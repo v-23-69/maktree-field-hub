@@ -1,4 +1,9 @@
-// Supabase client placeholder — will be configured when connecting
-// For now, all data comes from mock-data.ts
+import { createClient } from '@supabase/supabase-js'
 
-export const supabase = null;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+
+// Create client only when env vars are available; otherwise null for mock-data mode
+export const supabase = supabaseUrl && supabaseAnonKey
+  ? createClient(supabaseUrl, supabaseAnonKey)
+  : null
