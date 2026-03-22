@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import PageHeader from '@/components/shared/PageHeader';
-import BottomNav from '@/components/shared/BottomNav';
+import AdminLayout from '@/components/admin/AdminLayout';
 import { MOCK_AREAS, MOCK_SUB_AREAS } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,10 +14,8 @@ export default function AdminAreas() {
   const [selectedAreaId, setSelectedAreaId] = useState('');
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="Area Management" />
-
-      <div className="px-4 py-4 space-y-4">
+    <AdminLayout>
+      <div className="space-y-4">
         <div className="flex justify-end">
           <Dialog open={areaDialogOpen} onOpenChange={setAreaDialogOpen}>
             <DialogTrigger asChild>
@@ -26,7 +23,7 @@ export default function AdminAreas() {
                 <Plus className="h-4 w-4 mr-1" /> Add Area
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[340px] rounded-xl">
+            <DialogContent className="max-w-[340px] rounded-xl backdrop-blur-sm">
               <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
@@ -50,7 +47,7 @@ export default function AdminAreas() {
             return (
               <div
                 key={area.id}
-                className="rounded-xl bg-card shadow-sm overflow-hidden animate-fade-in-up"
+                className="rounded-xl bg-card shadow-sm overflow-hidden animate-fade-in"
                 style={{ animationDelay: `${i * 80}ms` }}
               >
                 <div className="flex items-center justify-between p-4">
@@ -70,8 +67,8 @@ export default function AdminAreas() {
                 </div>
                 {subAreas.length > 0 && (
                   <div className="border-t border-border px-4 py-2 space-y-1">
-                    {subAreas.map(sa => (
-                      <div key={sa.id} className="flex items-center justify-between py-1.5">
+                    {subAreas.map((sa, j) => (
+                      <div key={sa.id} className={`flex items-center justify-between py-1.5 ${j % 2 === 1 ? 'bg-muted/30 -mx-4 px-4 rounded' : ''}`}>
                         <div className="flex items-center gap-2">
                           <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                           <span className="text-sm text-foreground">{sa.name}</span>
@@ -88,7 +85,7 @@ export default function AdminAreas() {
       </div>
 
       <Dialog open={subAreaDialogOpen} onOpenChange={setSubAreaDialogOpen}>
-        <DialogContent className="max-w-[340px] rounded-xl">
+        <DialogContent className="max-w-[340px] rounded-xl backdrop-blur-sm">
           <DialogHeader><DialogTitle>Add Sub-area</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <div className="space-y-1.5">
@@ -104,8 +101,6 @@ export default function AdminAreas() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <BottomNav role="admin" />
-    </div>
+    </AdminLayout>
   );
 }

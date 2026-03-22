@@ -1,21 +1,28 @@
 import { useState } from 'react';
-import PageHeader from '@/components/shared/PageHeader';
-import BottomNav from '@/components/shared/BottomNav';
-import { MOCK_USERS } from '@/lib/mock-data';
+import { useSearchParams } from 'react-router-dom';
+import AdminLayout from '@/components/admin/AdminLayout';
+import { MOCK_USERS, MOCK_AREAS, MOCK_SUB_AREAS } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { UserRole } from '@/types/database.types';
 import { toast } from 'sonner';
 
 const ROLE_FILTERS = ['All', 'MR', 'Manager', 'Admin'] as const;
 
 export default function AdminUsers() {
-  const [filter, setFilter] = useState<typeof ROLE_FILTERS[number]>('All');
+  const [searchParams] = useSearchParams();
+  const initialFilter = searchParams.get('filter');
+  const [filter, setFilter] = useState<typeof ROLE_FILTERS[number]>(
+    initialFilter === 'mr' ? 'MR' : initialFilter === 'manager' ? 'Manager' : 'All'
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [newRole, setNewRole] = useState('mr');
+
+  const managers = MOCK_USERS.filter(u => u.role === 'manager' && u.is_active);
 
   const filtered = MOCK_USERS.filter(u => {
     if (filter === 'All') return true;
@@ -23,12 +30,10 @@ export default function AdminUsers() {
   });
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="User Management" />
-
-      <div className="px-4 py-4 space-y-4">
+    <AdminLayout>
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <div className="flex gap-1.5 overflow-x-auto">
+          <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
             {ROLE_FILTERS.map(f => (
               <button
                 key={f}
@@ -49,11 +54,11 @@ export default function AdminUsers() {
                 <Plus className="h-4 w-4 mr-1" /> Add
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[360px] rounded-xl">
+            <DialogContent className="max-w-[360px] rounded-xl backdrop-blur-sm">
               <DialogHeader>
                 <DialogTitle>Add New User</DialogTitle>
               </DialogHeader>
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3 pt-2 max-h-[70vh] overflow-y-auto">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Full Name</Label>
                   <Input placeholder="Enter full name" className="rounded-lg" />
@@ -64,7 +69,11 @@ export default function AdminUsers() {
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Role</Label>
-                  <select className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm">
+                  <select
+                    value={newRole}
+                    onChange={e => setNewRole(e.target.value)}
+                    className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                  >
                     <option value="mr">MR</option>
                     <option value="manager">Manager</option>
                     <option value="admin">Admin</option>
@@ -74,6 +83,45 @@ export default function AdminUsers() {
                   <Label className="text-xs">Email (Optional)</Label>
                   <Input type="email" placeholder="email@example.com" className="rounded-lg" />
                 </div>
+
+                {/* MR-specific: Assign Managers */}
+                {newRole === 'mr' && (
+                  <div className="space-y-2 pt-2 border-t border-border">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Managers</Label>
+                    <div className="space-y-2">
+                      {managers.map(m => (
+                        <label key={m.id} className="flex items-center gap-3 cursor-pointer">
+                          <Checkbox />
+                          <span className="text-sm text-foreground">{m.full_name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* MR-specific: Assign Sub-areas */}
+                {newRole === 'mr' && (
+                  <div className="space-y-3 pt-2 border-t border-border">
+                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Sub-areas</Label>
+                    {MOCK_AREAS.map(area => {
+                      const subAreas = MOCK_SUB_AREAS.filter(sa => sa.area_id === area.id);
+                      return (
+                        <div key={area.id}>
+                          <p className="text-xs font-medium text-foreground mb-1.5">{area.name}</p>
+                          <div className="space-y-1.5 pl-1">
+                            {subAreas.map(sa => (
+                              <label key={sa.id} className="flex items-center gap-3 cursor-pointer">
+                                <Checkbox />
+                                <span className="text-xs text-foreground">{sa.name}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
                 <Button
                   onClick={() => { setDialogOpen(false); toast.success('User created'); }}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
@@ -89,7 +137,10 @@ export default function AdminUsers() {
           {filtered.map((user, i) => (
             <div
               key={user.id}
-              className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-sm animate-fade-in-up"
+              className={cn(
+                'flex items-center gap-3 rounded-xl p-4 shadow-sm animate-fade-in',
+                i % 2 === 0 ? 'bg-card' : 'bg-card/80'
+              )}
               style={{ animationDelay: `${i * 60}ms` }}
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
@@ -111,8 +162,6 @@ export default function AdminUsers() {
           ))}
         </div>
       </div>
-
-      <BottomNav role="admin" />
-    </div>
+    </AdminLayout>
   );
 }

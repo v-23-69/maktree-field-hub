@@ -1,23 +1,36 @@
 import { useNavigate } from 'react-router-dom';
-import PageHeader from '@/components/shared/PageHeader';
-import BottomNav from '@/components/shared/BottomNav';
+import AdminLayout from '@/components/admin/AdminLayout';
 import StatCard from '@/components/shared/StatCard';
-import { Users, Stethoscope, MapPin, UserPlus, Plus, FileText } from 'lucide-react';
+import { Users, Stethoscope, MapPin, UserPlus, Plus, FileText, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+
+const ACTIVITY_FEED = [
+  { id: '1', text: 'Rajesh Kumar submitted report for 20 Mar 2026', time: '2 hours ago' },
+  { id: '2', text: 'Priya Sharma submitted report for 20 Mar 2026', time: '3 hours ago' },
+  { id: '3', text: 'New doctor Dr. Neha Agarwal added to Saket', time: '1 day ago' },
+  { id: '4', text: 'Amit Patel changed password', time: '2 days ago' },
+  { id: '5', text: 'Sub-area DLF Phase 2 added to Gurgaon', time: '3 days ago' },
+];
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="Admin Dashboard" />
-
-      <div className="px-4 py-4 space-y-5">
+    <AdminLayout>
+      <div className="space-y-5">
         <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={Users} value={3} label="Total MRs" />
-          <StatCard icon={Users} value={2} label="Total Managers" />
-          <StatCard icon={Stethoscope} value={6} label="Total Doctors" />
-          <StatCard icon={MapPin} value={4} label="Total Areas" />
+          <button onClick={() => navigate('/admin/users?filter=mr')} className="text-left active:scale-[0.97] transition-transform">
+            <StatCard icon={Users} value={3} label="Total MRs" />
+          </button>
+          <button onClick={() => navigate('/admin/users?filter=manager')} className="text-left active:scale-[0.97] transition-transform">
+            <StatCard icon={Users} value={2} label="Total Managers" />
+          </button>
+          <button onClick={() => navigate('/admin/doctors')} className="text-left active:scale-[0.97] transition-transform">
+            <StatCard icon={Stethoscope} value={6} label="Total Doctors" />
+          </button>
+          <button onClick={() => navigate('/admin/areas')} className="text-left active:scale-[0.97] transition-transform">
+            <StatCard icon={MapPin} value={4} label="Total Areas" />
+          </button>
         </div>
 
         <div>
@@ -41,9 +54,23 @@ export default function AdminDashboard() {
             ))}
           </div>
         </div>
-      </div>
 
-      <BottomNav role="admin" />
-    </div>
+        {/* Activity Feed */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent Activity</p>
+          <div className="rounded-xl bg-card shadow-sm divide-y divide-border overflow-hidden">
+            {ACTIVITY_FEED.map(item => (
+              <div key={item.id} className="flex items-start gap-3 p-3">
+                <Clock className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground">{item.text}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </AdminLayout>
   );
 }

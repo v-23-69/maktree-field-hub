@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import PageHeader from '@/components/shared/PageHeader';
-import BottomNav from '@/components/shared/BottomNav';
+import AdminLayout from '@/components/admin/AdminLayout';
 import EmptyState from '@/components/shared/EmptyState';
 import { MOCK_DOCTORS, MOCK_AREAS, MOCK_SUB_AREAS } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
@@ -8,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Plus, Edit, ToggleRight } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function AdminDoctors() {
@@ -24,10 +24,8 @@ export default function AdminDoctors() {
   });
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="Doctor Management" />
-
-      <div className="px-4 py-4 space-y-4">
+    <AdminLayout>
+      <div className="space-y-4">
         <div className="flex gap-2">
           <select
             value={areaFilter}
@@ -54,7 +52,7 @@ export default function AdminDoctors() {
                 <Plus className="h-4 w-4 mr-1" /> Add Doctor
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[360px] rounded-xl">
+            <DialogContent className="max-w-[360px] rounded-xl backdrop-blur-sm">
               <DialogHeader>
                 <DialogTitle>Add Doctor</DialogTitle>
               </DialogHeader>
@@ -105,7 +103,10 @@ export default function AdminDoctors() {
             {filteredDoctors.map((doc, i) => (
               <div
                 key={doc.id}
-                className="flex items-center gap-3 rounded-xl bg-card p-4 shadow-sm animate-fade-in-up"
+                className={cn(
+                  'flex items-center gap-3 rounded-xl p-4 shadow-sm animate-fade-in',
+                  i % 2 === 0 ? 'bg-card' : 'bg-card/80'
+                )}
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex-1 min-w-0">
@@ -121,8 +122,6 @@ export default function AdminDoctors() {
           </div>
         )}
       </div>
-
-      <BottomNav role="admin" />
-    </div>
+    </AdminLayout>
   );
 }
