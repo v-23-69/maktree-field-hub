@@ -53,7 +53,7 @@ export default function DoctorVisitDrawer({ open, onClose, doctor, existingVisit
     <Drawer open={open} onOpenChange={v => { if (!v) onClose(); }}>
       <DrawerContent className="max-h-[90vh] flex flex-col">
         <DrawerHeader className="pb-2 shrink-0">
-          <DrawerTitle className="text-base">{doctor.name}</DrawerTitle>
+          <DrawerTitle className="text-base">{doctor.full_name}</DrawerTitle>
           <p className="text-xs text-muted-foreground">{doctor.speciality}</p>
         </DrawerHeader>
 

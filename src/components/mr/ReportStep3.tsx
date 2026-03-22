@@ -61,7 +61,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground text-sm truncate">{doc.name}</p>
+                        <p className="font-semibold text-foreground text-sm truncate">{doc.full_name}</p>
                         <p className="text-xs text-muted-foreground">{doc.speciality}</p>
                       </div>
                       {hasVisit ? (
