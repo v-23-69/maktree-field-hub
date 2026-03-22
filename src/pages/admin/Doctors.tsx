@@ -110,8 +110,8 @@ export default function AdminDoctors() {
                 style={{ animationDelay: `${i * 60}ms` }}
               >
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground text-sm">{doc.name}</p>
-                  <p className="text-xs text-muted-foreground">{doc.code} · {doc.speciality}</p>
+                  <p className="font-medium text-foreground text-sm">{doc.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{doc.doctor_code} · {doc.speciality}</p>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <button className="p-1.5 text-muted-foreground"><Edit className="h-4 w-4" /></button>

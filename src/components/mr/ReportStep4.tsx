@@ -86,7 +86,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                     <div className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-sm text-left w-full active:scale-[0.98] transition-transform">
                       <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{doc!.name}</p>
+                        <p className="text-sm font-semibold text-foreground truncate">{doc!.full_name}</p>
                         <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
                           {visit.chemistName && <span>{visit.chemistName}</span>}
                           {visit.productsPromoted.length > 0 && (
