@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import ReportStep1 from '@/components/mr/ReportStep1';
@@ -21,46 +21,80 @@ export interface ReportFormData {
   }>;
 }
 
-const STEPS = ['Basic Info', 'Areas', 'Doctor Visits', 'Review'];
+const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
+const DRAFT_KEY = 'maktree_report_draft';
+
+function loadDraft(): ReportFormData | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return null;
+}
 
 export default function NewReport() {
   const [step, setStep] = useState(1);
-  const [formData, setFormData] = useState<ReportFormData>({
-    date: new Date().toISOString().split('T')[0],
-    workingWithId: '',
-    selectedAreaIds: [],
-    selectedSubAreaIds: [],
-    visits: {},
+  const [formData, setFormData] = useState<ReportFormData>(() => {
+    const draft = loadDraft();
+    return draft || {
+      date: new Date().toISOString().split('T')[0],
+      workingWithId: '',
+      selectedAreaIds: [],
+      selectedSubAreaIds: [],
+      visits: {},
+    };
   });
+
+  // Auto-save draft to localStorage
+  useEffect(() => {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
+  }, [formData]);
 
   const updateData = useCallback((partial: Partial<ReportFormData>) => {
     setFormData(prev => ({ ...prev, ...partial }));
+  }, []);
+
+  const clearDraft = useCallback(() => {
+    localStorage.removeItem(DRAFT_KEY);
   }, []);
 
   return (
     <div className="min-h-screen bg-background pb-20">
       <PageHeader title="New Daily Report" showBack />
 
-      {/* Progress */}
+      {/* Progress Bar */}
       <div className="px-4 pt-3 pb-2">
-        <div className="flex items-center gap-1 mb-2">
-          {STEPS.map((s, i) => (
-            <div key={s} className="flex-1 flex flex-col items-center gap-1">
-              <div className={cn(
-                'h-1.5 w-full rounded-full transition-colors',
-                i + 1 <= step ? 'bg-primary' : 'bg-muted'
-              )} />
-            </div>
-          ))}
+        <div className="flex items-center gap-0">
+          {STEPS.map((s, i) => {
+            const isActive = i + 1 === step;
+            const isCompleted = i + 1 < step;
+            return (
+              <div key={s} className="flex-1 flex flex-col items-center">
+                <div className="w-full flex items-center">
+                  <div className={cn(
+                    'h-1.5 w-full transition-colors duration-300',
+                    i === 0 && 'rounded-l-full',
+                    i === STEPS.length - 1 && 'rounded-r-full',
+                    isCompleted || isActive ? 'bg-primary' : 'bg-muted'
+                  )} />
+                </div>
+                <span className={cn(
+                  'text-[10px] mt-1.5 font-medium transition-colors',
+                  isActive ? 'text-primary' : isCompleted ? 'text-primary/70' : 'text-muted-foreground'
+                )}>
+                  {s}
+                </span>
+              </div>
+            );
+          })}
         </div>
-        <p className="text-xs text-muted-foreground text-center">Step {step} of 4 — {STEPS[step - 1]}</p>
       </div>
 
       <div className="px-4 py-3">
         {step === 1 && <ReportStep1 data={formData} onChange={updateData} onNext={() => setStep(2)} />}
         {step === 2 && <ReportStep2 data={formData} onChange={updateData} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
         {step === 3 && <ReportStep3 data={formData} onChange={updateData} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
-        {step === 4 && <ReportStep4 data={formData} onBack={() => setStep(3)} />}
+        {step === 4 && <ReportStep4 data={formData} onBack={() => setStep(3)} onClearDraft={clearDraft} />}
       </div>
 
       <BottomNav role="mr" />
