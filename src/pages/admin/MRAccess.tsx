@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import PageHeader from '@/components/shared/PageHeader';
-import BottomNav from '@/components/shared/BottomNav';
+import AdminLayout from '@/components/admin/AdminLayout';
 import { MOCK_USERS, MOCK_AREAS, MOCK_SUB_AREAS } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,11 +16,20 @@ export default function AdminMRAccess() {
     setCheckedSubAreas(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   };
 
-  return (
-    <div className="min-h-screen bg-background pb-20">
-      <PageHeader title="MR Area Assignment" />
+  const toggleArea = (areaId: string) => {
+    const subAreas = MOCK_SUB_AREAS.filter(sa => sa.area_id === areaId);
+    const allChecked = subAreas.every(sa => checkedSubAreas.includes(sa.id));
+    if (allChecked) {
+      setCheckedSubAreas(prev => prev.filter(id => !subAreas.some(sa => sa.id === id)));
+    } else {
+      const newIds = subAreas.map(sa => sa.id).filter(id => !checkedSubAreas.includes(id));
+      setCheckedSubAreas(prev => [...prev, ...newIds]);
+    }
+  };
 
-      <div className="px-4 py-4 space-y-4">
+  return (
+    <AdminLayout>
+      <div className="space-y-4">
         <div className="space-y-2">
           <Label className="text-xs">Select MR</Label>
           <select
@@ -35,13 +43,35 @@ export default function AdminMRAccess() {
         </div>
 
         {selectedMr && (
-          <div className="space-y-4 animate-fade-in-up">
+          <div className="space-y-4 animate-fade-in">
+            {/* Selected count */}
+            <p className="text-xs font-medium text-primary">
+              {checkedSubAreas.length} of {MOCK_SUB_AREAS.length} sub-areas selected
+            </p>
+
             {MOCK_AREAS.map(area => {
               const subAreas = MOCK_SUB_AREAS.filter(sa => sa.area_id === area.id);
+              const checkedCount = subAreas.filter(sa => checkedSubAreas.includes(sa.id)).length;
+              const allChecked = subAreas.length > 0 && checkedCount === subAreas.length;
+              const someChecked = checkedCount > 0 && !allChecked;
+
               return (
                 <div key={area.id} className="rounded-xl bg-card p-4 shadow-sm">
-                  <p className="font-medium text-foreground text-sm mb-3">{area.name}</p>
-                  <div className="space-y-2.5">
+                  {/* Area header with select all */}
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <Checkbox
+                        checked={allChecked}
+                        // Use indeterminate-like visual when partial
+                        className={someChecked ? 'data-[state=unchecked]:bg-primary/30 data-[state=unchecked]:border-primary' : ''}
+                        onCheckedChange={() => toggleArea(area.id)}
+                      />
+                      <span className="font-medium text-foreground text-sm">{area.name}</span>
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">{checkedCount} of {subAreas.length}</span>
+                  </div>
+
+                  <div className="space-y-2.5 pl-1">
                     {subAreas.map(sa => (
                       <label key={sa.id} className="flex items-center gap-3 touch-target cursor-pointer">
                         <Checkbox
@@ -65,8 +95,6 @@ export default function AdminMRAccess() {
           </div>
         )}
       </div>
-
-      <BottomNav role="admin" />
-    </div>
+    </AdminLayout>
   );
 }
