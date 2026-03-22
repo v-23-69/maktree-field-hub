@@ -55,8 +55,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           onClick={() => setSidebarOpen(false)}
         >
           <aside
-            className="absolute left-0 top-0 bottom-0 w-64 bg-card shadow-xl animate-slide-in-right"
-            style={{ animationName: 'slideInLeft' }}
+            className="absolute left-0 top-0 bottom-0 w-64 bg-card shadow-xl animate-slide-in-left"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex h-14 items-center justify-between px-4 border-b border-border">
