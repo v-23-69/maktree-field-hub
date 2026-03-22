@@ -15,7 +15,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
   const today = new Date().toISOString().split('T')[0];
 
   return (
-    <div className="space-y-5 animate-fade-in-up">
+    <div className="space-y-5 animate-fade-in">
       <div className="space-y-2">
         <Label>Date</Label>
         <Input
@@ -41,12 +41,16 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
         </select>
       </div>
 
-      <Button
-        onClick={onNext}
-        className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-      >
-        Next
-      </Button>
+      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-sm border-t border-border">
+        <div className="max-w-lg mx-auto">
+          <Button
+            onClick={onNext}
+            className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+          >
+            Next
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
