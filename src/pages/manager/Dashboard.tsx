@@ -5,12 +5,54 @@ import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
 import { Users, FileText, Stethoscope, Calendar } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { useManagerMrs } from '@/hooks/useManagerTeam';
+import { useAddDoctor } from '@/hooks/useAdminDoctors';
+import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
+import { useAssignSubAreaToMr } from '@/hooks/useAdminMrAccess';
+import { useAllAreas } from '@/hooks/useAreas';
+import { toast } from 'sonner';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
+type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
+  const [action, setAction] = useState<QuickAction>(null);
+
+  const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
+  const { data: areas = [] } = useAllAreas();
+  const addDoctor = useAddDoctor();
+  const addArea = useAddArea();
+  const addSubArea = useAddSubArea();
+  const assignSubArea = useAssignSubAreaToMr();
+
+  const [doctorName, setDoctorName] = useState('');
+  const [doctorSpec, setDoctorSpec] = useState('');
+  const [doctorSubAreaId, setDoctorSubAreaId] = useState('');
+  const [areaName, setAreaName] = useState('');
+  const [subAreaName, setSubAreaName] = useState('');
+  const [subAreaAreaId, setSubAreaAreaId] = useState('');
+  const [assignMrId, setAssignMrId] = useState('');
+  const [assignSubAreaId, setAssignSubAreaId] = useState('');
+
+  const allSubAreas = areas.flatMap(a => (a.sub_areas ?? []).map(sa => ({ ...sa, areaName: a.name })));
+
+  const closeDrawer = () => {
+    setAction(null);
+    setDoctorName('');
+    setDoctorSpec('');
+    setDoctorSubAreaId('');
+    setAreaName('');
+    setSubAreaName('');
+    setSubAreaAreaId('');
+    setAssignMrId('');
+    setAssignSubAreaId('');
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -44,7 +86,178 @@ export default function ManagerDashboard() {
             </button>
           ))}
         </div>
+
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Quick Actions
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('doctor')}>
+              Add Doctor
+            </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('area')}>
+              Add Area
+            </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('subarea')}>
+              Add Sub-area
+            </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('assign')}>
+              Assign Area to MR
+            </Button>
+          </div>
+        </div>
       </div>
+
+      <Drawer open={action !== null} onOpenChange={v => { if (!v) closeDrawer(); }}>
+        <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[10px] border bg-background p-0 gap-0">
+          <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2">
+            <DrawerTitle className="text-base">
+              {action === 'doctor' && 'Add Doctor'}
+              {action === 'area' && 'Add Area'}
+              {action === 'subarea' && 'Add Sub-area'}
+              {action === 'assign' && 'Assign Area to MR'}
+            </DrawerTitle>
+          </DrawerHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4 space-y-4">
+            {action === 'doctor' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Doctor Name</Label>
+                  <Input value={doctorName} onChange={e => setDoctorName(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Speciality</Label>
+                  <Input value={doctorSpec} onChange={e => setDoctorSpec(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Sub-area</Label>
+                  <select value={doctorSubAreaId} onChange={e => setDoctorSubAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">Choose Sub-area</option>
+                    {allSubAreas.map(sa => (
+                      <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  disabled={addDoctor.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() =>
+                    void addDoctor
+                      .mutateAsync({ sub_area_id: doctorSubAreaId, full_name: doctorName, speciality: doctorSpec })
+                      .then(() => {
+                        toast.success('Doctor added ✓')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add doctor'))
+                  }
+                >
+                  {addDoctor.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            )}
+
+            {action === 'area' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Area Name</Label>
+                  <Input value={areaName} onChange={e => setAreaName(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <Button
+                  type="button"
+                  disabled={addArea.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() =>
+                    void addArea
+                      .mutateAsync(areaName)
+                      .then(() => {
+                        toast.success('Area added ✓')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add area'))
+                  }
+                >
+                  {addArea.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            )}
+
+            {action === 'subarea' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Area</Label>
+                  <select value={subAreaAreaId} onChange={e => setSubAreaAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">Choose Area</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Sub-area Name</Label>
+                  <Input value={subAreaName} onChange={e => setSubAreaName(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <Button
+                  type="button"
+                  disabled={addSubArea.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() =>
+                    void addSubArea
+                      .mutateAsync({ areaId: subAreaAreaId, name: subAreaName })
+                      .then(() => {
+                        toast.success('Sub-area added ✓')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add sub-area'))
+                  }
+                >
+                  {addSubArea.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            )}
+
+            {action === 'assign' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">MR</Label>
+                  <select value={assignMrId} onChange={e => setAssignMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">Choose MR</option>
+                    {mrs.map(m => (
+                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Sub-area</Label>
+                  <select value={assignSubAreaId} onChange={e => setAssignSubAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">Choose Sub-area</option>
+                    {allSubAreas.map(sa => (
+                      <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  disabled={assignSubArea.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() =>
+                    void assignSubArea
+                      .mutateAsync({ mrId: assignMrId, subAreaId: assignSubAreaId })
+                      .then(() => {
+                        toast.success('Area assigned to MR ✓')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not assign area'))
+                  }
+                >
+                  {assignSubArea.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <BottomNav role="manager" />
     </div>

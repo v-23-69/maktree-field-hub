@@ -1,7 +1,9 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, FilePlus, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck } from 'lucide-react';
+import { Home, FilePlus, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, Target } from 'lucide-react';
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useManagerUnlockRequests } from '@/hooks/useUnlockRequests';
 
 interface NavItem {
   to: string;
@@ -13,11 +15,14 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   mr: [
     { to: '/mr/dashboard', icon: Home, label: 'Home' },
     { to: '/mr/report/new', icon: FilePlus, label: 'New Report' },
+    { to: '/mr/master-list', icon: List, label: 'Master List' },
     { to: '/mr/report/history', icon: History, label: 'History' },
   ],
   manager: [
     { to: '/manager/dashboard', icon: Home, label: 'Home' },
     { to: '/manager/reports', icon: FileText, label: 'Reports' },
+    { to: '/manager/requests', icon: Bell, label: 'Requests' },
+    { to: '/manager/targets', icon: Target, label: 'Targets' },
     { to: '/manager/analytics', icon: BarChart3, label: 'Analytics' },
   ],
   admin: [
@@ -32,6 +37,10 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
 export default function BottomNav({ role }: { role: UserRole }) {
   const items = NAV_ITEMS[role];
   const location = useLocation();
+  const { user } = useAuth();
+  const managerId = role === 'manager' ? user?.id ?? '' : '';
+  const { data: unlockData } = useManagerUnlockRequests(managerId);
+  const pendingCount = unlockData?.pending?.length ?? 0;
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
@@ -47,7 +56,14 @@ export default function BottomNav({ role }: { role: UserRole }) {
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
-              <item.icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+              <span className="relative inline-flex">
+                <item.icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+                {item.to === '/manager/requests' && pendingCount > 0 && (
+                  <span className="absolute -top-1 -right-2 min-w-[16px] px-1 h-4 text-[10px] rounded-full bg-destructive text-white flex items-center justify-center border border-background">
+                    {pendingCount > 99 ? '99+' : pendingCount}
+                  </span>
+                )}
+              </span>
               <span>{item.label}</span>
             </NavLink>
           );

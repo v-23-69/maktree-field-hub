@@ -17,6 +17,9 @@ export default function ManagerAnalytics() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [run, setRun] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'area' | 'loyalty' | 'intel'>('overview');
+  const [loyaltyProduct, setLoyaltyProduct] = useState('');
+  const [loyaltyArea, setLoyaltyArea] = useState('');
 
   const { data: mrs = [], isLoading: mrsLoading } = useManagerMrs(user?.id ?? '');
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
@@ -31,6 +34,9 @@ export default function ManagerAnalytics() {
   const productData = charts?.productPromotions ?? [];
   const mrData = charts?.mrVisits ?? [];
   const competitorData = charts?.competitorBrands ?? [];
+  const areaPerformance = charts?.areaPerformance ?? [];
+  const doctorLoyalty = charts?.doctorLoyalty ?? [];
+  const competitorIntel = charts?.competitorIntel ?? [];
   const maxCompetitor = competitorData.length
     ? Math.max(...competitorData.map(c => c.count), 1)
     : 1;
@@ -39,7 +45,24 @@ export default function ManagerAnalytics() {
   const uniqueDoctors = charts?.uniqueDoctorVisits ?? 0;
 
   const hasAnyChart =
-    productData.length > 0 || mrData.length > 0 || competitorData.length > 0;
+    productData.length > 0 || mrData.length > 0 || competitorData.length > 0 || areaPerformance.length > 0 || doctorLoyalty.length > 0 || competitorIntel.length > 0;
+
+  const loyaltyProducts = useMemo(
+    () => Array.from(new Set(doctorLoyalty.map(d => d.product_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [doctorLoyalty],
+  )
+  const loyaltyAreas = useMemo(
+    () => Array.from(new Set(doctorLoyalty.map(d => d.area).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [doctorLoyalty],
+  )
+  const filteredDoctorLoyalty = useMemo(
+    () =>
+      doctorLoyalty.filter(d =>
+        (!loyaltyProduct || d.product_name === loyaltyProduct) &&
+        (!loyaltyArea || d.area === loyaltyArea),
+      ),
+    [doctorLoyalty, loyaltyProduct, loyaltyArea],
+  )
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -65,6 +88,13 @@ export default function ManagerAnalytics() {
           {run && chartsLoading ? 'Loading…' : 'Generate Report'}
         </Button>
 
+        <div className="grid grid-cols-4 gap-2">
+          <Button type="button" variant={activeTab === 'overview' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('overview')}>Overview</Button>
+          <Button type="button" variant={activeTab === 'area' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('area')}>Area Performance</Button>
+          <Button type="button" variant={activeTab === 'loyalty' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('loyalty')}>Doctor Loyalty</Button>
+          <Button type="button" variant={activeTab === 'intel' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('intel')}>Competitor Intel</Button>
+        </div>
+
         {mrsLoading && <LoadingSpinner />}
         {!mrsLoading && mrIds.length === 0 && (
           <EmptyState message="No medical representatives are assigned to you yet." />
@@ -80,7 +110,7 @@ export default function ManagerAnalytics() {
           <EmptyState message="No data for selected period" />
         )}
 
-        {run && !chartsLoading && !isError && hasAnyChart && (
+        {run && !chartsLoading && !isError && hasAnyChart && activeTab === 'overview' && (
           <>
             <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 animate-fade-in">
               <p className="text-sm font-semibold text-primary">
@@ -149,6 +179,101 @@ export default function ManagerAnalytics() {
               </div>
             )}
           </>
+        )}
+
+        {run && !chartsLoading && !isError && activeTab === 'area' && (
+          <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Area Ranking by Quantity
+            </p>
+            {areaPerformance.length === 0 ? (
+              <EmptyState message="No area performance data for selected period" />
+            ) : (
+              <div className="min-w-[340px] h-64 overflow-x-auto">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={areaPerformance} layout="vertical" margin={{ left: 0, right: 16 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
+                    <YAxis dataKey="area" type="category" tick={{ fontSize: 10 }} width={85} />
+                    <Tooltip />
+                    <Bar dataKey="qty" fill="hsl(210, 90%, 45%)" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        )}
+
+        {run && !chartsLoading && !isError && activeTab === 'loyalty' && (
+          <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Doctor Loyalty
+            </p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={loyaltyProduct}
+                onChange={e => setLoyaltyProduct(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All Products</option>
+                {loyaltyProducts.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+              <select
+                value={loyaltyArea}
+                onChange={e => setLoyaltyArea(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All Areas</option>
+                {loyaltyAreas.map(a => (
+                  <option key={a} value={a}>{a}</option>
+                ))}
+              </select>
+            </div>
+
+            {filteredDoctorLoyalty.length === 0 ? (
+              <EmptyState message="No doctor loyalty data matches selected filters." />
+            ) : (
+              <div className="space-y-2">
+                {filteredDoctorLoyalty.map((row, idx) => (
+                  <div key={`${row.doctor_name}-${row.product_name}-${idx}`} className="rounded-lg border border-border bg-background p-3">
+                    <p className="text-sm font-medium text-foreground">{row.doctor_name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {row.product_name} | {row.area || 'Area'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Months written: {row.months_written} | Total qty: {row.total_qty}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {run && !chartsLoading && !isError && activeTab === 'intel' && (
+          <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Competitor Intelligence
+            </p>
+            {competitorIntel.length === 0 ? (
+              <EmptyState message="No competitor intelligence data available." />
+            ) : (
+              <div className="min-w-[340px] h-64 overflow-x-auto">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={competitorIntel.slice(0, 20)}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                    <XAxis dataKey="brand" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip formatter={(value, _name, props: any) => [value, `${props.payload.area} (${props.payload.month || 'N/A'})`]} />
+                    <Bar dataKey="qty" fill="hsl(6, 80%, 58%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
         )}
       </div>
 

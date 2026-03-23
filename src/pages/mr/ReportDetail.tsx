@@ -7,16 +7,25 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { Textarea } from '@/components/ui/textarea';
 import { useDailyReport } from '@/hooks/useReport';
 import type { ReportVisit } from '@/types/database.types';
 import { ChevronDown, Pill } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const { user } = useAuth();
+  const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
+  const [issueText, setIssueText] = useState('');
+  const [issueSubmitting, setIssueSubmitting] = useState(false);
 
   const { data: report, isLoading, isError } = useDailyReport(id ?? '');
 
@@ -195,9 +204,81 @@ export default function ReportDetail() {
             <Button variant="outline" className="w-full" type="button" onClick={() => navigate('/mr/report/history')}>
               Back to history
             </Button>
+
+            <div className="pt-3">
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full touch-target rounded-lg"
+                onClick={() => setIssueDrawerOpen(true)}
+              >
+                Report an Issue
+              </Button>
+            </div>
           </>
         )}
       </div>
+
+      <Drawer
+        open={issueDrawerOpen}
+        onOpenChange={v => {
+          if (!v) setIssueDrawerOpen(false)
+        }}
+      >
+        <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[10px] border bg-background p-0 gap-0">
+          <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2">
+            <DrawerTitle className="text-base">Report an Issue</DrawerTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Date: {report?.report_date ? formatDisplayDate(report.report_date) : '—'}
+            </p>
+          </DrawerHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Issue Description
+              </label>
+              <Textarea
+                value={issueText}
+                onChange={e => setIssueText(e.target.value)}
+                placeholder="Describe the issue you found in this report…"
+                className="min-h-[140px] touch-target rounded-lg"
+              />
+            </div>
+
+            <Button
+              type="button"
+              disabled={!issueText.trim() || issueSubmitting || !report || !user || !supabase}
+              onClick={async () => {
+                if (!report || !user || !supabase) return
+                setIssueSubmitting(true)
+                try {
+                  const { error: insErr } = await supabase
+                    .from('report_issues')
+                    .insert({
+                      report_id: report.id,
+                      mr_id: user.id,
+                      issue_text: issueText.trim(),
+                      report_date: report.report_date,
+                    })
+                  if (insErr) throw insErr
+
+                  toast.success('Issue submitted ✓')
+                  setIssueDrawerOpen(false)
+                  setIssueText('')
+                } catch (e) {
+                  toast.error(e instanceof Error ? e.message : 'Submit failed')
+                } finally {
+                  setIssueSubmitting(false)
+                }
+              }}
+              className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+            >
+              {issueSubmitting ? 'Submitting…' : 'Submit'}
+            </Button>
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <BottomNav role="mr" />
     </div>

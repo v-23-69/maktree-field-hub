@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import type { DailyReport, ReportVisit } from '@/types/database.types'
+import type {
+  AllowedReportDate,
+  DailyReport,
+  ReportBlockStatus,
+  ReportUnlockRequest,
+  ReportVisit,
+} from '@/types/database.types'
 
 async function loadReportVisits(
   client: SupabaseClient,
@@ -503,5 +509,68 @@ export function useManagerReportByMrAndDate(mrId: string, reportDate: string) {
       }
     },
     enabled: !!mrId && !!reportDate && !!supabase,
+  })
+}
+
+export function useAllowedReportDates(mrId: string) {
+  return useQuery({
+    queryKey: ['allowed-report-dates', mrId],
+    queryFn: async (): Promise<AllowedReportDate[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('get_allowed_report_dates', {
+        p_mr_id: mrId,
+      })
+      if (error) throw error
+      return (data ?? []) as AllowedReportDate[]
+    },
+    enabled: !!mrId && !!supabase,
+  })
+}
+
+export function useReportBlockStatus(mrId: string) {
+  return useQuery({
+    queryKey: ['report-block-status', mrId],
+    queryFn: async (): Promise<ReportBlockStatus> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('check_report_block_status', {
+        p_mr_id: mrId,
+      })
+      if (error) throw error
+      return data as ReportBlockStatus
+    },
+    enabled: !!mrId && !!supabase,
+  })
+}
+
+export function useRequestReportUnlock() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: { mrId: string; reason: string }): Promise<void> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const mrId = p.mrId.trim()
+
+      const { data: managerRow, error: mErr } = await supabase
+        .from('mr_manager_map')
+        .select('manager_id')
+        .eq('mr_id', mrId)
+        .order('assigned_at', { ascending: true })
+        .maybeSingle()
+      if (mErr) throw mErr
+      const managerId = (managerRow?.manager_id ?? null) as string | null
+      if (!managerId) throw new Error('No manager assigned to this MR')
+
+      const { error: insErr } = await supabase
+        .from('report_unlock_requests')
+        .insert({
+          mr_id: mrId,
+          manager_id: managerId,
+          reason: p.reason.trim(),
+          requested_date: new Date().toISOString(),
+        })
+      if (insErr) throw insErr
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['report-block-status', vars.mrId] })
+    },
   })
 }

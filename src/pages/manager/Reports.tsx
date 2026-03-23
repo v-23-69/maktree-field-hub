@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
@@ -11,10 +11,16 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerReportByMrAndDate } from '@/hooks/useReport';
+import { useManagerReportIssues, useUpdateReportIssue } from '@/hooks/useReportIssues';
+import { useAllAreas } from '@/hooks/useAreas';
 import type { ReportVisit } from '@/types/database.types';
 import { Download, FileSpreadsheet, ChevronDown, Pill, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
+import { supabase } from '@/lib/supabase';
 
 export default function ManagerReports() {
   const { user } = useAuth();
@@ -22,12 +28,40 @@ export default function ManagerReports() {
   const [selectedDate, setSelectedDate] = useState('');
   const [showReport, setShowReport] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
+  const [activeTab, setActiveTab] = useState<'reports' | 'issues'>('reports');
+  const [filterSpeciality, setFilterSpeciality] = useState('');
+  const [filterProduct, setFilterProduct] = useState('');
+  const [filterAreaId, setFilterAreaId] = useState('');
+  const [filterSubAreaId, setFilterSubAreaId] = useState('');
+  const [filterMrId, setFilterMrId] = useState('');
+  const [filterFromDate, setFilterFromDate] = useState('');
+  const [filterToDate, setFilterToDate] = useState('');
 
   const { data: mrs = [], isLoading: mrsLoading, isError: mrsError } = useManagerMrs(user?.id ?? '');
+  const { data: allAreas = [] } = useAllAreas();
   const { data: report, isLoading: reportLoading, isError: reportError } = useManagerReportByMrAndDate(
     showReport ? selectedMr : '',
     showReport ? selectedDate : '',
   );
+
+  const { data: reportIssues = [], isLoading: issuesLoading, isError: issuesError } =
+    useManagerReportIssues(user?.id ?? '');
+  const updateIssue = useUpdateReportIssue();
+
+  const [managerNotesByIssueId, setManagerNotesByIssueId] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!reportIssues) return
+    setManagerNotesByIssueId(prev => {
+      const next = { ...prev }
+      for (const issue of reportIssues) {
+        const existing = next[issue.id]
+        if (typeof existing === 'string') continue
+        next[issue.id] = (issue.manager_note ?? '') as string
+      }
+      return next
+    })
+  }, [reportIssues])
 
   const mrUser = useMemo(() => mrs.find(u => u.id === selectedMr), [mrs, selectedMr]);
 
@@ -41,6 +75,79 @@ export default function ManagerReports() {
     [visits],
   );
 
+  const areaNameBySubAreaId = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const area of allAreas) {
+      for (const sa of area.sub_areas ?? []) {
+        map.set(sa.id, area.id)
+      }
+    }
+    return map
+  }, [allAreas])
+
+  const uniqueSpecialities = useMemo(() => {
+    const set = new Set<string>()
+    for (const v of sortedVisits) {
+      const s = v.doctor?.speciality?.trim()
+      if (s) set.add(s)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [sortedVisits])
+
+  const uniqueProducts = useMemo(() => {
+    const set = new Set<string>()
+    for (const v of sortedVisits) {
+      for (const p of v.promoted_products ?? []) {
+        const name = p.product?.name?.trim()
+        if (name) set.add(name)
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [sortedVisits])
+
+  const filteredVisits = useMemo(() => {
+    return sortedVisits.filter(v => {
+      if (filterMrId && selectedMr !== filterMrId) return false
+
+      if (filterFromDate && selectedDate < filterFromDate) return false
+      if (filterToDate && selectedDate > filterToDate) return false
+
+      if (filterSpeciality) {
+        const s = v.doctor?.speciality ?? ''
+        if (s !== filterSpeciality) return false
+      }
+
+      if (filterProduct) {
+        const has = (v.promoted_products ?? []).some(
+          p => (p.product?.name ?? '') === filterProduct,
+        )
+        if (!has) return false
+      }
+
+      const subAreaId = v.doctor?.sub_area_id ?? ''
+      if (filterSubAreaId && subAreaId !== filterSubAreaId) return false
+
+      if (filterAreaId) {
+        const areaId = areaNameBySubAreaId.get(subAreaId) ?? ''
+        if (areaId !== filterAreaId) return false
+      }
+
+      return true
+    })
+  }, [
+    sortedVisits,
+    filterMrId,
+    selectedMr,
+    filterFromDate,
+    filterToDate,
+    selectedDate,
+    filterSpeciality,
+    filterProduct,
+    filterSubAreaId,
+    filterAreaId,
+    areaNameBySubAreaId,
+  ])
+
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleViewReport = () => {
@@ -48,11 +155,125 @@ export default function ManagerReports() {
     setOpenCards({});
   };
 
+  const downloadCurrentReportExcel = () => {
+    if (!report) {
+      toast.error('Load a report first.')
+      return
+    }
+    const rows = (report.visits ?? []).map(visit => ({
+      'Doctor Name': visit.doctor?.full_name ?? '',
+      Speciality: visit.doctor?.speciality ?? '',
+      'Sub Area': visit.doctor?.sub_area?.name ?? '',
+      Area: (visit.doctor?.sub_area as any)?.area?.name ?? '',
+      Chemist: visit.chemist?.name ?? '',
+      'Products Promoted': (visit.promoted_products ?? [])
+        .map(p => p.product?.name)
+        .filter(Boolean)
+        .join(', '),
+      Competitors: (visit.competitor_entries ?? [])
+        .map(c => `${c.brand_name} (${c.quantity})`)
+        .join(', '),
+      'Monthly Support': (visit.monthly_support_entries ?? [])
+        .map(m => `${m.product?.name ?? ''} (${m.quantity})`)
+        .join(', '),
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Report')
+    const mrName = mrUser?.full_name?.replace(/\s+/g, '_') || 'MR'
+    XLSX.writeFile(wb, `MR_Report_${mrName}_${selectedDate}.xlsx`)
+  }
+
+  const downloadRangeExcel = async () => {
+    try {
+      if (!supabase) throw new Error('Supabase not configured')
+      if (!filterFromDate || !filterToDate) {
+        toast.error('Select date range first (From and To).')
+        return
+      }
+
+      let q = supabase
+        .from('v_visit_detail')
+        .select('*')
+        .gte('report_date', filterFromDate)
+        .lte('report_date', filterToDate)
+
+      if (selectedMr) q = q.eq('mr_id', selectedMr)
+      if (filterAreaId) {
+        const areaName = allAreas.find(a => a.id === filterAreaId)?.name ?? ''
+        if (areaName) q = q.eq('area', areaName)
+      }
+      if (filterSubAreaId) {
+        const sa = allAreas.flatMap(a => a.sub_areas ?? []).find(s => s.id === filterSubAreaId)
+        if (sa?.name) q = q.eq('sub_area', sa.name)
+      }
+
+      const { data, error } = await q.order('report_date', { ascending: false })
+      if (error) throw error
+
+      const rows = (data ?? []).map((r: any) => ({
+        Date: r.report_date ?? '',
+        MR: r.mr_name ?? '',
+        'Doctor Name': r.doctor_name ?? '',
+        Area: r.area ?? '',
+        'Sub Area': r.sub_area ?? '',
+        'Doctor Id': r.doctor_id ?? '',
+        'Visit Id': r.visit_id ?? '',
+      }))
+
+      if (rows.length === 0) {
+        toast.error('No visit records found for selected range.')
+        return
+      }
+
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Visits')
+      XLSX.writeFile(
+        wb,
+        `MR_Visits_${filterFromDate}_to_${filterToDate}.xlsx`,
+      )
+      toast.success('Excel downloaded ✓')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Excel download failed')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20">
       <PageHeader title="MR Reports" />
 
       <div className="px-4 py-4 space-y-4">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={activeTab === 'reports' ? 'default' : 'outline'}
+            className="flex-1 touch-target rounded-lg"
+            onClick={() => {
+              setActiveTab('reports')
+              setShowReport(false)
+              setOpenCards({})
+            }}
+          >
+            Reports
+          </Button>
+          <Button
+            type="button"
+            variant={activeTab === 'issues' ? 'default' : 'outline'}
+            className="flex-1 touch-target rounded-lg"
+            onClick={() => {
+              setActiveTab('issues')
+              setShowReport(false)
+              setOpenCards({})
+            }}
+          >
+            Issues
+          </Button>
+        </div>
+
+        {activeTab === 'reports' && (
+        <div className="space-y-3">
         <div className="space-y-3 rounded-xl bg-card p-4 shadow-sm animate-fade-in">
           <div className="space-y-2">
             <Label className="text-xs">Select MR</Label>
@@ -90,6 +311,127 @@ export default function ManagerReports() {
           </Button>
         </div>
 
+        <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Doctor Visit Filters
+          </p>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Speciality</Label>
+              <select
+                value={filterSpeciality}
+                onChange={e => setFilterSpeciality(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All</option>
+                {uniqueSpecialities.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Product</Label>
+              <select
+                value={filterProduct}
+                onChange={e => setFilterProduct(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All</option>
+                {uniqueProducts.map(p => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Area</Label>
+              <select
+                value={filterAreaId}
+                onChange={e => {
+                  setFilterAreaId(e.target.value)
+                  setFilterSubAreaId('')
+                }}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All</option>
+                {allAreas.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">Sub-area</Label>
+              <select
+                value={filterSubAreaId}
+                onChange={e => setFilterSubAreaId(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All</option>
+                {(allAreas
+                  .filter(a => !filterAreaId || a.id === filterAreaId)
+                  .flatMap(a => a.sub_areas ?? [])
+                ).map(sa => (
+                  <option key={sa.id} value={sa.id}>{sa.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">MR</Label>
+              <select
+                value={filterMrId}
+                onChange={e => setFilterMrId(e.target.value)}
+                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+              >
+                <option value="">All</option>
+                {mrs.map(m => (
+                  <option key={m.id} value={m.id}>{m.full_name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">From Date</Label>
+              <Input type="date" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} className="h-10 rounded-lg text-xs" />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">To Date</Label>
+              <Input type="date" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} className="h-10 rounded-lg text-xs" />
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full touch-target rounded-lg"
+            onClick={() => {
+              setFilterSpeciality('')
+              setFilterProduct('')
+              setFilterAreaId('')
+              setFilterSubAreaId('')
+              setFilterMrId('')
+              setFilterFromDate('')
+              setFilterToDate('')
+            }}
+          >
+            Clear Filters
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full touch-target rounded-lg border-accent/50 text-accent-foreground"
+            onClick={() => void downloadRangeExcel()}
+          >
+            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
+            Download Date Range Excel
+          </Button>
+        </div>
+
         {showReport && selectedMr && selectedDate && (
           <>
             {reportLoading && <LoadingSpinner />}
@@ -105,7 +447,7 @@ export default function ManagerReports() {
                   <Button variant="outline" className="flex-1 touch-target rounded-lg text-sm font-semibold border-primary/30 text-primary" type="button">
                     <Download className="h-4 w-4 mr-1.5" /> Download PDF
                   </Button>
-                  <Button variant="outline" className="flex-1 touch-target rounded-lg text-sm font-semibold border-accent/50 text-accent-foreground" type="button">
+                  <Button variant="outline" className="flex-1 touch-target rounded-lg text-sm font-semibold border-accent/50 text-accent-foreground" type="button" onClick={downloadCurrentReportExcel}>
                     <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Download Excel
                   </Button>
                 </div>
@@ -132,12 +474,12 @@ export default function ManagerReports() {
                 </div>
 
                 <div>
-                  <p className="text-sm font-medium text-foreground mb-3">Doctor Visits ({sortedVisits.length})</p>
-                  {sortedVisits.length === 0 ? (
+                  <p className="text-sm font-medium text-foreground mb-3">Doctor Visits ({filteredVisits.length})</p>
+                  {filteredVisits.length === 0 ? (
                     <EmptyState message="No visits recorded for this report." />
                   ) : (
                     <div className="space-y-2">
-                      {sortedVisits.map(visit => {
+                      {filteredVisits.map(visit => {
                         const doc = visit.doctor;
                         const subName = doc?.sub_area?.name ?? '—';
                         const chemistName = visit.chemist?.name ?? '—';
@@ -245,8 +587,133 @@ export default function ManagerReports() {
           </>
         )}
 
-        {!showReport && (
-          <EmptyState message="Select an MR and date to view their report" />
+          {!showReport && (
+            <EmptyState message="Select an MR and date to view their report" />
+          )}
+        </div>
+      )}
+
+        {activeTab === 'issues' && (
+          <div className="space-y-4 rounded-xl bg-card p-4 shadow-sm animate-fade-in">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Open Report Issues
+              </p>
+              <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                {reportIssues?.length ?? 0}
+              </Badge>
+            </div>
+
+            {issuesLoading && <LoadingSpinner />}
+
+            {issuesError && <EmptyState message="Could not load report issues." />}
+
+            {!issuesLoading && !issuesError && (reportIssues?.length ?? 0) === 0 && (
+              <EmptyState message="No open report issues." />
+            )}
+
+            {!issuesLoading && !issuesError && (reportIssues?.length ?? 0) > 0 && (
+              <div className="space-y-3">
+                {reportIssues.map(issue => {
+                  const noteValue =
+                    managerNotesByIssueId[issue.id] ?? issue.manager_note ?? ''
+
+                  const canMarkReviewed =
+                    issue.status !== 'reviewed' && issue.status !== 'resolved'
+                  const canResolve = issue.status !== 'resolved'
+
+                  const statusBadgeClass =
+                    issue.status === 'open'
+                      ? 'bg-amber-500/10 text-amber-900 border-amber-500/30'
+                      : issue.status === 'reviewed'
+                        ? 'bg-primary/10 text-primary border-primary/30'
+                        : 'bg-emerald-600/10 text-emerald-800 border-emerald-600/30'
+
+                  return (
+                    <div
+                      key={issue.id}
+                      className="rounded-xl border border-border bg-background p-4 space-y-3"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {issue.mr_full_name ?? 'MR'}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Date: {issue.report_date ? formatDisplayDate(issue.report_date) : '—'}
+                          </p>
+                        </div>
+                        <Badge className={statusBadgeClass}>{issue.status}</Badge>
+                      </div>
+
+                      <div className="space-y-1">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Issue
+                        </p>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">
+                          {issue.issue_text}
+                        </p>
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          Manager Note
+                        </p>
+                        <Textarea
+                          value={noteValue}
+                          onChange={e =>
+                            setManagerNotesByIssueId(prev => ({
+                              ...prev,
+                              [issue.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Add your review note…"
+                          className="min-h-[120px] touch-target rounded-lg"
+                        />
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          className="flex-1 touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                          disabled={!canMarkReviewed || updateIssue.isPending}
+                          onClick={() =>
+                            void updateIssue
+                              .mutateAsync({
+                                issueId: issue.id,
+                                status: 'reviewed',
+                                managerNote: noteValue,
+                              })
+                              .then(() => toast.success('Marked as reviewed ✓'))
+                          }
+                        >
+                          Mark Reviewed
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="flex-1 touch-target rounded-lg"
+                          disabled={!canResolve || updateIssue.isPending}
+                          onClick={() =>
+                            void updateIssue
+                              .mutateAsync({
+                                issueId: issue.id,
+                                status: 'resolved',
+                                managerNote: noteValue,
+                              })
+                              .then(() => toast.success('Issue resolved ✓'))
+                          }
+                        >
+                          Resolve
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         )}
       </div>
 

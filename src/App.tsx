@@ -10,14 +10,18 @@ import MRDashboard from "@/pages/mr/Dashboard";
 import NewReport from "@/pages/mr/NewReport";
 import ReportHistory from "@/pages/mr/ReportHistory";
 import ReportDetail from "@/pages/mr/ReportDetail";
+import MasterList from "@/pages/mr/MasterList";
 import ManagerDashboard from "@/pages/manager/Dashboard";
 import ManagerReports from "@/pages/manager/Reports";
 import ManagerAnalytics from "@/pages/manager/Analytics";
+import UnlockRequests from "@/pages/manager/UnlockRequests";
+import ManagerTargets from "@/pages/manager/Targets";
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminUsers from "@/pages/admin/Users";
 import AdminDoctors from "@/pages/admin/Doctors";
 import AdminAreas from "@/pages/admin/Areas";
 import AdminMRAccess from "@/pages/admin/MRAccess";
+import AdminTargets from "@/pages/admin/Targets";
 import NotFound from "@/pages/NotFound";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 
@@ -57,12 +61,15 @@ const App = () => (
             {/* MR Routes */}
             <Route path="/mr/dashboard" element={<ProtectedRoute allowedRoles={['mr']}><MRDashboard /></ProtectedRoute>} />
             <Route path="/mr/report/new" element={<ProtectedRoute allowedRoles={['mr']}><NewReport /></ProtectedRoute>} />
+            <Route path="/mr/master-list" element={<ProtectedRoute allowedRoles={['mr']}><MasterList /></ProtectedRoute>} />
             <Route path="/mr/report/history" element={<ProtectedRoute allowedRoles={['mr']}><ReportHistory /></ProtectedRoute>} />
             <Route path="/mr/report/:id" element={<ProtectedRoute allowedRoles={['mr']}><ReportDetail /></ProtectedRoute>} />
 
             {/* Manager Routes */}
             <Route path="/manager/dashboard" element={<ProtectedRoute allowedRoles={['manager']}><ManagerDashboard /></ProtectedRoute>} />
             <Route path="/manager/reports" element={<ProtectedRoute allowedRoles={['manager']}><ManagerReports /></ProtectedRoute>} />
+            <Route path="/manager/requests" element={<ProtectedRoute allowedRoles={['manager']}><UnlockRequests /></ProtectedRoute>} />
+            <Route path="/manager/targets" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTargets /></ProtectedRoute>} />
             <Route path="/manager/analytics" element={<ProtectedRoute allowedRoles={['manager']}><ManagerAnalytics /></ProtectedRoute>} />
 
             {/* Admin Routes */}
@@ -71,6 +78,7 @@ const App = () => (
             <Route path="/admin/doctors" element={<ProtectedRoute allowedRoles={['admin']}><AdminDoctors /></ProtectedRoute>} />
             <Route path="/admin/areas" element={<ProtectedRoute allowedRoles={['admin']}><AdminAreas /></ProtectedRoute>} />
             <Route path="/admin/mr-access" element={<ProtectedRoute allowedRoles={['admin']}><AdminMRAccess /></ProtectedRoute>} />
+            <Route path="/admin/targets" element={<ProtectedRoute allowedRoles={['admin']}><AdminTargets /></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

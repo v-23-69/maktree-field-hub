@@ -59,6 +59,39 @@ export function useSaveMrSubAreaAccess() {
   })
 }
 
+export function useAssignSubAreaToMr() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: { mrId: string; subAreaId: string }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      try {
+        const { data: existing, error: exErr } = await supabase
+          .from('mr_sub_area_access')
+          .select('id')
+          .eq('mr_id', p.mrId)
+          .eq('sub_area_id', p.subAreaId)
+          .maybeSingle()
+        if (exErr) throw exErr
+        if (existing?.id) return
+
+        const { error } = await supabase
+          .from('mr_sub_area_access')
+          .insert({ mr_id: p.mrId, sub_area_id: p.subAreaId })
+        if (error) throw error
+      } catch (e) {
+        const message =
+          e instanceof Error ? e.message : 'Could not assign sub-area'
+        throw new Error(message)
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mr-access'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-sub-areas'] })
+      queryClient.invalidateQueries({ queryKey: ['all-areas'] })
+    },
+  })
+}
+
 export function useAdminMrsList() {
   return useQuery({
     queryKey: ['admin-mrs'],

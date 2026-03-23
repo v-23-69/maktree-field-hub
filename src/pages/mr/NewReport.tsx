@@ -7,6 +7,13 @@ import ReportStep2 from '@/components/mr/ReportStep2';
 import ReportStep3 from '@/components/mr/ReportStep3';
 import ReportStep4 from '@/components/mr/ReportStep4';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useReportBlockStatus, useRequestReportUnlock } from '@/hooks/useReport';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { AlertTriangle } from 'lucide-react';
+import { toast } from 'sonner';
 
 /** One saved doctor visit (local form state). */
 export interface VisitFormEntry {
@@ -78,7 +85,11 @@ function loadDraft(): ReportFormData | null {
 }
 
 export default function NewReport() {
+  const { user } = useAuth()
+  const mrId = user?.id ?? ''
+
   const [step, setStep] = useState(1);
+  const [unlockReason, setUnlockReason] = useState('')
   const [formData, setFormData] = useState<ReportFormData>(() => {
     const draft = loadDraft();
     return draft || {
@@ -100,6 +111,111 @@ export default function NewReport() {
   const clearDraft = useCallback(() => {
     localStorage.removeItem(DRAFT_KEY);
   }, []);
+
+  const {
+    data: blockStatus,
+    isLoading: blockLoading,
+    isError: blockError,
+  } = useReportBlockStatus(mrId)
+  const requestUnlock = useRequestReportUnlock()
+
+  if (blockLoading) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="New Daily Report" showBack />
+        <div className="px-4 py-6">
+          <LoadingSpinner />
+        </div>
+        <BottomNav role="mr" />
+      </div>
+    )
+  }
+
+  if (blockError) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="New Daily Report" showBack />
+        <div className="px-4 py-6">
+          <p className="text-sm text-destructive">Could not load report block status.</p>
+        </div>
+        <BottomNav role="mr" />
+      </div>
+    )
+  }
+
+  if (blockStatus?.is_blocked) {
+    if (blockStatus.has_pending_request) {
+      return (
+        <div className="min-h-screen bg-background pb-20">
+          <PageHeader title="New Daily Report" showBack />
+          <div className="px-4 py-6 space-y-4">
+            <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+              <AlertTriangle className="h-5 w-5 text-amber-700" />
+              <div>
+                <p className="text-base font-semibold text-foreground">Unlock Request Pending</p>
+                <p className="text-sm text-muted-foreground">
+                  Your request has been sent to your manager. Please wait for approval.
+                </p>
+              </div>
+            </div>
+          </div>
+          <BottomNav role="mr" />
+        </div>
+      )
+    }
+
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="New Daily Report" showBack />
+        <div className="px-4 py-6 space-y-4">
+          <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
+            <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
+            <div className="space-y-1">
+              <p className="text-base font-semibold text-foreground">
+                Report Submission Blocked
+              </p>
+              <p className="text-sm text-muted-foreground">
+                You have not submitted reports for {blockStatus.missed_dates.join(', ')}.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Reason
+            </label>
+            <Textarea
+              value={unlockReason}
+              onChange={e => setUnlockReason(e.target.value)}
+              placeholder="Please explain why reports were not submitted"
+              className="min-h-[120px] touch-target rounded-lg"
+            />
+          </div>
+
+          <Button
+            type="button"
+            disabled={requestUnlock.isPending || !unlockReason.trim()}
+            onClick={async () => {
+              try {
+                await requestUnlock.mutateAsync({
+                  mrId,
+                  reason: unlockReason,
+                })
+                toast.success('Unlock request sent ✓')
+                setUnlockReason('')
+              } catch (e) {
+                toast.error(e instanceof Error ? e.message : 'Request failed')
+              }
+            }}
+            className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+          >
+            {requestUnlock.isPending ? 'Sending…' : 'Send Unlock Request'}
+          </Button>
+        </div>
+        <BottomNav role="mr" />
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">

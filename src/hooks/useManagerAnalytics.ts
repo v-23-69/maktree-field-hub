@@ -5,6 +5,15 @@ export interface ManagerAnalyticsCharts {
   productPromotions: { name: string; count: number }[]
   mrVisits: { name: string; visits: number }[]
   competitorBrands: { brand: string; count: number }[]
+  areaPerformance: { area: string; qty: number }[]
+  doctorLoyalty: {
+    doctor_name: string
+    product_name: string
+    area: string
+    months_written: number
+    total_qty: number
+  }[]
+  competitorIntel: { area: string; brand: string; month: string; qty: number }[]
   totalVisits: number
   uniqueDoctorVisits: number
 }
@@ -50,6 +59,16 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : v != null ? String(v) : ''
 }
 
+function pick(
+  row: Record<string, unknown>,
+  keys: string[],
+): unknown {
+  for (const k of keys) {
+    if (k in row) return row[k]
+  }
+  return null
+}
+
 /** Aggregates analytics views for the manager's MR roster and date range. */
 export function useManagerAnalytics(
   mrIds: string[],
@@ -66,13 +85,16 @@ export function useManagerAnalytics(
           productPromotions: [],
           mrVisits: [],
           competitorBrands: [],
+          areaPerformance: [],
+          doctorLoyalty: [],
+          competitorIntel: [],
           totalVisits: 0,
           uniqueDoctorVisits: 0,
         }
       }
 
       try {
-        const [msRes, compRes, visitRes] = await Promise.all([
+        const [msRes, compRes, visitRes, areaRes, loyaltyRes, intelRes] = await Promise.all([
           supabase
             .from('v_monthly_support_summary')
             .select(
@@ -97,11 +119,24 @@ export function useManagerAnalytics(
             .in('mr_id', mrIds)
             .gte('report_date', fromDate)
             .lte('report_date', toDate),
+          supabase
+            .from('v_area_performance')
+            .select('*'),
+          supabase
+            .from('v_doctor_loyalty')
+            .select('*')
+            .in('mr_id', mrIds),
+          supabase
+            .from('v_competitor_intelligence')
+            .select('*'),
         ])
 
         if (msRes.error) throw msRes.error
         if (compRes.error) throw compRes.error
         if (visitRes.error) throw visitRes.error
+        if (areaRes.error) throw areaRes.error
+        if (loyaltyRes.error) throw loyaltyRes.error
+        if (intelRes.error) throw intelRes.error
 
         const msRows = (msRes.data ?? []) as MonthlySupportSummaryRow[]
         const productMap = new Map<string, number>()
@@ -143,10 +178,42 @@ export function useManagerAnalytics(
         const totalVisits = visitRows.length
         const uniqueDoctorVisits = visitIds.size || totalVisits
 
+        const areaMap = new Map<string, number>()
+        for (const raw of (areaRes.data ?? []) as Record<string, unknown>[]) {
+          const area = str(pick(raw, ['area', 'area_name'])) || 'Area'
+          const qty = num(pick(raw, ['total_quantity', 'quantity', 'total_qty', 'qty']))
+          areaMap.set(area, (areaMap.get(area) ?? 0) + qty)
+        }
+        const areaPerformance = Array.from(areaMap.entries())
+          .map(([area, qty]) => ({ area, qty }))
+          .sort((a, b) => b.qty - a.qty)
+
+        const doctorLoyalty = ((loyaltyRes.data ?? []) as Record<string, unknown>[])
+          .map(raw => ({
+            doctor_name: str(pick(raw, ['doctor_name', 'doctor'])),
+            product_name: str(pick(raw, ['product_name', 'product'])),
+            area: str(pick(raw, ['area', 'area_name'])),
+            months_written: num(pick(raw, ['months_written', 'months'])),
+            total_qty: num(pick(raw, ['total_quantity', 'quantity', 'total_qty', 'qty'])),
+          }))
+          .sort((a, b) => b.months_written - a.months_written)
+
+        const competitorIntel = ((intelRes.data ?? []) as Record<string, unknown>[])
+          .map(raw => ({
+            area: str(pick(raw, ['area', 'area_name'])) || 'Area',
+            brand: str(pick(raw, ['competitor_brand', 'brand_name', 'brand'])) || 'Brand',
+            month: str(pick(raw, ['month_label', 'month', 'report_month', 'month_date'])),
+            qty: num(pick(raw, ['total_quantity', 'quantity', 'total_qty', 'qty'])),
+          }))
+          .sort((a, b) => b.qty - a.qty)
+
         return {
           productPromotions,
           mrVisits,
           competitorBrands,
+          areaPerformance,
+          doctorLoyalty,
+          competitorIntel,
           totalVisits,
           uniqueDoctorVisits,
         }

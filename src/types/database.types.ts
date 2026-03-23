@@ -37,6 +37,14 @@ export interface Doctor {
   doctor_code: string
   full_name: string
   speciality: string | null
+  qualification: string | null
+  address: string | null
+  city: string | null
+  mobile: string | null
+  birthday: string | null
+  marriage_anniversary: string | null
+  visit_frequency: 'weekly' | 'fortnightly' | 'monthly' | null
+  master_list_complete: boolean
   is_active: boolean
   created_at: string
   sub_area?: SubArea
@@ -46,6 +54,9 @@ export interface Chemist {
   id: string
   sub_area_id: string
   name: string
+  address: string | null
+  city: string | null
+  mobile: string | null
   is_active: boolean
   created_at: string
 }
@@ -199,4 +210,86 @@ export interface AuthState {
   authReady: boolean
   /** Supabase has a JWT but `public.users` profile is not loaded yet (e.g. returning visit). */
   isProfileLoading: boolean
+}
+
+export interface DoctorAlert {
+  doctor_id: string
+  doctor_name: string
+  alert_type: 'birthday' | 'anniversary'
+  alert_date: string
+  days_until: number
+  sub_area: string
+}
+
+export interface ReportBlockStatus {
+  is_blocked: boolean
+  missed_dates: string[]
+  has_pending_request: boolean
+}
+
+export interface AllowedReportDate {
+  report_date: string
+  already_submitted: boolean
+}
+
+export interface ReportUnlockRequest {
+  id: string
+  mr_id: string
+  manager_id: string | null
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  manager_comment: string | null
+  requested_date: string
+  resolved_at: string | null
+  created_at: string
+}
+
+export interface ReportIssue {
+  id: string
+  report_id: string
+  mr_id: string
+  issue_text: string
+  report_date: string
+  status: 'open' | 'reviewed' | 'resolved'
+  manager_note: string | null
+  created_at: string
+}
+
+export interface Target {
+  id: string
+  mr_id: string
+  product_id: string
+  sub_area_id: string | null
+  target_qty: number
+  achieved_qty: number
+  start_date: string
+  end_date: string
+  set_by: string
+  created_at: string
+}
+
+export interface TargetAchievement {
+  target_id: string
+  mr_id: string
+  mr_name: string
+  mr_code: string
+  product_name: string
+  sub_area: string | null
+  target_qty: number
+  start_date: string
+  end_date: string
+  achieved_qty: number
+  achievement_pct: number
+}
+
+export interface MasterListCompletion {
+  mr_id: string
+  mr_name: string
+  area: string
+  sub_area: string
+  sub_area_id: string
+  total_doctors: number
+  complete_doctors: number
+  incomplete_doctors: number
+  completion_pct: number
 }
