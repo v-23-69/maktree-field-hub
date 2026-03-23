@@ -6,10 +6,10 @@ import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
 
 import Login from "@/pages/auth/Login";
-import ChangePassword from "@/pages/auth/ChangePassword";
 import MRDashboard from "@/pages/mr/Dashboard";
 import NewReport from "@/pages/mr/NewReport";
 import ReportHistory from "@/pages/mr/ReportHistory";
+import ReportDetail from "@/pages/mr/ReportDetail";
 import ManagerDashboard from "@/pages/manager/Dashboard";
 import ManagerReports from "@/pages/manager/Reports";
 import ManagerAnalytics from "@/pages/manager/Analytics";
@@ -19,13 +19,28 @@ import AdminDoctors from "@/pages/admin/Doctors";
 import AdminAreas from "@/pages/admin/Areas";
 import AdminMRAccess from "@/pages/admin/MRAccess";
 import NotFound from "@/pages/NotFound";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      /** Avoid refetching on every mount/focus during navigation (faster perceived load). */
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+});
 
 function RootRedirect() {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, authReady } = useAuth();
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    );
+  }
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-  if (user.must_change_password) return <Navigate to="/change-password" replace />;
   return <Navigate to={getRoleDashboard(user.role)} replace />;
 }
 
@@ -38,12 +53,12 @@ const App = () => (
           <Routes>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
-            <Route path="/change-password" element={<ChangePassword />} />
 
             {/* MR Routes */}
             <Route path="/mr/dashboard" element={<ProtectedRoute allowedRoles={['mr']}><MRDashboard /></ProtectedRoute>} />
             <Route path="/mr/report/new" element={<ProtectedRoute allowedRoles={['mr']}><NewReport /></ProtectedRoute>} />
             <Route path="/mr/report/history" element={<ProtectedRoute allowedRoles={['mr']}><ReportHistory /></ProtectedRoute>} />
+            <Route path="/mr/report/:id" element={<ProtectedRoute allowedRoles={['mr']}><ReportDetail /></ProtectedRoute>} />
 
             {/* Manager Routes */}
             <Route path="/manager/dashboard" element={<ProtectedRoute allowedRoles={['manager']}><ManagerDashboard /></ProtectedRoute>} />

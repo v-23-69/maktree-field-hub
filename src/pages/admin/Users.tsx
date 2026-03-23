@@ -1,7 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '@/components/admin/AdminLayout';
-import { MOCK_USERS, MOCK_AREAS, MOCK_SUB_AREAS } from '@/lib/mock-data';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import EmptyState from '@/components/shared/EmptyState';
+import {
+  useAdminUsersList,
+  useCreateUser,
+  useToggleUserActive,
+  useMrAssignments,
+  useSaveMrAssignments,
+  type CreateUserPayload,
+} from '@/hooks/useAdminUsers';
+import { useAllAreas } from '@/hooks/useAreas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Plus, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import type { User, UserRole } from '@/types/database.types';
 
 const ROLE_FILTERS = ['All', 'MR', 'Manager', 'Admin'] as const;
 
@@ -20,14 +31,105 @@ export default function AdminUsers() {
     initialFilter === 'mr' ? 'MR' : initialFilter === 'manager' ? 'Manager' : 'All'
   );
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [newRole, setNewRole] = useState('mr');
+  const [editUser, setEditUser] = useState<User | null>(null);
+  const [newRole, setNewRole] = useState<UserRole>('mr');
+  const [fullName, setFullName] = useState('');
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [email, setEmail] = useState('');
+  const [selectedManagers, setSelectedManagers] = useState<Set<string>>(new Set());
+  const [selectedSubAreas, setSelectedSubAreas] = useState<Set<string>>(new Set());
+  const [editManagers, setEditManagers] = useState<Set<string>>(new Set());
+  const [editSubAreas, setEditSubAreas] = useState<Set<string>>(new Set());
 
-  const managers = MOCK_USERS.filter(u => u.role === 'manager' && u.is_active);
+  const { data: allUsers = [], isLoading, isError, refetch } = useAdminUsersList();
+  const { data: areasData = [] } = useAllAreas();
+  const createUser = useCreateUser();
+  const toggleActive = useToggleUserActive();
+  const saveMrAssignments = useSaveMrAssignments();
+  const { data: existingAssignments, isLoading: assignLoading } = useMrAssignments(editUser?.id ?? '');
 
-  const filtered = MOCK_USERS.filter(u => {
-    if (filter === 'All') return true;
-    return u.role === filter.toLowerCase();
-  });
+  const managers = useMemo(
+    () => allUsers.filter(u => u.role === 'manager' && u.is_active),
+    [allUsers],
+  );
+
+  const filtered = useMemo(() => {
+    return allUsers.filter(u => {
+      if (filter === 'All') return true;
+      return u.role === filter.toLowerCase();
+    });
+  }, [allUsers, filter]);
+
+  const resetCreateForm = () => {
+    setFullName('');
+    setEmployeeCode('');
+    setEmail('');
+    setNewRole('mr');
+    setSelectedManagers(new Set());
+    setSelectedSubAreas(new Set());
+  };
+
+  const openEditMr = (u: User) => {
+    setEditUser(u);
+    setEditManagers(new Set());
+    setEditSubAreas(new Set());
+  };
+
+  useEffect(() => {
+    if (!editUser || !existingAssignments) return;
+    setEditManagers(new Set(existingAssignments.managerIds));
+    setEditSubAreas(new Set(existingAssignments.subAreaIds));
+  }, [editUser, existingAssignments]);
+
+  const handleCreate = async () => {
+    if (!fullName.trim() || !employeeCode.trim() || !email.trim()) {
+      toast.error('Fill in name, employee code, and email');
+      return;
+    }
+    const payload: CreateUserPayload = {
+      fullName: fullName.trim(),
+      employeeCode: employeeCode.trim(),
+      email: email.trim(),
+      role: newRole,
+      managerIds: newRole === 'mr' ? [...selectedManagers] : [],
+      subAreaIds: newRole === 'mr' ? [...selectedSubAreas] : [],
+    };
+    try {
+      await createUser.mutateAsync(payload);
+      toast.success('User created. Default password: Maktree@123');
+      setDialogOpen(false);
+      resetCreateForm();
+      void refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not create user');
+    }
+  };
+
+  const handleToggle = async (u: User) => {
+    try {
+      await toggleActive.mutateAsync({ userId: u.id, isActive: u.is_active });
+      toast.success(u.is_active ? 'User deactivated' : 'User activated');
+      void refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Update failed');
+    }
+  };
+
+  const handleSaveEditMr = async () => {
+    if (!editUser) return;
+    try {
+      await saveMrAssignments.mutateAsync({
+        mrId: editUser.id,
+        managerIds: [...editManagers],
+        subAreaIds: [...editSubAreas],
+      });
+      toast.success('Assignments saved');
+      setEditUser(null);
+      void refetch();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Save failed');
+    }
+  };
 
   return (
     <AdminLayout>
@@ -37,6 +139,7 @@ export default function AdminUsers() {
             {ROLE_FILTERS.map(f => (
               <button
                 key={f}
+                type="button"
                 onClick={() => setFilter(f)}
                 className={cn(
                   'rounded-full px-3 py-1.5 text-xs font-medium border whitespace-nowrap active:scale-95 transition-all',
@@ -48,30 +151,30 @@ export default function AdminUsers() {
             ))}
           </div>
 
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) resetCreateForm(); }}>
             <DialogTrigger asChild>
               <Button size="sm" className="rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 shrink-0">
                 <Plus className="h-4 w-4 mr-1" /> Add
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[360px] rounded-xl backdrop-blur-sm">
+            <DialogContent className="max-w-[360px] rounded-xl backdrop-blur-sm max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add New User</DialogTitle>
               </DialogHeader>
-              <div className="space-y-3 pt-2 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Full Name</Label>
-                  <Input placeholder="Enter full name" className="rounded-lg" />
+                  <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter full name" className="rounded-lg" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Employee Code</Label>
-                  <Input placeholder="MKT-MR-004" className="rounded-lg" />
+                  <Input value={employeeCode} onChange={e => setEmployeeCode(e.target.value)} placeholder="MKT-MR-004" className="rounded-lg" />
                 </div>
                 <div className="space-y-1.5">
                   <Label className="text-xs">Role</Label>
                   <select
                     value={newRole}
-                    onChange={e => setNewRole(e.target.value)}
+                    onChange={e => setNewRole(e.target.value as UserRole)}
                     className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
                   >
                     <option value="mr">MR</option>
@@ -80,18 +183,30 @@ export default function AdminUsers() {
                   </select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Email (Optional)</Label>
-                  <Input type="email" placeholder="email@example.com" className="rounded-lg" />
+                  <Label className="text-xs">Email (login)</Label>
+                  <Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="email@example.com" className="rounded-lg" />
                 </div>
+                <p className="text-[11px] text-muted-foreground">
+                  New users receive the default password <span className="font-medium text-foreground">Maktree@123</span> from the edge function.
+                </p>
 
-                {/* MR-specific: Assign Managers */}
                 {newRole === 'mr' && (
                   <div className="space-y-2 pt-2 border-t border-border">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Managers</Label>
                     <div className="space-y-2">
                       {managers.map(m => (
                         <label key={m.id} className="flex items-center gap-3 cursor-pointer">
-                          <Checkbox />
+                          <Checkbox
+                            checked={selectedManagers.has(m.id)}
+                            onCheckedChange={checked => {
+                              setSelectedManagers(prev => {
+                                const next = new Set(prev);
+                                if (checked) next.add(m.id);
+                                else next.delete(m.id);
+                                return next;
+                              });
+                            }}
+                          />
                           <span className="text-sm text-foreground">{m.full_name}</span>
                         </label>
                       ))}
@@ -99,69 +214,165 @@ export default function AdminUsers() {
                   </div>
                 )}
 
-                {/* MR-specific: Assign Sub-areas */}
                 {newRole === 'mr' && (
                   <div className="space-y-3 pt-2 border-t border-border">
                     <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Sub-areas</Label>
-                    {MOCK_AREAS.map(area => {
-                      const subAreas = MOCK_SUB_AREAS.filter(sa => sa.area_id === area.id);
-                      return (
-                        <div key={area.id}>
-                          <p className="text-xs font-medium text-foreground mb-1.5">{area.name}</p>
-                          <div className="space-y-1.5 pl-1">
-                            {subAreas.map(sa => (
-                              <label key={sa.id} className="flex items-center gap-3 cursor-pointer">
-                                <Checkbox />
-                                <span className="text-xs text-foreground">{sa.name}</span>
-                              </label>
-                            ))}
-                          </div>
+                    {areasData.map(area => (
+                      <div key={area.id}>
+                        <p className="text-xs font-medium text-foreground mb-1.5">{area.name}</p>
+                        <div className="space-y-1.5 pl-1">
+                          {(area.sub_areas ?? []).map(sa => (
+                            <label key={sa.id} className="flex items-center gap-3 cursor-pointer">
+                              <Checkbox
+                                checked={selectedSubAreas.has(sa.id)}
+                                onCheckedChange={checked => {
+                                  setSelectedSubAreas(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(sa.id);
+                                    else next.delete(sa.id);
+                                    return next;
+                                  });
+                                }}
+                              />
+                              <span className="text-xs text-foreground">{sa.name}</span>
+                            </label>
+                          ))}
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
                   </div>
                 )}
 
                 <Button
-                  onClick={() => { setDialogOpen(false); toast.success('User created'); }}
+                  type="button"
+                  disabled={createUser.isPending}
+                  onClick={() => void handleCreate()}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                 >
-                  Create User
+                  {createUser.isPending ? 'Creating…' : 'Create User'}
                 </Button>
               </div>
             </DialogContent>
           </Dialog>
         </div>
 
-        <div className="space-y-2">
-          {filtered.map((user, i) => (
-            <div
-              key={user.id}
-              className={cn(
-                'flex items-center gap-3 rounded-xl p-4 shadow-sm animate-fade-in',
-                i % 2 === 0 ? 'bg-card' : 'bg-card/80'
-              )}
-              style={{ animationDelay: `${i * 60}ms` }}
-            >
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
-                <span className="text-sm font-bold text-primary">{user.full_name.split(' ').map(n => n[0]).join('')}</span>
+        {isLoading && <LoadingSpinner />}
+        {isError && <EmptyState message="Could not load users." />}
+        {!isLoading && !isError && allUsers.length === 0 && (
+          <EmptyState message="No users yet." />
+        )}
+        {!isLoading && !isError && allUsers.length > 0 && filtered.length === 0 && (
+          <EmptyState message="No users match this filter." />
+        )}
+        {!isLoading && !isError && filtered.length > 0 && (
+          <div className="space-y-2 overflow-x-auto min-w-0">
+            {filtered.map((u, i) => (
+              <div
+                key={u.id}
+                className={cn(
+                  'flex items-center gap-3 rounded-xl p-4 shadow-sm animate-fade-in',
+                  i % 2 === 0 ? 'bg-card' : 'bg-card/80'
+                )}
+                style={{ animationDelay: `${i * 60}ms` }}
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 shrink-0">
+                  <span className="text-sm font-bold text-primary">{u.full_name.split(' ').map(n => n[0]).join('')}</span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground text-sm truncate">{u.full_name}</p>
+                  <p className="text-xs text-muted-foreground">{u.employee_code} · <span className="capitalize">{u.role}</span></p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {u.role === 'mr' && (
+                    <button
+                      type="button"
+                      className="p-1.5 text-muted-foreground hover:text-foreground"
+                      onClick={() => openEditMr(u)}
+                      aria-label="Edit MR access"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className={cn('p-1.5', u.is_active ? 'text-primary' : 'text-muted-foreground')}
+                    onClick={() => void handleToggle(u)}
+                    disabled={toggleActive.isPending}
+                    aria-label={u.is_active ? 'Deactivate user' : 'Activate user'}
+                  >
+                    {u.is_active ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
+                  </button>
+                </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground text-sm truncate">{user.full_name}</p>
-                <p className="text-xs text-muted-foreground">{user.employee_code} · <span className="capitalize">{user.role}</span></p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button className="p-1.5 text-muted-foreground hover:text-foreground">
-                  <Edit className="h-4 w-4" />
-                </button>
-                <button className={cn('p-1.5', user.is_active ? 'text-primary' : 'text-muted-foreground')}>
-                  {user.is_active ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      <Dialog open={!!editUser} onOpenChange={open => { if (!open) setEditUser(null); }}>
+        <DialogContent className="max-w-[360px] rounded-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit MR: {editUser?.full_name}</DialogTitle>
+          </DialogHeader>
+          {assignLoading ? (
+            <LoadingSpinner />
+          ) : (
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Managers</Label>
+                {managers.map(m => (
+                  <label key={m.id} className="flex items-center gap-3 cursor-pointer">
+                    <Checkbox
+                      checked={editManagers.has(m.id)}
+                      onCheckedChange={checked => {
+                        setEditManagers(prev => {
+                          const next = new Set(prev);
+                          if (checked) next.add(m.id);
+                          else next.delete(m.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <span className="text-sm">{m.full_name}</span>
+                  </label>
+                ))}
+              </div>
+              <div className="space-y-3">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Sub-areas</Label>
+                {areasData.map(area => (
+                  <div key={area.id}>
+                    <p className="text-xs font-medium mb-1">{area.name}</p>
+                    {(area.sub_areas ?? []).map(sa => (
+                      <label key={sa.id} className="flex items-center gap-3 cursor-pointer pl-1 py-0.5">
+                        <Checkbox
+                          checked={editSubAreas.has(sa.id)}
+                          onCheckedChange={checked => {
+                            setEditSubAreas(prev => {
+                              const next = new Set(prev);
+                              if (checked) next.add(sa.id);
+                              else next.delete(sa.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="text-xs">{sa.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <Button
+                type="button"
+                className="w-full"
+                disabled={saveMrAssignments.isPending}
+                onClick={() => void handleSaveEditMr()}
+              >
+                {saveMrAssignments.isPending ? 'Saving…' : 'Save assignments'}
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { MOCK_DOCTORS, MOCK_SUB_AREAS } from '@/lib/mock-data';
+import { useDoctorsBySubAreas } from '@/hooks/useDoctors';
 import { CheckCircle2, Pencil, Plus } from 'lucide-react';
 import DoctorVisitDrawer from '@/components/mr/DoctorVisitDrawer';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import EmptyState from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
-import type { ReportFormData } from '@/pages/mr/NewReport';
+import type { ReportFormData, VisitFormEntry } from '@/pages/mr/NewReport';
+import type { Doctor } from '@/types/database.types';
+import { useProducts } from '@/hooks/useProducts';
 
 interface Props {
   data: ReportFormData;
@@ -15,21 +19,44 @@ interface Props {
 
 export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
   const [activeDoctorId, setActiveDoctorId] = useState<string | null>(null);
+  const { data: doctors = [], isLoading, isError } = useDoctorsBySubAreas(data.selectedSubAreaIds);
+  const { data: products = [] } = useProducts();
 
-  const doctors = MOCK_DOCTORS.filter(d => data.selectedSubAreaIds.includes(d.sub_area_id) && d.is_active);
   const visitCount = Object.keys(data.visits).length;
 
-  // Group doctors by sub-area
   const grouped = data.selectedSubAreaIds.map(saId => {
-    const subArea = MOCK_SUB_AREAS.find(s => s.id === saId);
+    const subAreaName =
+      doctors.find(d => d.sub_area_id === saId)?.sub_area?.name ?? 'Sub-area';
     const docs = doctors.filter(d => d.sub_area_id === saId);
-    return { subArea, docs };
+    return { subAreaId: saId, subAreaName, docs };
   }).filter(g => g.docs.length > 0);
 
-  const handleSaveVisit = (doctorId: string, visit: ReportFormData['visits'][string]) => {
-    onChange({ visits: { ...data.visits, [doctorId]: visit } });
+  const handleSaveVisit = (doctorId: string, subAreaId: string, visit: VisitFormEntry) => {
+    onChange({
+      visits: {
+        ...data.visits,
+        [doctorId]: { ...visit, doctorId, subAreaId },
+      },
+    });
     setActiveDoctorId(null);
   };
+
+  const activeDoctor: Doctor | null =
+    activeDoctorId ? doctors.find(d => d.id === activeDoctorId) ?? null : null;
+  const activeSubAreaId = activeDoctor?.sub_area_id ?? '';
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (isError) {
+    return (
+      <div className="space-y-4 pb-20">
+        <EmptyState message="Could not load doctors for the selected sub-areas." />
+        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 animate-fade-in pb-20">
@@ -39,13 +66,13 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
       </div>
 
       {grouped.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-8 text-center">No doctors found in selected sub-areas.</p>
+        <EmptyState message="No doctors found in selected sub-areas." />
       ) : (
         <div className="space-y-4">
-          {grouped.map(({ subArea, docs }) => (
-            <div key={subArea?.id}>
+          {grouped.map(({ subAreaId, subAreaName, docs }) => (
+            <div key={subAreaId}>
               <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-1.5 -mx-4 px-4 mb-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{subArea?.name}</p>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{subAreaName}</p>
               </div>
               <div className="space-y-2">
                 {docs.map((doc, i) => {
@@ -53,15 +80,16 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
                   return (
                     <button
                       key={doc.id}
+                      type="button"
                       onClick={() => setActiveDoctorId(doc.id)}
                       className={cn(
-                        'w-full flex items-center gap-3 rounded-xl p-4 shadow-sm text-left active:scale-[0.98] transition-all duration-150 animate-fade-in',
+                        'w-full max-w-full min-w-0 flex items-center gap-2 sm:gap-3 rounded-xl p-3 sm:p-4 shadow-sm text-left active:scale-[0.98] transition-all duration-150 animate-fade-in overflow-hidden',
                         hasVisit ? 'bg-primary/5 border border-primary/20' : 'bg-card'
                       )}
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-foreground text-sm truncate">{doc.full_name}</p>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <p className="font-semibold text-foreground text-sm truncate text-left">{doc.full_name}</p>
                         <p className="text-xs text-muted-foreground">{doc.speciality}</p>
                       </div>
                       {hasVisit ? (
@@ -88,7 +116,10 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
       <DoctorVisitDrawer
         open={!!activeDoctorId}
         onClose={() => setActiveDoctorId(null)}
-        doctor={doctors.find(d => d.id === activeDoctorId) || null}
+        doctorId={activeDoctorId}
+        subAreaId={activeSubAreaId}
+        doctor={activeDoctor}
+        products={products}
         existingVisit={activeDoctorId ? data.visits[activeDoctorId] : undefined}
         onSave={handleSaveVisit}
       />

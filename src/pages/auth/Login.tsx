@@ -1,49 +1,80 @@
-import { useState } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { Eye, EyeOff } from 'lucide-react';
-import { useAuth, getRoleDashboard } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
+import type { UserRole } from '@/types/database.types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
-interface LoginForm {
-  employeeCode: string;
-  password: string;
+function navigateByRole(
+  nav: (path: string, options?: { replace?: boolean }) => void,
+  role: UserRole,
+) {
+  const opts = { replace: true as const };
+  if (role === 'mr') nav('/mr/dashboard', opts);
+  else if (role === 'manager') nav('/manager/dashboard', opts);
+  else nav('/admin/dashboard', opts);
 }
 
 export default function Login() {
-  const { login } = useAuth();
+  const { signIn, isAuthenticated, user, authReady, isProfileLoading } =
+    useAuth();
   const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>();
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = async (data: LoginForm) => {
-    setIsLoading(true);
-    const result = await login(data.employeeCode, data.password);
-    setIsLoading(false);
+  useEffect(() => {
+    if (!authReady) return;
+    if (isAuthenticated && user) {
+      navigateByRole(navigate, user.role);
+    }
+  }, [authReady, isAuthenticated, user, navigate]);
 
-    if (result.success) {
-      const stored = localStorage.getItem('maktree_user');
-      if (stored) {
-        const user = JSON.parse(stored);
-        if (user.must_change_password) {
-          navigate('/change-password');
-        } else {
-          navigate(getRoleDashboard(user.role));
-        }
+  const handleLogin = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!employeeCode.trim() || !password) {
+      toast.error('Employee code (or email) and password are required');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const result = await signIn(employeeCode, password);
+      if (result.success && result.user) {
+        navigateByRole(navigate, result.user.role);
+        toast.success('Signed in');
+      } else {
+        toast.error(result.error || 'Login failed');
       }
-    } else {
-      toast.error(result.error || 'Login failed');
+    } catch {
+      toast.error('Login failed');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  if (!authReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
+  if (isProfileLoading) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4">
+        <LoadingSpinner />
+        <p className="text-sm text-muted-foreground">Restoring your session…</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      <div className="w-full max-w-sm animate-fade-in-up">
-        {/* Logo */}
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 w-full max-w-full min-w-0 overflow-x-hidden">
+      <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
         <div className="mb-8 flex flex-col items-center gap-3">
           <div className="flex h-20 w-20 items-center justify-center rounded-full bg-primary shadow-lg">
             <span className="text-2xl font-bold text-primary-foreground">MM</span>
@@ -54,45 +85,37 @@ export default function Login() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="employeeCode">Employee Code</Label>
+            <Label htmlFor="employeeCode">Employee code or work email</Label>
             <Input
               id="employeeCode"
-              placeholder="MKT-MR-001"
-              className="touch-target rounded-lg"
-              {...register('employeeCode', { required: 'Employee code is required' })}
+              placeholder="e.g. MKT-MR-001 or arun.khadul@maktree.in"
+              value={employeeCode}
+              onChange={e => setEmployeeCode(e.target.value)}
+              className="touch-target rounded-lg w-full min-w-0 max-w-full"
+              autoComplete="username"
             />
-            {errors.employeeCode && <p className="text-xs text-destructive">{errors.employeeCode.message}</p>}
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Enter password"
-                className="touch-target rounded-lg pr-12"
-                {...register('password', { required: 'Password is required' })}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              className="touch-target rounded-lg w-full min-w-0 max-w-full"
+              autoComplete="current-password"
+            />
           </div>
 
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-base font-semibold"
           >
-            {isLoading ? 'Signing in...' : 'Sign In'}
+            {isSubmitting ? 'Signing in...' : 'Sign In'}
           </Button>
         </form>
 

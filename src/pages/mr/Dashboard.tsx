@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { FilePlus, FileText, Stethoscope, Calendar } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
@@ -9,7 +10,7 @@ import { Button } from '@/components/ui/button';
 export default function MRDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const today = formatDisplayDate(todayInputDate());
 
   return (
     <div className="min-h-screen bg-background pb-20">

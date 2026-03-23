@@ -7,17 +7,28 @@ export function useDoctorsBySubAreas(subAreaIds: string[]) {
     queryKey: ['doctors-by-sub-areas', subAreaIds],
     queryFn: async (): Promise<Doctor[]> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('doctors')
-        .select('*, sub_area:sub_areas(*)')
-        .in('sub_area_id', subAreaIds)
-        .eq('is_active', true)
-        .order('full_name')
-      if (error) throw error
-      return data as Doctor[]
+      try {
+        const { data, error } = await supabase
+          .from('doctors')
+          .select('*, sub_area:sub_areas(*)')
+          .in('sub_area_id', subAreaIds)
+          .eq('is_active', true)
+          .order('sub_area_id', { ascending: true })
+          .order('full_name', { ascending: true })
+        if (error) throw error
+        return (data ?? []) as Doctor[]
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Failed to load doctors'
+        throw new Error(message)
+      }
     },
     enabled: subAreaIds.length > 0 && !!supabase,
   })
+}
+
+type ChemistMapRow = {
+  chemist_id: string
+  chemists: { id: string; name: string; sub_area_id: string } | null
 }
 
 export function useChemistsByDoctor(doctorId: string) {
@@ -25,12 +36,27 @@ export function useChemistsByDoctor(doctorId: string) {
     queryKey: ['chemists-by-doctor', doctorId],
     queryFn: async (): Promise<Chemist[]> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('chemist_doctor_maps')
-        .select('chemist:chemists(*)')
-        .eq('doctor_id', doctorId)
-      if (error) throw error
-      return (data as any[]).map(d => d.chemist).filter(Boolean) as Chemist[]
+      try {
+        const { data, error } = await supabase
+          .from('chemist_doctor_map')
+          .select('chemist_id, chemists(id, name, sub_area_id)')
+          .eq('doctor_id', doctorId)
+        if (error) throw error
+        const rows = (data ?? []) as ChemistMapRow[]
+        return rows
+          .map(r => r.chemists)
+          .filter((c): c is NonNullable<typeof c> => !!c)
+          .map(c => ({
+            id: c.id,
+            sub_area_id: c.sub_area_id,
+            name: c.name,
+            is_active: true,
+            created_at: '',
+          }))
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Failed to load chemists'
+        throw new Error(message)
+      }
     },
     enabled: !!doctorId && !!supabase,
   })

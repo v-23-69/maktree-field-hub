@@ -8,7 +8,6 @@ export interface User {
   full_name: string
   email: string | null
   role: UserRole
-  must_change_password: boolean
   is_active: boolean
   created_at: string
   updated_at: string
@@ -147,7 +146,7 @@ export interface DailyReportFormData {
   visits: DoctorVisitFormData[]
 }
 
-// Legacy aliases used by mock-data and existing UI components
+// Legacy / alternate shapes used by report UI
 export interface DoctorVisit {
   id: string
   report_id: string
@@ -191,6 +190,13 @@ export interface ReportSubArea {
 
 export interface AuthState {
   user: User | null
+  /**
+   * True only while the initial Supabase session read is in progress (short; does not wait on profile).
+   */
   isLoading: boolean
   isAuthenticated: boolean
+  /** True once the first session check has finished — safe to render the login form. */
+  authReady: boolean
+  /** Supabase has a JWT but `public.users` profile is not loaded yet (e.g. returning visit). */
+  isProfileLoading: boolean
 }

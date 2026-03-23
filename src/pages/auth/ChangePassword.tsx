@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { useAuth, getRoleDashboard } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Info } from 'lucide-react';
 import { toast } from 'sonner';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
 interface ChangePasswordForm {
   newPassword: string;
@@ -14,22 +15,66 @@ interface ChangePasswordForm {
 }
 
 export default function ChangePassword() {
-  const { user, changePassword } = useAuth();
+  const {
+    user,
+    changePassword,
+    isAuthenticated,
+    authReady,
+    isProfileLoading,
+  } = useAuth();
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { register, handleSubmit, watch, formState: { errors } } = useForm<ChangePasswordForm>();
 
+  useEffect(() => {
+    if (!authReady || isProfileLoading) return;
+    if (!isAuthenticated || !user) {
+      navigate('/login', { replace: true });
+    }
+  }, [authReady, isProfileLoading, isAuthenticated, user, navigate]);
+
   const onSubmit = async (data: ChangePasswordForm) => {
-    setIsLoading(true);
-    await changePassword(data.newPassword);
-    setIsLoading(false);
-    toast.success('Password changed successfully');
-    if (user) navigate(getRoleDashboard(user.role));
+    setIsSubmitting(true);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(
+        () => reject(new Error('Request timed out. Please try again.')),
+        10_000,
+      ),
+    );
+    try {
+      const result = (await Promise.race([
+        changePassword(data.newPassword),
+        timeoutPromise,
+      ])) as { success: boolean; error?: string };
+
+      if (result.success) {
+        toast.success('Password changed successfully ✓');
+        if (user?.role === 'mr') navigate('/mr/dashboard');
+        else if (user?.role === 'manager') navigate('/manager/dashboard');
+        else navigate('/admin/dashboard');
+      } else {
+        toast.error(result.error || 'Failed to change password');
+      }
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to change password';
+      toast.error(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
+  if (!authReady || isProfileLoading || !user) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      <div className="w-full max-w-sm animate-fade-in-up">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 w-full max-w-full min-w-0 overflow-x-hidden">
+      <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
         <div className="mb-6 flex flex-col items-center gap-3">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary">
             <span className="text-xl font-bold text-primary-foreground">MM</span>
@@ -60,7 +105,7 @@ export default function ChangePassword() {
             <Input
               id="confirmPassword"
               type="password"
-              className="touch-target rounded-lg"
+              className="touch-target rounded-lg w-full min-w-0 max-w-full"
               placeholder="Re-enter password"
               {...register('confirmPassword', {
                 required: 'Required',
@@ -72,10 +117,10 @@ export default function ChangePassword() {
 
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isSubmitting}
             className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 text-base font-semibold"
           >
-            {isLoading ? 'Updating...' : 'Set New Password'}
+            {isSubmitting ? 'Updating...' : 'Set New Password'}
           </Button>
         </form>
       </div>

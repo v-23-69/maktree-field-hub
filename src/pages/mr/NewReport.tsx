@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { todayInputDate } from '@/lib/dateUtils';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import ReportStep1 from '@/components/mr/ReportStep1';
@@ -7,28 +8,72 @@ import ReportStep3 from '@/components/mr/ReportStep3';
 import ReportStep4 from '@/components/mr/ReportStep4';
 import { cn } from '@/lib/utils';
 
+/** One saved doctor visit (local form state). */
+export interface VisitFormEntry {
+  doctorId: string
+  subAreaId: string
+  productsPromoted: string[]
+  chemistName: string
+  competitors: { brandName: string; quantity: number }[]
+  monthlySupport: { productId: string; quantity: number }[]
+}
+
 export interface ReportFormData {
-  date: string;
-  workingWithId: string;
-  selectedAreaIds: string[];
-  selectedSubAreaIds: string[];
-  visits: Record<string, {
-    doctorId: string;
-    productsPromoted: string[];
-    chemistName: string;
-    competitors: { brandName: string; quantity: number }[];
-    monthlySupport: { productId: string; quantity: number }[];
-  }>;
+  date: string
+  workingWithId: string
+  selectedSubAreaIds: string[]
+  visits: Record<string, VisitFormEntry>
 }
 
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
 const DRAFT_KEY = 'maktree_report_draft';
 
+function migrateDraft(raw: unknown): ReportFormData | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  if (typeof o.date !== 'string') return null
+  return {
+    date: o.date,
+    workingWithId: typeof o.workingWithId === 'string' ? o.workingWithId : '',
+    selectedSubAreaIds: Array.isArray(o.selectedSubAreaIds)
+      ? (o.selectedSubAreaIds as string[])
+      : [],
+    visits: typeof o.visits === 'object' && o.visits !== null
+      ? migrateVisits(o.visits as Record<string, unknown>)
+      : {},
+  }
+}
+
+function migrateVisits(v: Record<string, unknown>): Record<string, VisitFormEntry> {
+  const out: Record<string, VisitFormEntry> = {}
+  for (const [k, val] of Object.entries(v)) {
+    if (!val || typeof val !== 'object') continue
+    const e = val as Record<string, unknown>
+    const doctorId = typeof e.doctorId === 'string' ? e.doctorId : k
+    const subAreaId = typeof e.subAreaId === 'string' ? e.subAreaId : ''
+    out[k] = {
+      doctorId,
+      subAreaId,
+      productsPromoted: Array.isArray(e.productsPromoted)
+        ? (e.productsPromoted as string[])
+        : [],
+      chemistName: typeof e.chemistName === 'string' ? e.chemistName : '',
+      competitors: Array.isArray(e.competitors)
+        ? (e.competitors as { brandName: string; quantity: number }[])
+        : [{ brandName: '', quantity: 0 }],
+      monthlySupport: Array.isArray(e.monthlySupport)
+        ? (e.monthlySupport as { productId: string; quantity: number }[])
+        : [{ productId: '', quantity: 0 }],
+    }
+  }
+  return out
+}
+
 function loadDraft(): ReportFormData | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
+    if (raw) return migrateDraft(JSON.parse(raw));
+  } catch { /* ignore */ }
   return null;
 }
 
@@ -37,15 +82,13 @@ export default function NewReport() {
   const [formData, setFormData] = useState<ReportFormData>(() => {
     const draft = loadDraft();
     return draft || {
-      date: new Date().toISOString().split('T')[0],
+      date: todayInputDate(),
       workingWithId: '',
-      selectedAreaIds: [],
       selectedSubAreaIds: [],
       visits: {},
     };
   });
 
-  // Auto-save draft to localStorage
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
   }, [formData]);
@@ -62,7 +105,6 @@ export default function NewReport() {
     <div className="min-h-screen bg-background pb-20">
       <PageHeader title="New Daily Report" showBack />
 
-      {/* Progress Bar */}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-0">
           {STEPS.map((s, i) => {
@@ -92,9 +134,29 @@ export default function NewReport() {
 
       <div className="px-4 py-3">
         {step === 1 && <ReportStep1 data={formData} onChange={updateData} onNext={() => setStep(2)} />}
-        {step === 2 && <ReportStep2 data={formData} onChange={updateData} onNext={() => setStep(3)} onBack={() => setStep(1)} />}
-        {step === 3 && <ReportStep3 data={formData} onChange={updateData} onNext={() => setStep(4)} onBack={() => setStep(2)} />}
-        {step === 4 && <ReportStep4 data={formData} onBack={() => setStep(3)} onClearDraft={clearDraft} />}
+        {step === 2 && (
+          <ReportStep2
+            data={formData}
+            onChange={updateData}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+          />
+        )}
+        {step === 3 && (
+          <ReportStep3
+            data={formData}
+            onChange={updateData}
+            onNext={() => setStep(4)}
+            onBack={() => setStep(2)}
+          />
+        )}
+        {step === 4 && (
+          <ReportStep4
+            data={formData}
+            onBack={() => setStep(3)}
+            onClearDraft={clearDraft}
+          />
+        )}
       </div>
 
       <BottomNav role="mr" />
