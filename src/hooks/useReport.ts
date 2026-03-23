@@ -3,6 +3,142 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import type { DailyReport, ReportVisit } from '@/types/database.types'
 
+async function loadReportVisits(
+  client: SupabaseClient,
+  reportId: string,
+): Promise<ReportVisit[]> {
+  // Keep this query robust: avoid deep nested embeds that can produce PostgREST
+  // 400 errors depending on relationship naming / RLS / join configuration.
+  const {
+    data: visits,
+    error: visitsErr,
+  } = await client
+    .from('report_visits')
+    .select('id, report_id, doctor_id, chemist_id, visited_at')
+    .eq('report_id', reportId)
+    .order('visited_at', { ascending: true })
+
+  if (visitsErr) throw visitsErr
+  const v = (visits ?? []) as ReportVisit[]
+  if (v.length === 0) return []
+
+  const visitIds = v.map(r => r.id)
+  const doctorIds = [...new Set(v.map(r => r.doctor_id))]
+  const chemistIds = [...new Set(v.map(r => r.chemist_id).filter(Boolean))] as string[]
+
+  const { data: doctors, error: docErr } = await client
+    .from('doctors')
+    .select('*, sub_area:sub_areas(*)')
+    .in('id', doctorIds)
+  if (docErr) throw docErr
+
+  let chemists: any[] = []
+  if (chemistIds.length > 0) {
+    const { data: chemData, error: chemErr } = await client
+      .from('chemists')
+      .select('id, name, sub_area_id, is_active, created_at')
+      .in('id', chemistIds)
+    if (chemErr) throw chemErr
+    chemists = (chemData ?? []) as any[]
+  }
+
+  const doctorById = new Map<string, (typeof doctors)[number]>()
+  for (const d of doctors ?? []) doctorById.set((d as any).id, d as any)
+
+  const chemistById = new Map<string, (typeof chemists)[number]>()
+  for (const c of chemists ?? []) chemistById.set((c as any).id, c as any)
+
+  const { data: promotedRows, error: promotedErr } = await client
+    .from('promoted_products')
+    .select('id, visit_id, product_id')
+    .in('visit_id', visitIds)
+  if (promotedErr) throw promotedErr
+
+  const { data: competitorRows, error: competitorErr } = await client
+    .from('competitor_entries')
+    .select('id, visit_id, brand_name, quantity')
+    .in('visit_id', visitIds)
+  if (competitorErr) throw competitorErr
+
+  const { data: monthlyRows, error: monthlyErr } = await client
+    .from('monthly_support_entries')
+    .select('id, visit_id, product_id, quantity')
+    .in('visit_id', visitIds)
+  if (monthlyErr) throw monthlyErr
+
+  const promoted = (promotedRows ?? []) as Array<{
+    id: string
+    visit_id: string
+    product_id: string
+  }>
+  const competitors = (competitorRows ?? []) as Array<{
+    id: string
+    visit_id: string
+    brand_name: string
+    quantity: number
+  }>
+  const monthly = (monthlyRows ?? []) as Array<{
+    id: string
+    visit_id: string
+    product_id: string
+    quantity: number
+  }>
+
+  const productIds = [
+    ...new Set([
+      ...promoted.map(r => r.product_id),
+      ...monthly.map(r => r.product_id),
+    ]),
+  ]
+
+  let products: Array<{ id: string; name: string }> = []
+  if (productIds.length > 0) {
+    const { data: prodData, error: productsErr } = await client
+      .from('products')
+      .select('id, name')
+      .in('id', productIds)
+    if (productsErr) throw productsErr
+    products = (prodData ?? []) as Array<{ id: string; name: string }>
+  }
+
+  const productById = new Map<string, { id: string; name: string }>()
+  for (const p of products ?? []) productById.set((p as any).id, p as any)
+
+  // Assemble final shape expected by the UI.
+  return v.map(visit => {
+    const doctor = doctorById.get(visit.doctor_id)
+    const chemist = visit.chemist_id ? chemistById.get(visit.chemist_id) : undefined
+
+    return {
+      ...visit,
+      doctor: doctor as any,
+      chemist: chemist as any,
+      promoted_products: promoted
+        .filter(pp => pp.visit_id === visit.id)
+        .map(pp => ({
+          id: pp.id,
+          visit_id: pp.visit_id,
+          product_id: pp.product_id,
+          product: productById.get(pp.product_id)
+            ? { ...productById.get(pp.product_id)!, is_active: true }
+            : undefined,
+        })),
+      competitor_entries: competitors.filter(c => c.visit_id === visit.id),
+      monthly_support_entries: monthly
+        .filter(m => m.visit_id === visit.id)
+        .map(m => ({
+          id: m.id,
+          visit_id: m.visit_id,
+          product_id: m.product_id,
+          quantity: m.quantity,
+          product: productById.get(m.product_id)
+            ? { ...productById.get(m.product_id)!, is_active: true }
+            : undefined,
+        })),
+    } as ReportVisit
+  })
+}
+
 /** Check for an existing daily report for MR + date (draft or submitted). */
 export async function findExistingDailyReport(
   client: SupabaseClient,
@@ -180,20 +316,13 @@ export function useDailyReport(reportId: string) {
           .select(`
             *,
             mr:users!daily_reports_mr_id_fkey(*),
-            manager:users!daily_reports_manager_id_fkey(*),
-            visits:report_visits(
-              *,
-              doctor:doctors(*, sub_area:sub_areas(name)),
-              chemist:chemists(*),
-              promoted_products(*, product:products(*)),
-              competitor_entries(*),
-              monthly_support_entries(*, product:products(*))
-            )
+            manager:users!daily_reports_manager_id_fkey(*)
           `)
           .eq('id', reportId)
           .single()
         if (error) throw error
-        return data as DailyReport & { visits: ReportVisit[] }
+        const visits = await loadReportVisits(supabase, reportId)
+        return { ...(data as DailyReport), visits }
       } catch (e) {
         const message =
           e instanceof Error ? e.message : 'Failed to load daily report'
@@ -357,21 +486,16 @@ export function useManagerReportByMrAndDate(mrId: string, reportDate: string) {
           .select(`
             *,
             mr:users!daily_reports_mr_id_fkey(*),
-            manager:users!daily_reports_manager_id_fkey(*),
-            visits:report_visits(
-              *,
-              doctor:doctors(*, sub_area:sub_areas(name)),
-              chemist:chemists(*),
-              promoted_products(*, product:products(*)),
-              competitor_entries(*),
-              monthly_support_entries(*, product:products(*))
-            )
+            manager:users!daily_reports_manager_id_fkey(*)
           `)
           .eq('mr_id', mrId)
           .eq('report_date', reportDate)
           .maybeSingle()
         if (error) throw error
-        return data as (DailyReport & { visits: ReportVisit[] }) | null
+        if (!data) return null
+        const report = data as DailyReport
+        const visits = await loadReportVisits(supabase, report.id)
+        return { ...report, visits }
       } catch (e) {
         const message =
           e instanceof Error ? e.message : 'Failed to load report'
