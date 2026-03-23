@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Info } from 'lucide-react';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import AppLogo from '@/components/shared/AppLogo';
 
 interface ChangePasswordForm {
   newPassword: string;
@@ -76,9 +77,7 @@ export default function ChangePassword() {
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 w-full max-w-full min-w-0 overflow-x-hidden">
       <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
         <div className="mb-6 flex flex-col items-center gap-3">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary">
-            <span className="text-xl font-bold text-primary-foreground">MM</span>
-          </div>
+          <AppLogo className="h-20 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Change Password</h1>
         </div>
 

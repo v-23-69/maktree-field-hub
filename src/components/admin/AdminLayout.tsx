@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/shared/BottomNav';
+import AppLogo from '@/components/shared/AppLogo';
 
 const SIDEBAR_ITEMS = [
   { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
@@ -21,9 +22,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-card">
         <div className="flex h-14 items-center gap-2 px-4 border-b border-border">
-          <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-            <span className="text-xs font-bold text-primary-foreground">MM</span>
-          </div>
+          <AppLogo className="h-8 w-auto" />
           <span className="font-semibold text-sm text-foreground">Admin Panel</span>
         </div>
         <nav className="flex-1 p-3 space-y-1">
@@ -60,9 +59,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             <div className="flex h-14 items-center justify-between px-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-                  <span className="text-xs font-bold text-primary-foreground">MM</span>
-                </div>
+                <AppLogo className="h-8 w-auto" />
                 <span className="font-semibold text-sm text-foreground">Admin</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5">
