@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target } from 'lucide-react';
+import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/shared/BottomNav';
 import AppLogo from '@/components/shared/AppLogo';
@@ -12,6 +12,8 @@ const SIDEBAR_ITEMS = [
   { to: '/admin/areas', icon: MapPin, label: 'Areas' },
   { to: '/admin/mr-access', icon: Settings, label: 'MR Access' },
   { to: '/admin/targets', icon: Target, label: 'Targets' },
+  { to: '/admin/holidays', icon: CalendarDays, label: 'Holidays' },
+  { to: '/admin/users', icon: ShieldAlert, label: 'Block Complaints' },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

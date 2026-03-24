@@ -16,7 +16,7 @@ interface AuthContextType extends AuthState {
   signIn: (
     employeeCode: string,
     password: string,
-  ) => Promise<{ success: boolean; error?: string; user?: User }>
+  ) => Promise<{ success: boolean; error?: string; user?: User; isBlocked?: boolean; blockReason?: string }>
   logout: () => Promise<void>
   changePassword: (
     newPassword: string,
@@ -302,6 +302,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionUser.id,
         sessionUser.app_metadata ?? {},
       )
+      if ((profile as User & { is_blocked?: boolean; block_reason?: string | null }).is_blocked) {
+        await supabase.auth.signOut()
+        return {
+          success: false,
+          isBlocked: true,
+          blockReason: (profile as User & { block_reason?: string | null }).block_reason ?? null,
+        }
+      }
       profileLoadGenRef.current += 1
       lastLoadedAuthUserIdRef.current = sessionUser.id
       setHasSession(true)

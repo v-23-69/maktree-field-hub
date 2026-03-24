@@ -21,10 +21,14 @@ import { Plus, Edit, ToggleLeft, ToggleRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { User, UserRole } from '@/types/database.types';
+import { useAuth } from '@/hooks/useAuth';
+import { useBlockUser, useUnblockUser, useBlockComplaints, useResolveComplaint } from '@/hooks/useBlockSystem';
+import { Textarea } from '@/components/ui/textarea';
 
 const ROLE_FILTERS = ['All', 'MR', 'Manager', 'Admin'] as const;
 
 export default function AdminUsers() {
+  const { user: authUser } = useAuth();
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter');
   const [filter, setFilter] = useState<typeof ROLE_FILTERS[number]>(
@@ -40,6 +44,9 @@ export default function AdminUsers() {
   const [selectedSubAreas, setSelectedSubAreas] = useState<Set<string>>(new Set());
   const [editManagers, setEditManagers] = useState<Set<string>>(new Set());
   const [editSubAreas, setEditSubAreas] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<'users' | 'complaints'>('users');
+  const [blockReasonByUserId, setBlockReasonByUserId] = useState<Record<string, string>>({});
+  const [complaintNotes, setComplaintNotes] = useState<Record<string, string>>({});
 
   const { data: allUsers = [], isLoading, isError, refetch } = useAdminUsersList();
   const { data: areasData = [] } = useAllAreas();
@@ -47,6 +54,10 @@ export default function AdminUsers() {
   const toggleActive = useToggleUserActive();
   const saveMrAssignments = useSaveMrAssignments();
   const { data: existingAssignments, isLoading: assignLoading } = useMrAssignments(editUser?.id ?? '');
+  const blockUser = useBlockUser();
+  const unblockUser = useUnblockUser();
+  const { data: complaints = [] } = useBlockComplaints();
+  const resolveComplaint = useResolveComplaint();
 
   const managers = useMemo(
     () => allUsers.filter(u => u.role === 'manager' && u.is_active),
@@ -134,6 +145,15 @@ export default function AdminUsers() {
   return (
     <AdminLayout>
       <div className="space-y-4">
+        <div className="flex gap-2">
+          <Button variant={activeTab === 'users' ? 'default' : 'outline'} onClick={() => setActiveTab('users')} className="flex-1">Users</Button>
+          <Button variant={activeTab === 'complaints' ? 'default' : 'outline'} onClick={() => setActiveTab('complaints')} className="flex-1">
+            Complaints
+          </Button>
+        </div>
+
+        {activeTab === 'users' && (
+          <>
         <div className="flex items-center justify-between">
           <div className="flex gap-1.5 overflow-x-auto scrollbar-hide">
             {ROLE_FILTERS.map(f => (
@@ -281,6 +301,17 @@ export default function AdminUsers() {
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm truncate">{u.full_name}</p>
                   <p className="text-xs text-muted-foreground">{u.employee_code} · <span className="capitalize">{u.role}</span></p>
+                  {u.role !== 'admin' && !u.is_blocked && (
+                    <Input
+                      className="mt-2 h-8 text-xs"
+                      placeholder="Block reason"
+                      value={blockReasonByUserId[u.id] ?? ''}
+                      onChange={e => setBlockReasonByUserId(prev => ({ ...prev, [u.id]: e.target.value }))}
+                    />
+                  )}
+                  {u.is_blocked && (
+                    <p className="text-xs text-destructive mt-1">Blocked: {u.block_reason ?? 'No reason'}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {u.role === 'mr' && (
@@ -302,11 +333,94 @@ export default function AdminUsers() {
                   >
                     {u.is_active ? <ToggleRight className="h-5 w-5" /> : <ToggleLeft className="h-5 w-5" />}
                   </button>
+                  {u.role !== 'admin' && (
+                    u.is_blocked ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          void unblockUser
+                            .mutateAsync({ userId: u.id, adminUserId: authUser?.id ?? '' })
+                            .then(() => toast.success('User unblocked'))
+                        }
+                      >
+                        Unblock
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => {
+                          const reason = blockReasonByUserId[u.id]?.trim()
+                          if (!reason) {
+                            toast.error('Enter block reason first')
+                            return
+                          }
+                          void blockUser
+                            .mutateAsync({ userId: u.id, reason, adminUserId: authUser?.id ?? '' })
+                            .then(() => toast.success('User blocked'))
+                        }}
+                      >
+                        Block
+                      </Button>
+                    )
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
+        </>
+      )}
+
+      {activeTab === 'complaints' && (
+        <div className="space-y-3">
+          {complaints.map(c => (
+            <div key={c.id} className="rounded-xl border p-3 space-y-2">
+              <p className="text-xs uppercase text-muted-foreground">{c.status}</p>
+              <p className="text-sm">{c.complaint}</p>
+              <Textarea
+                value={complaintNotes[c.id] ?? c.admin_note ?? ''}
+                onChange={e => setComplaintNotes(prev => ({ ...prev, [c.id]: e.target.value }))}
+                placeholder="Admin note"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() =>
+                    void resolveComplaint
+                      .mutateAsync({
+                        complaintId: c.id,
+                        status: 'approved',
+                        adminNote: complaintNotes[c.id] ?? c.admin_note,
+                        resolvedBy: authUser?.id ?? '',
+                        userId: c.user_id,
+                      })
+                      .then(() => toast.success('Complaint approved'))
+                  }
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() =>
+                    void resolveComplaint
+                      .mutateAsync({
+                        complaintId: c.id,
+                        status: 'rejected',
+                        adminNote: complaintNotes[c.id] ?? c.admin_note,
+                        resolvedBy: authUser?.id ?? '',
+                        userId: c.user_id,
+                      })
+                      .then(() => toast.success('Complaint rejected'))
+                  }
+                >
+                  Reject
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
 
       <Dialog open={!!editUser} onOpenChange={open => { if (!open) setEditUser(null); }}>

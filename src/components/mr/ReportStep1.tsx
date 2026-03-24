@@ -45,6 +45,13 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
 
   return (
     <div className="space-y-5 animate-fade-in">
+      {data.tpAutoFilled && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+          <p className="text-xs text-primary font-medium">
+            Auto-filled from your tour program for this date
+          </p>
+        </div>
+      )}
       <div className="space-y-2">
         <Label>Date Options</Label>
 

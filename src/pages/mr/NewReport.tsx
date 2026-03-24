@@ -9,6 +9,7 @@ import ReportStep4 from '@/components/mr/ReportStep4';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useReportBlockStatus, useRequestReportUnlock } from '@/hooks/useReport';
+import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,6 +31,7 @@ export interface ReportFormData {
   workingWithId: string
   selectedSubAreaIds: string[]
   visits: Record<string, VisitFormEntry>
+  tpAutoFilled?: boolean
 }
 
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
@@ -97,12 +99,44 @@ export default function NewReport() {
       workingWithId: '',
       selectedSubAreaIds: [],
       visits: {},
+      tpAutoFilled: false,
     };
   });
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
   }, [formData]);
+
+  useEffect(() => {
+    const applyTourPlanAutofill = async () => {
+      if (!supabase || !mrId || !formData.date) return
+      const { data, error } = await supabase.rpc('get_tour_plan_for_date', {
+        p_mr_id: mrId,
+        p_date: formData.date,
+      })
+      if (error) return
+      const row = Array.isArray(data) ? data[0] : data
+      if (!row) return
+      setFormData(prev => {
+        const next = { ...prev }
+        let changed = false
+        if (row.working_with && !next.workingWithId) {
+          next.workingWithId = row.working_with as string
+          changed = true
+        }
+        if (row.sub_area_id) {
+          const sid = row.sub_area_id as string
+          if (!next.selectedSubAreaIds.includes(sid)) {
+            next.selectedSubAreaIds = [sid, ...next.selectedSubAreaIds]
+            changed = true
+          }
+        }
+        if (changed) next.tpAutoFilled = true
+        return next
+      })
+    }
+    void applyTourPlanAutofill()
+  }, [mrId, formData.date])
 
   const updateData = useCallback((partial: Partial<ReportFormData>) => {
     setFormData(prev => ({ ...prev, ...partial }));

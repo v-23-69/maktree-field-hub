@@ -1,5 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { UserCircle2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 interface PageHeaderProps {
   title: string;
@@ -9,6 +11,7 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, showBack, rightAction }: PageHeaderProps) {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   return (
     <header className="sticky top-0 z-30 flex items-center gap-3 bg-card px-4 py-3 shadow-sm">
@@ -18,7 +21,13 @@ export default function PageHeader({ title, showBack, rightAction }: PageHeaderP
         </button>
       )}
       <h1 className="text-lg font-semibold text-foreground flex-1 truncate">{title}</h1>
-      {rightAction}
+      {rightAction ?? (
+        user ? (
+          <button onClick={() => navigate('/profile')} className="touch-target rounded-full">
+            <UserCircle2 className="h-6 w-6 text-muted-foreground" />
+          </button>
+        ) : null
+      )}
     </header>
   );
 }

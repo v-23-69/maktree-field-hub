@@ -31,10 +31,7 @@ export function useManagerTargets(managerId: string) {
       if (!supabase) throw new Error('Supabase not configured')
 
       const { data: targets, error: tErr } = await supabase
-        .from('targets')
-        .select('*')
-        .eq('set_by', managerId)
-        .order('created_at', { ascending: false })
+        .rpc('list_targets_for_setter')
       if (tErr) throw tErr
 
       const rows = (targets ?? []) as Target[]

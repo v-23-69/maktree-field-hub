@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
@@ -10,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
-import { useManagerReportByMrAndDate } from '@/hooks/useReport';
+import { useManagerMrReportDates, useManagerReportByMrAndDate } from '@/hooks/useReport';
 import { useManagerReportIssues, useUpdateReportIssue } from '@/hooks/useReportIssues';
 import { useAllAreas } from '@/hooks/useAreas';
 import type { ReportVisit } from '@/types/database.types';
@@ -21,14 +22,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
+import { useManagerExpenses, useDownloadExpenseExcel } from '@/hooks/useManagerExpense';
 
 export default function ManagerReports() {
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [selectedMr, setSelectedMr] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [showReport, setShowReport] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
-  const [activeTab, setActiveTab] = useState<'reports' | 'issues'>('reports');
+  const [activeTab, setActiveTab] = useState<'reports' | 'issues' | 'expenses'>('reports');
   const [filterSpeciality, setFilterSpeciality] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterAreaId, setFilterAreaId] = useState('');
@@ -39,6 +42,7 @@ export default function ManagerReports() {
 
   const { data: mrs = [], isLoading: mrsLoading, isError: mrsError } = useManagerMrs(user?.id ?? '');
   const { data: allAreas = [] } = useAllAreas();
+  const { data: availableDates = [] } = useManagerMrReportDates(selectedMr);
   const { data: report, isLoading: reportLoading, isError: reportError } = useManagerReportByMrAndDate(
     showReport ? selectedMr : '',
     showReport ? selectedDate : '',
@@ -46,22 +50,46 @@ export default function ManagerReports() {
 
   const { data: reportIssues = [], isLoading: issuesLoading, isError: issuesError } =
     useManagerReportIssues(user?.id ?? '');
+  const currentMonth = selectedDate ? selectedDate.slice(0, 7) : new Date().toISOString().slice(0, 7)
+  const { data: expenseRows = [] } = useManagerExpenses(user?.id ?? '', currentMonth)
+  const downloadExpenseExcel = useDownloadExpenseExcel()
   const updateIssue = useUpdateReportIssue();
 
   const [managerNotesByIssueId, setManagerNotesByIssueId] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    const mrParam = searchParams.get('mrId')
+    const dateParam = searchParams.get('date')
+    const viewParam = searchParams.get('view')
+    if (mrParam && mrParam !== selectedMr) setSelectedMr(mrParam)
+    if (dateParam && dateParam !== selectedDate) setSelectedDate(dateParam)
+    if (viewParam === '1' && mrParam && dateParam) setShowReport(true)
+    // one-time sync from URL
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
     if (!reportIssues) return
     setManagerNotesByIssueId(prev => {
       const next = { ...prev }
+      let changed = false
       for (const issue of reportIssues) {
         const existing = next[issue.id]
         if (typeof existing === 'string') continue
         next[issue.id] = (issue.manager_note ?? '') as string
+        changed = true
       }
-      return next
+      return changed ? next : prev
     })
   }, [reportIssues])
+
+  useEffect(() => {
+    if (!selectedMr) return
+    if (availableDates.length === 0) return
+    if (selectedDate && availableDates.includes(selectedDate)) return
+    setSelectedDate(availableDates[0])
+    setShowReport(false)
+  }, [selectedMr, availableDates, selectedDate])
 
   const mrUser = useMemo(() => mrs.find(u => u.id === selectedMr), [mrs, selectedMr]);
 
@@ -270,6 +298,14 @@ export default function ManagerReports() {
           >
             Issues
           </Button>
+          <Button
+            type="button"
+            variant={activeTab === 'expenses' ? 'default' : 'outline'}
+            className="flex-1 touch-target rounded-lg"
+            onClick={() => setActiveTab('expenses')}
+          >
+            Expenses
+          </Button>
         </div>
 
         {activeTab === 'reports' && (
@@ -300,6 +336,11 @@ export default function ManagerReports() {
           <div className="space-y-2">
             <Label className="text-xs">Select Date</Label>
             <Input type="date" value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setShowReport(false); }} className="touch-target rounded-lg" />
+            {availableDates.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Latest submitted date: {availableDates[0]}
+              </p>
+            )}
           </div>
 
           <Button
@@ -713,6 +754,33 @@ export default function ManagerReports() {
                 })}
               </div>
             )}
+          </div>
+        )}
+
+        {activeTab === 'expenses' && (
+          <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
+            <p className="text-sm font-medium">Expense Summary ({expenseRows.length} reports)</p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                const rows = expenseRows.flatMap((r: any) =>
+                  (r.items ?? []).map((it: any) => ({
+                    Date: r.report_date,
+                    Category: it.category,
+                    Description: it.description,
+                    Amount: Number(it.amount ?? 0),
+                  })),
+                )
+                downloadExpenseExcel(rows, `Manager_Expenses_${currentMonth}.xlsx`)
+              }}
+            >
+              Download as Excel
+            </Button>
+            {expenseRows.map((row: any) => (
+              <div key={row.id} className="rounded-lg border p-3 text-sm">
+                <p>{row.report_date} - Used: {row.total_used}</p>
+              </div>
+            ))}
           </div>
         )}
       </div>

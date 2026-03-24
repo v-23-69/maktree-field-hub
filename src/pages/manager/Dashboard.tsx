@@ -1,5 +1,6 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
@@ -15,16 +16,23 @@ import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
 import { useAssignSubAreaToMr } from '@/hooks/useAdminMrAccess';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
+import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
+import { todayInputDate } from '@/lib/dateUtils';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
 type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
   const [action, setAction] = useState<QuickAction>(null);
 
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
+  const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
+  const { data: stats } = useManagerDashboardStats(user?.id ?? '', mrIds);
   const { data: areas = [] } = useAllAreas();
   const addDoctor = useAddDoctor();
   const addArea = useAddArea();
@@ -41,6 +49,31 @@ export default function ManagerDashboard() {
   const [assignSubAreaId, setAssignSubAreaId] = useState('');
 
   const allSubAreas = areas.flatMap(a => (a.sub_areas ?? []).map(sa => ({ ...sa, areaName: a.name })));
+  const today = todayInputDate()
+
+  const { data: todaysMrReports = [] } = useQuery({
+    queryKey: ['manager-mr-today-report-status', user?.id, mrIds, today],
+    enabled: !!user?.id && mrIds.length > 0 && !!supabase,
+    queryFn: async (): Promise<Array<{ mrId: string; submitted: boolean; reportId: string | null }>> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select('id, mr_id, status, report_date')
+        .in('mr_id', mrIds)
+        .eq('report_date', today)
+      if (error) throw error
+
+      const byMr = new Map<string, { submitted: boolean; reportId: string | null }>()
+      for (const id of mrIds) byMr.set(id, { submitted: false, reportId: null })
+      for (const r of data ?? []) {
+        byMr.set((r as any).mr_id, {
+          submitted: (r as any).status === 'submitted',
+          reportId: (r as any).id ?? null,
+        })
+      }
+      return mrIds.map(id => ({ mrId: id, ...(byMr.get(id) ?? { submitted: false, reportId: null }) }))
+    },
+  })
 
   const closeDrawer = () => {
     setAction(null);
@@ -64,10 +97,10 @@ export default function ManagerDashboard() {
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={Users} value={3} label="Total MRs" />
-          <StatCard icon={FileText} value={2} label="Reports Today" />
-          <StatCard icon={Calendar} value={28} label="Reports This Month" />
-          <StatCard icon={Stethoscope} value={142} label="Doctors Visited" />
+          <StatCard icon={Users} value={mrs.length} label="Total MRs" />
+          <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" />
+          <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="Reports This Month" />
+          <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" />
         </div>
 
         <div className="flex gap-2">
@@ -104,6 +137,43 @@ export default function ManagerDashboard() {
             <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('assign')}>
               Assign Area to MR
             </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg col-span-2" onClick={() => navigate('/manager/holidays')}>
+              Holidays
+            </Button>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            Today Reports by MRs
+          </p>
+          <div className="space-y-2">
+            {mrs.map(mr => {
+              const s = todaysMrReports.find(r => r.mrId === mr.id)
+              const submitted = !!s?.submitted
+              return (
+                <button
+                  key={mr.id}
+                  type="button"
+                  disabled={!submitted}
+                  onClick={() => {
+                    if (!submitted || !s?.reportId) return
+                    window.location.href = `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`
+                  }}
+                  className={cn(
+                    'w-full text-left rounded-xl border p-3 shadow-sm active:scale-[0.99] transition',
+                    submitted ? 'bg-card border-emerald-600/40' : 'bg-card border-border opacity-80',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-medium text-foreground truncate">{mr.full_name}</p>
+                    <span className={cn('text-xs font-semibold', submitted ? 'text-emerald-700' : 'text-muted-foreground')}>
+                      {submitted ? 'Submitted' : 'Pending'}
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>

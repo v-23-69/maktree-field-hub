@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, FilePlus, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, Target } from 'lucide-react';
+import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, Target, CalendarDays, Receipt } from 'lucide-react';
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,14 +14,17 @@ interface NavItem {
 const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   mr: [
     { to: '/mr/dashboard', icon: Home, label: 'Home' },
-    { to: '/mr/report/new', icon: FilePlus, label: 'New Report' },
+    { to: '/mr/report/new', icon: Clipboard, label: 'DCR Report' },
     { to: '/mr/master-list', icon: List, label: 'Master List' },
+    { to: '/mr/tour-program', icon: CalendarDays, label: 'Tour Program' },
+    { to: '/mr/expense', icon: Receipt, label: 'Expense' },
     { to: '/mr/report/history', icon: History, label: 'History' },
   ],
   manager: [
     { to: '/manager/dashboard', icon: Home, label: 'Home' },
     { to: '/manager/reports', icon: FileText, label: 'Reports' },
     { to: '/manager/requests', icon: Bell, label: 'Requests' },
+    { to: '/manager/leaves', icon: CalendarDays, label: 'Leaves' },
     { to: '/manager/targets', icon: Target, label: 'Targets' },
     { to: '/manager/analytics', icon: BarChart3, label: 'Analytics' },
   ],

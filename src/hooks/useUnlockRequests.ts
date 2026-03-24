@@ -16,40 +16,9 @@ export function useManagerUnlockRequests(managerId: string) {
     }> => {
       if (!supabase) throw new Error('Supabase not configured')
 
-      const { data: maps, error: mapErr } = await supabase
-        .from('mr_manager_map')
-        .select('mr_id')
-        .eq('manager_id', managerId)
-
-      if (mapErr) throw mapErr
-      const mrIds = [...new Set((maps ?? []).map(m => m.mr_id).filter(Boolean))]
-      if (mrIds.length === 0) {
-        return { pending: [], resolved: [] }
-      }
-
-      const { data: reqs, error: reqErr } = await supabase
-        .from('report_unlock_requests')
-        .select('*')
-        .eq('manager_id', managerId)
-        .in('mr_id', mrIds)
-        .order('created_at', { ascending: false })
-
-      if (reqErr) throw reqErr
-
-      const { data: users, error: uErr } = await supabase
-        .from('users')
-        .select('id, full_name')
-        .in('id', mrIds)
-
-      if (uErr) throw uErr
-
-      const mrNameById = new Map<string, string>()
-      for (const u of users ?? []) mrNameById.set((u as any).id, (u as any).full_name ?? '')
-
-      const rows = (reqs ?? []) as ReportUnlockRequest[]
-      const withNames = rows.map(
-        r => ({ ...(r as any), mr_full_name: mrNameById.get(r.mr_id) } as UnlockRequestRow),
-      )
+      const rpc = await supabase.rpc('list_unlock_requests_for_manager')
+      if (rpc.error) throw rpc.error
+      const withNames = (rpc.data ?? []) as UnlockRequestRow[]
 
       const pending = withNames.filter(r => r.status === 'pending')
 

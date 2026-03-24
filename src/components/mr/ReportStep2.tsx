@@ -50,6 +50,13 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
 
   return (
     <div className="space-y-6 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden">
+      {data.tpAutoFilled && (
+        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+          <p className="text-xs text-primary font-medium">
+            Auto-filled from your tour program for this date
+          </p>
+        </div>
+      )}
       <p className="text-sm font-medium text-foreground">Select the sub-areas you worked in today</p>
 
       {grouped.map(({ area, sub_areas }) => (

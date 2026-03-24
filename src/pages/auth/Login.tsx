@@ -44,10 +44,13 @@ export default function Login() {
     }
     setIsSubmitting(true);
     try {
+      localStorage.setItem('last_employee_code', employeeCode.trim())
       const result = await signIn(employeeCode, password);
       if (result.success && result.user) {
         navigateByRole(navigate, result.user.role);
         toast.success('Signed in');
+      } else if (result.isBlocked) {
+        navigate('/blocked-complaint', { replace: true, state: { blockReason: result.blockReason } })
       } else {
         toast.error(result.error || 'Login failed');
       }

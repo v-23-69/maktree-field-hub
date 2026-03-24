@@ -9,6 +9,23 @@ export interface User {
   email: string | null
   role: UserRole
   is_active: boolean
+  profile_photo_url?: string | null
+  dob?: string | null
+  aadhaar_number?: string | null
+  address?: string | null
+  city?: string | null
+  state?: string | null
+  pincode?: string | null
+  mobile?: string | null
+  emergency_contact_name?: string | null
+  emergency_contact_mobile?: string | null
+  joining_date?: string | null
+  designation?: string | null
+  profile_complete_pct?: number
+  is_blocked?: boolean
+  block_reason?: string | null
+  blocked_at?: string | null
+  blocked_by?: string | null
   created_at: string
   updated_at: string
 }
@@ -292,4 +309,136 @@ export interface MasterListCompletion {
   complete_doctors: number
   incomplete_doctors: number
   completion_pct: number
+}
+
+export interface UserProfile extends User {
+  profile_photo_url: string | null
+  dob: string | null
+  aadhaar_number: string | null
+  address: string | null
+  city: string | null
+  state: string | null
+  pincode: string | null
+  mobile: string | null
+  emergency_contact_name: string | null
+  emergency_contact_mobile: string | null
+  joining_date: string | null
+  designation: string | null
+  profile_complete_pct: number
+  is_blocked: boolean
+  block_reason: string | null
+}
+
+export interface Holiday {
+  id: string
+  name: string
+  holiday_date: string
+  holiday_type: 'national' | 'company'
+  created_by: string
+  created_at: string
+}
+
+export interface MrHoliday {
+  id: string
+  mr_id: string
+  holiday_id: string
+  assigned_by: string
+  year: number
+  counts_as_leave: boolean
+  holiday?: Holiday
+}
+
+export interface LeaveRequest {
+  id: string
+  mr_id: string
+  manager_id: string | null
+  leave_date: string
+  leave_type: 'full' | 'half_morning' | 'half_afternoon'
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  manager_note: string | null
+  resolved_at: string | null
+  created_at: string
+}
+
+export interface StrikeReport {
+  id: string
+  mr_id: string
+  strike_date: string
+  created_at: string
+}
+
+export interface ExpenseReport {
+  id: string
+  mr_id: string
+  report_date: string
+  daily_limit: number
+  total_used: number
+  status: 'draft' | 'submitted'
+  submitted_at: string | null
+  created_at: string
+}
+
+export interface ExpenseItem {
+  id: string
+  expense_report_id: string
+  category: 'Travel' | 'Food' | 'Stationery' | 'Printing' | 'Communication' | 'Other'
+  description: string
+  amount: number
+  created_at: string
+}
+
+export interface TourProgram {
+  id: string
+  mr_id: string
+  month: string
+  status: 'draft' | 'submitted' | 'approved' | 'rejected'
+  manager_id: string | null
+  manager_note: string | null
+  is_late: boolean
+  approved_at: string | null
+  submitted_at: string | null
+  created_at: string
+}
+
+export interface TourProgramEntry {
+  id: string
+  tour_program_id: string
+  work_date: string
+  sub_area_id: string | null
+  working_with: string | null
+  day_type: 'working' | 'sunday' | 'holiday' | 'leave' | 'strike'
+  notes: string | null
+}
+
+export interface BlockComplaint {
+  id: string
+  user_id: string
+  complaint: string
+  status: 'pending' | 'approved' | 'rejected'
+  admin_note: string | null
+  resolved_by: string | null
+  resolved_at: string | null
+  created_at: string
+}
+
+export interface DcrDailyStatus {
+  mr_id: string
+  check_date: string
+  tour_program_done: boolean
+  dcr_done: boolean
+  expense_done: boolean
+  is_working_day: boolean
+}
+
+export interface DcrMonthlySummary {
+  mr_id: string
+  mr_name: string
+  month: string
+  total_working_days: number
+  dcr_submitted_days: number
+  leave_days: number
+  holiday_days: number
+  strike_days: number
+  holidays_used_this_year: number
 }

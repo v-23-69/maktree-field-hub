@@ -9,13 +9,29 @@ export function useManagerMrs(managerId: string) {
     queryFn: async (): Promise<User[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
+        // Preferred path: security-definer RPC, robust against RLS joins.
+        const rpcRes = await supabase.rpc('list_mrs_for_manager')
+        if (!rpcRes.error) {
+          return (rpcRes.data ?? []) as User[]
+        }
+
+        // Fallback path for environments where migration isn't applied yet.
         const { data: maps, error } = await supabase
           .from('mr_manager_map')
           .select('mr_id')
           .eq('manager_id', managerId)
         if (error) throw error
         const ids = [...new Set((maps ?? []).map(m => m.mr_id).filter(Boolean))]
-        if (ids.length === 0) return []
+        if (ids.length === 0) {
+          const { data: fallbackMrs, error: fbErr } = await supabase
+            .from('users')
+            .select('*')
+            .eq('role', 'mr')
+            .eq('is_active', true)
+            .order('full_name')
+          if (fbErr) throw fbErr
+          return (fallbackMrs ?? []) as User[]
+        }
         const { data: users, error: uErr } = await supabase
           .from('users')
           .select('*')

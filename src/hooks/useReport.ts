@@ -279,35 +279,21 @@ export async function saveReportVisit(
 
   const chemistName = visit.chemistName.trim()
   if (chemistName) {
-    const { data: chemist, error: chemErr } = await client
-      .from('chemists')
-      .upsert(
-        { sub_area_id: doctorSubAreaId, name: chemistName },
-        { onConflict: 'sub_area_id,name', ignoreDuplicates: false },
-      )
-      .select('id')
-      .single()
-
-    if (chemErr) throw chemErr
-    if (!chemist?.id) throw new Error('Chemist upsert failed')
-
-    const { error: mapErr } = await client.from('chemist_doctor_map').upsert(
-      { chemist_id: chemist.id, doctor_id: doctorId },
-      { onConflict: 'chemist_id,doctor_id', ignoreDuplicates: true },
-    )
-    if (mapErr) throw mapErr
-
-    const { error: upv } = await client
-      .from('report_visits')
-      .update({ chemist_id: chemist.id })
-      .eq('id', visitId)
-    if (upv) throw upv
+    const rpc = await client.rpc('upsert_chemist_for_visit', {
+      p_visit_id: visitId,
+      p_doctor_id: doctorId,
+      p_doctor_sub_area_id: doctorSubAreaId,
+      p_chemist_name: chemistName,
+    })
+    if (rpc.error) throw rpc.error
   } else {
-    const { error: upv } = await client
-      .from('report_visits')
-      .update({ chemist_id: null })
-      .eq('id', visitId)
-    if (upv) throw upv
+    const rpc = await client.rpc('upsert_chemist_for_visit', {
+      p_visit_id: visitId,
+      p_doctor_id: doctorId,
+      p_doctor_sub_area_id: doctorSubAreaId,
+      p_chemist_name: '',
+    })
+    if (rpc.error) throw rpc.error
   }
 }
 
@@ -509,6 +495,25 @@ export function useManagerReportByMrAndDate(mrId: string, reportDate: string) {
       }
     },
     enabled: !!mrId && !!reportDate && !!supabase,
+  })
+}
+
+export function useManagerMrReportDates(mrId: string) {
+  return useQuery({
+    queryKey: ['manager-mr-report-dates', mrId],
+    enabled: !!mrId && !!supabase,
+    queryFn: async (): Promise<string[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select('report_date')
+        .eq('mr_id', mrId)
+        .eq('status', 'submitted')
+        .order('report_date', { ascending: false })
+        .limit(60)
+      if (error) throw error
+      return (data ?? []).map(r => r.report_date as string)
+    },
   })
 }
 

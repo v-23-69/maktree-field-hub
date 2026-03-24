@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerUnlockRequests, useResolveUnlockRequest } from '@/hooks/useUnlockRequests'
 import PageHeader from '@/components/shared/PageHeader'
@@ -10,6 +10,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { useManagerPendingTourPrograms, useResolveTourProgram, useTourProgramEntries } from '@/hooks/useTourProgram'
+import { useAllAreas } from '@/hooks/useAreas'
 
 export default function UnlockRequests() {
   const { user } = useAuth()
@@ -20,6 +23,16 @@ export default function UnlockRequests() {
 
   const pending = data?.pending ?? []
   const resolved = data?.resolved ?? []
+  const [tab, setTab] = useState<'unlock' | 'tour-programs'>('unlock')
+  const { data: pendingTp = [] } = useManagerPendingTourPrograms(managerId)
+  const resolveTp = useResolveTourProgram()
+  const [tpNoteById, setTpNoteById] = useState<Record<string, string>>({})
+  const [expandedTpId, setExpandedTpId] = useState<string | null>(null)
+  const { data: tpEntries = [] } = useTourProgramEntries(expandedTpId ?? undefined)
+  const { data: areas = [] } = useAllAreas()
+  const subAreaNameById = new Map(
+    areas.flatMap(area => (area.sub_areas ?? []).map(sa => [sa.id, `${area.name} / ${sa.name}`] as const)),
+  )
 
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState('')
@@ -170,10 +183,14 @@ export default function UnlockRequests() {
       <PageHeader title="Requests" />
 
       <div className="px-4 py-4 space-y-4">
+        <div className="flex gap-2">
+          <Button variant={tab === 'unlock' ? 'default' : 'outline'} className="flex-1" onClick={() => setTab('unlock')}>Unlock Requests</Button>
+          <Button variant={tab === 'tour-programs' ? 'default' : 'outline'} className="flex-1" onClick={() => setTab('tour-programs')}>Tour Programs</Button>
+        </div>
         {isLoading && <LoadingSpinner />}
         {isError && <EmptyState message="Could not load unlock requests." />}
 
-        {!isLoading && !isError && (
+        {!isLoading && !isError && tab === 'unlock' && (
           <>
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -201,6 +218,64 @@ export default function UnlockRequests() {
               )}
             </div>
           </>
+        )}
+
+        {tab === 'tour-programs' && (
+          <div className="space-y-3">
+            {pendingTp.length === 0 ? (
+              <EmptyState message="No pending tour programs." />
+            ) : (
+              pendingTp.map((tp: any) => (
+                <div key={tp.id} className="rounded-xl border p-3 space-y-2">
+                  <p className="text-sm font-medium">MR: {tp.mr_name ?? tp.mr_id}</p>
+                  <p className="text-xs text-muted-foreground">Month: {tp.month}</p>
+                  {tp.is_late && <Badge variant="destructive">Late</Badge>}
+                  <Button variant="outline" onClick={() => setExpandedTpId(prev => (prev === tp.id ? null : tp.id))}>
+                    View TP
+                  </Button>
+                  {expandedTpId === tp.id && (
+                    <div className="rounded-lg border p-2 space-y-1">
+                      {tpEntries.map(entry => (
+                        <p key={entry.id} className="text-xs">
+                          {entry.work_date}: {entry.sub_area_id ? subAreaNameById.get(entry.sub_area_id) ?? entry.sub_area_id : '—'} {entry.day_type}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                  <Input
+                    placeholder="Manager note (for reject)"
+                    value={tpNoteById[tp.id] ?? ''}
+                    onChange={e => setTpNoteById(prev => ({ ...prev, [tp.id]: e.target.value }))}
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      onClick={() =>
+                        void resolveTp
+                          .mutateAsync({ tourProgramId: tp.id, action: 'approved' })
+                          .then(() => toast.success('Tour program approved'))
+                      }
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() =>
+                        void resolveTp
+                          .mutateAsync({
+                            tourProgramId: tp.id,
+                            action: 'rejected',
+                            managerNote: tpNoteById[tp.id] ?? '',
+                          })
+                          .then(() => toast.success('Tour program rejected'))
+                      }
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         )}
       </div>
 

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
@@ -11,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics';
 import { formatDisplayDate } from '@/lib/dateUtils';
+import { supabase } from '@/lib/supabase';
 
 export default function ManagerAnalytics() {
   const { user } = useAuth();
@@ -46,6 +48,54 @@ export default function ManagerAnalytics() {
 
   const hasAnyChart =
     productData.length > 0 || mrData.length > 0 || competitorData.length > 0 || areaPerformance.length > 0 || doctorLoyalty.length > 0 || competitorIntel.length > 0;
+
+  const monthLabel = toDate ? toDate.slice(0, 7) : ''
+  const { data: expenseSummaryRows = [] } = useQuery({
+    queryKey: ['manager-expense-summary-overview', mrIds, monthLabel, run],
+    enabled: run && !!monthLabel && mrIds.length > 0 && !!supabase,
+    queryFn: async () => {
+      if (!supabase) return []
+      const { data, error } = await supabase
+        .from('v_expense_monthly_summary')
+        .select('*')
+        .in('mr_id', mrIds)
+        .eq('month', `${monthLabel}-01`)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const { data: expenseByCategoryRows = [] } = useQuery({
+    queryKey: ['manager-expense-category-overview', mrIds, monthLabel, run],
+    enabled: run && !!monthLabel && mrIds.length > 0 && !!supabase,
+    queryFn: async () => {
+      if (!supabase) return []
+      const { data, error } = await supabase
+        .from('v_expense_by_category')
+        .select('*')
+        .in('mr_id', mrIds)
+        .eq('month', `${monthLabel}-01`)
+      if (error) throw error
+      return data ?? []
+    },
+  })
+  const expenseTotals = useMemo(() => {
+    return expenseSummaryRows.reduce(
+      (acc: { allotted: number; used: number }, row: any) => {
+        acc.allotted += Number(row.total_allotted ?? 0)
+        acc.used += Number(row.total_used ?? 0)
+        return acc
+      },
+      { allotted: 0, used: 0 },
+    )
+  }, [expenseSummaryRows])
+  const expenseByCategory = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const row of expenseByCategoryRows as any[]) {
+      const key = String(row.category ?? 'Other')
+      m.set(key, (m.get(key) ?? 0) + Number(row.total_amount ?? 0))
+    }
+    return Array.from(m.entries()).map(([name, amount]) => ({ name, amount }))
+  }, [expenseByCategoryRows])
 
   const loyaltyProducts = useMemo(
     () => Array.from(new Set(doctorLoyalty.map(d => d.product_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -178,6 +228,29 @@ export default function ManagerAnalytics() {
                 </div>
               </div>
             )}
+
+            <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                Expense Overview ({monthLabel || 'month'})
+              </p>
+              <p className="text-sm">
+                Allotted: {expenseTotals.allotted.toFixed(0)} | Used: {expenseTotals.used.toFixed(0)} | Balance:{' '}
+                {(expenseTotals.allotted - expenseTotals.used).toFixed(0)}
+              </p>
+              {expenseByCategory.length > 0 && (
+                <div className="h-44 mt-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={expenseByCategory}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      <Bar dataKey="amount" fill="hsl(210, 80%, 55%)" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              )}
+            </div>
           </>
         )}
 
