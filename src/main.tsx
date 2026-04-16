@@ -9,8 +9,12 @@ createRoot(document.getElementById("root")!).render(
   </ErrorBoundary>,
 );
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(console.error)
-  })
+if ("serviceWorker" in navigator) {
+  const register = () => {
+    void navigator.serviceWorker
+      .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .catch((err) => console.error("[PWA] Service worker registration failed:", err));
+  };
+  if (document.readyState === "complete") register();
+  else window.addEventListener("load", register, { once: true });
 }
