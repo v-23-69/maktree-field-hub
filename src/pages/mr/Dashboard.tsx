@@ -20,6 +20,7 @@ import type { DcrDailyStatus, DcrMonthlySummary } from '@/types/database.types';
 import { useTodayStrike, useMarkStrike } from '@/hooks/useStrike';
 import { useMrHolidays } from '@/hooks/useHolidays';
 import { toast } from 'sonner';
+import InstallPrompt from '@/components/shared/InstallPrompt';
 
 export default function MRDashboard() {
   const { user } = useAuth();
@@ -329,6 +330,7 @@ export default function MRDashboard() {
         </div>
       </div>
 
+      <InstallPrompt />
       <BottomNav role="mr" />
     </div>
   );

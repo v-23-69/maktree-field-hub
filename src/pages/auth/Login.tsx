@@ -1,7 +1,6 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserRole } from '@/types/database.types';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,47 +9,40 @@ import { toast } from 'sonner';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import AppLogo from '@/components/shared/AppLogo';
 
-function navigateByRole(
-  nav: (path: string, options?: { replace?: boolean }) => void,
-  role: UserRole,
-) {
-  const opts = { replace: true as const };
-  if (role === 'mr') nav('/mr/dashboard', opts);
-  else if (role === 'manager') nav('/manager/dashboard', opts);
-  else nav('/admin/dashboard', opts);
-}
-
 export default function Login() {
-  const { signIn, isAuthenticated, user, authReady, isProfileLoading } =
+  const { signIn, user, authReady, isProfileLoading, blockedInfo, clearBlockedInfo } =
     useAuth();
   const navigate = useNavigate();
-  const [employeeCode, setEmployeeCode] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!authReady) return;
-    if (isAuthenticated && user) {
-      navigateByRole(navigate, user.role);
+    if (user && authReady) {
+      if (user.role === 'mr') navigate('/mr/dashboard', { replace: true })
+      else if (user.role === 'manager') navigate('/manager/dashboard', { replace: true })
+      else navigate('/admin/dashboard', { replace: true })
     }
-  }, [authReady, isAuthenticated, user, navigate]);
+  }, [user, authReady, navigate])
+
+  useEffect(() => {
+    if (!blockedInfo?.isBlocked) return
+    navigate('/blocked-complaint', { replace: true, state: { blockReason: blockedInfo.blockReason } })
+    clearBlockedInfo()
+  }, [blockedInfo, navigate, clearBlockedInfo])
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
-    if (!employeeCode.trim() || !password) {
-      toast.error('Employee code (or email) and password are required');
+    if (!email.trim() || !password) {
+      toast.error('Email and password are required');
       return;
     }
     setIsSubmitting(true);
     try {
-      localStorage.setItem('last_employee_code', employeeCode.trim())
-      const result = await signIn(employeeCode, password);
-      if (result.success && result.user) {
-        navigateByRole(navigate, result.user.role);
+      const result = await signIn(email, password);
+      if (result.success) {
         toast.success('Signed in');
-      } else if (result.isBlocked) {
-        navigate('/blocked-complaint', { replace: true, state: { blockReason: result.blockReason } })
       } else {
         toast.error(result.error || 'Login failed');
       }
@@ -90,11 +82,13 @@ export default function Login() {
 
         <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="employeeCode">Employee code or work email</Label>
+            <Label htmlFor="email">Email</Label>
             <Input
-              id="employeeCode"
-              value={employeeCode}
-              onChange={e => setEmployeeCode(e.target.value)}
+              id="email"
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
               className="touch-target rounded-lg w-full min-w-0 max-w-full"
               autoComplete="username"
             />
