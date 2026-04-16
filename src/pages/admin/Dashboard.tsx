@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { useAdminDashboardStats } from '@/hooks/useDashboardStats';
 import { supabase } from '@/lib/supabase';
 import { formatDisplayDate } from '@/lib/dateUtils';
-import InstallPrompt from '@/components/shared/InstallPrompt';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -104,7 +103,6 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
-      <InstallPrompt />
     </AdminLayout>
   );
 }

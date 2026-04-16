@@ -20,7 +20,6 @@ import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { todayInputDate } from '@/lib/dateUtils';
-import InstallPrompt from '@/components/shared/InstallPrompt';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
 type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | null
@@ -330,7 +329,6 @@ export default function ManagerDashboard() {
         </DrawerContent>
       </Drawer>
 
-      <InstallPrompt />
       <BottomNav role="manager" />
     </div>
   );

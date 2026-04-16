@@ -32,6 +32,7 @@ import AdminHolidays from "@/pages/admin/Holidays";
 import NotFound from "@/pages/NotFound";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import ProfilePage from "@/pages/profile/Profile";
+import InstallPrompt from "@/components/shared/InstallPrompt";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,6 +63,7 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
+          <InstallPrompt />
           <Routes>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
