@@ -63,20 +63,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     let mounted = true
-    void (async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!mounted) return
-      if (session?.user) {
-        await loadProfile(session.user.id)
-      } else {
-        setUser(null)
-        setAuthReady(true)
-        setIsProfileLoading(false)
-      }
-    })()
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (!mounted) return
         if (session?.user) {
           await loadProfile(session.user.id)
         } else {
@@ -110,12 +99,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
       }
+      await loadProfile(authData.session.user.id)
       return { success: true }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed'
       return { success: false, error: message }
     }
-  }, [])
+  }, [loadProfile])
 
   const logout = useCallback(async () => {
     try {

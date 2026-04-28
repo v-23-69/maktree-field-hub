@@ -1,6 +1,7 @@
 {
   "name": "Maktree Medicines",
   "short_name": "Maktree",
+  "id": "/",
   "description": "Maktree Medicines Field Reporting Portal",
   "start_url": "/",
   "scope": "/",

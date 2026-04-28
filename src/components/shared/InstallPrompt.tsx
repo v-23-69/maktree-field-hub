@@ -21,24 +21,34 @@ function isLikelyMobile(): boolean {
 }
 
 export default function InstallPrompt() {
-  const { isAuthenticated, authReady } = useAuth()
+  const { authReady } = useAuth()
   const nativeRef = useRef<BeforeInstallPromptEvent | null>(null)
   const [mode, setMode] = useState<'none' | 'native' | 'manual'>('none')
 
   useEffect(() => {
-    if (!authReady || !isAuthenticated) return
-    if (isStandalone()) return
-    if (sessionStorage.getItem(DISMISS_KEY) === '1') return
-
     const handler = (e: Event) => {
       e.preventDefault()
       nativeRef.current = e as BeforeInstallPromptEvent
-      setMode('native')
+      setMode((m) => (m === 'none' ? 'native' : m))
     }
     window.addEventListener('beforeinstallprompt', handler)
 
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!authReady) return
+    if (isStandalone()) return
+    if (sessionStorage.getItem(DISMISS_KEY) === '1') return
+    if (nativeRef.current) {
+      setMode('native')
+      return
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined
-    if (isLikelyMobile()) {
+    if (isLikelyMobile() || /Chrome/i.test(navigator.userAgent)) {
       timer = setTimeout(() => {
         if (!nativeRef.current) {
           setMode((m) => (m === 'none' ? 'manual' : m))
@@ -47,17 +57,16 @@ export default function InstallPrompt() {
     }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handler)
       if (timer) clearTimeout(timer)
     }
-  }, [authReady, isAuthenticated])
+  }, [authReady])
 
   const dismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, '1')
     setMode('none')
   }
 
-  if (!authReady || !isAuthenticated) return null
+  if (!authReady) return null
   if (isStandalone()) return null
   if (mode === 'none') return null
 
