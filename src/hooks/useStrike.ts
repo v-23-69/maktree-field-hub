@@ -16,9 +16,14 @@ export function useTodayStrike(mrId: string) {
         .eq('mr_id', mrId)
         .eq('strike_date', today)
         .maybeSingle()
-      if (error) throw error
+      if (error) {
+        // If RLS blocks this row for current role/session, do not break dashboard render.
+        if (error.code === '42501' || /forbidden/i.test(error.message)) return null
+        throw error
+      }
       return (data as StrikeReport) ?? null
     },
+    retry: false,
   })
 }
 

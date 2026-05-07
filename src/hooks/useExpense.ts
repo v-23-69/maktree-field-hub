@@ -2,6 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { ExpenseItem, ExpenseReport } from '@/types/database.types'
 
+function isForbidden(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42501' || /forbidden/i.test(error.message ?? '')
+}
+
 export function useExpenseReport(mrId: string, date: string) {
   return useQuery({
     queryKey: ['expense-report', mrId, date],
@@ -14,9 +19,13 @@ export function useExpenseReport(mrId: string, date: string) {
         .eq('mr_id', mrId)
         .eq('report_date', date)
         .maybeSingle()
-      if (error) throw error
+      if (error) {
+        if (isForbidden(error)) return null
+        throw error
+      }
       return (data as ExpenseReport) ?? null
     },
+    retry: false,
   })
 }
 
@@ -65,9 +74,13 @@ export function useExpenseItems(reportId?: string) {
         .select('*')
         .eq('expense_report_id', reportId)
         .order('created_at')
-      if (error) throw error
+      if (error) {
+        if (isForbidden(error)) return []
+        throw error
+      }
       return (data ?? []) as ExpenseItem[]
     },
+    retry: false,
   })
 }
 
@@ -122,8 +135,12 @@ export function useExpenseSummary(mrId: string, month: string) {
         .eq('mr_id', mrId)
         .eq('month', month)
         .maybeSingle()
-      if (error) throw error
+      if (error) {
+        if (isForbidden(error)) return null
+        throw error
+      }
       return data
     },
+    retry: false,
   })
 }

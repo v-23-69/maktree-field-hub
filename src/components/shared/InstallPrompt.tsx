@@ -21,11 +21,12 @@ function isLikelyMobile(): boolean {
 }
 
 export default function InstallPrompt() {
-  const { authReady } = useAuth()
+  const { authReady, isAuthenticated } = useAuth()
   const nativeRef = useRef<BeforeInstallPromptEvent | null>(null)
   const [mode, setMode] = useState<'none' | 'native' | 'manual'>('none')
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated) return
     const handler = (e: Event) => {
       e.preventDefault()
       nativeRef.current = e as BeforeInstallPromptEvent
@@ -36,10 +37,10 @@ export default function InstallPrompt() {
     return () => {
       window.removeEventListener('beforeinstallprompt', handler)
     }
-  }, [])
+  }, [authReady, isAuthenticated])
 
   useEffect(() => {
-    if (!authReady) return
+    if (!authReady || !isAuthenticated) return
     if (isStandalone()) return
     if (sessionStorage.getItem(DISMISS_KEY) === '1') return
     if (nativeRef.current) {
@@ -59,14 +60,14 @@ export default function InstallPrompt() {
     return () => {
       if (timer) clearTimeout(timer)
     }
-  }, [authReady])
+  }, [authReady, isAuthenticated])
 
   const dismiss = () => {
     sessionStorage.setItem(DISMISS_KEY, '1')
     setMode('none')
   }
 
-  if (!authReady) return null
+  if (!authReady || !isAuthenticated) return null
   if (isStandalone()) return null
   if (mode === 'none') return null
 

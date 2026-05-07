@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert } from 'lucide-react';
+import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/shared/BottomNav';
 import AppLogo from '@/components/shared/AppLogo';
+import { useAuth } from '@/hooks/useAuth';
 
 const SIDEBAR_ITEMS = [
   { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
@@ -19,6 +20,7 @@ const SIDEBAR_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background">
@@ -33,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             const isActive = location.pathname === item.to;
             return (
               <NavLink
-                key={item.to}
+                key={`${item.to}-${item.label}`}
                 to={item.to}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
@@ -74,7 +76,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 const isActive = location.pathname === item.to;
                 return (
                   <NavLink
-                    key={item.to}
+                    key={`${item.to}-${item.label}`}
                     to={item.to}
                     onClick={() => setSidebarOpen(false)}
                     className={cn(
@@ -97,15 +99,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main content */}
       <div className="lg:pl-60 pb-20 lg:pb-0">
         {/* Admin header with hamburger and search */}
-        <header className="sticky top-0 z-30 flex items-center gap-3 bg-card px-4 py-3 shadow-sm border-b border-border lg:border-b-0">
+        <header className="sticky top-0 z-30 flex items-center gap-2 bg-card px-3 sm:px-4 py-2.5 shadow-sm border-b border-border">
           <button
             onClick={() => setSidebarOpen(true)}
             className="lg:hidden touch-target flex items-center justify-center rounded-lg p-1 active:scale-95 transition-transform"
           >
             <Menu className="h-5 w-5 text-foreground" />
           </button>
-          <div className="flex-1 flex items-center gap-2">
-            <div className="relative flex-1 max-w-sm">
+          <div className="flex-1 flex items-center gap-2 min-w-0">
+            <div className="relative flex-1 max-w-sm min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
@@ -114,9 +116,20 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
             </div>
           </div>
+          <button
+            onClick={async () => {
+              await logout();
+              window.location.hash = '#/login';
+            }}
+            className="touch-target rounded-lg p-2 text-muted-foreground hover:text-foreground"
+            aria-label="Logout"
+            title="Logout"
+          >
+            <LogOut className="h-5 w-5" />
+          </button>
         </header>
 
-        <div className="px-4 py-4 min-w-0 max-w-full overflow-x-auto">
+        <div className="px-3 sm:px-4 py-4 min-w-0 max-w-full overflow-x-auto">
           {children}
         </div>
       </div>

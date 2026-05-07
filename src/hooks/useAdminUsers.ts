@@ -39,60 +39,27 @@ export function useCreateUser() {
     mutationFn: async (payload: CreateUserPayload) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
-        const { data: inserted, error: insErr } = await supabase
-          .from('users')
-          .insert({
-            employee_code: payload.employeeCode.trim(),
-            full_name: payload.fullName.trim(),
-            role: payload.role,
-            email: payload.email.trim(),
-            is_active: true,
-          })
-          .select('id')
-          .single()
-        if (insErr) throw insErr
-
         const { data: fnResult, error: fnErr } =
           await supabase.functions.invoke<{
-            id?: string
+            user_id?: string
+            auth_user_id?: string
             error?: string
           }>('create-auth-user', {
             body: {
+              action: 'create_user',
               employee_code: payload.employeeCode.trim(),
               email: payload.email.trim(),
               full_name: payload.fullName.trim(),
               role: payload.role,
+              manager_ids: payload.managerIds,
+              sub_area_ids: payload.subAreaIds,
             },
           })
 
         if (fnErr) throw fnErr
         if (fnResult?.error) throw new Error(fnResult.error)
-        if (!fnResult?.id) throw new Error('Auth user was not created')
-
-        if (payload.role === 'mr') {
-          if (payload.managerIds.length > 0) {
-            const { error: mErr } = await supabase.from('mr_manager_map').insert(
-              payload.managerIds.map(manager_id => ({
-                mr_id: inserted.id,
-                manager_id,
-              })),
-            )
-            if (mErr) throw mErr
-          }
-          if (payload.subAreaIds.length > 0) {
-            const { error: sErr } = await supabase
-              .from('mr_sub_area_access')
-              .insert(
-                payload.subAreaIds.map(sub_area_id => ({
-                  mr_id: inserted.id,
-                  sub_area_id,
-                })),
-              )
-            if (sErr) throw sErr
-          }
-        }
-
-        return inserted.id as string
+        if (!fnResult?.user_id) throw new Error('User was not created')
+        return fnResult.user_id
       } catch (e) {
         const message =
           e instanceof Error ? e.message : 'Could not create user'
@@ -102,6 +69,32 @@ export function useCreateUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       queryClient.invalidateQueries({ queryKey: ['manager-mrs'] })
+    },
+  })
+}
+
+export function useDeleteMrUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { mrId: string; transferToMrId?: string }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data: fnResult, error: fnErr } =
+        await supabase.functions.invoke<{ success?: boolean; error?: string }>('create-auth-user', {
+          body: {
+            action: 'delete_mr',
+            mr_id: payload.mrId,
+            transfer_to_mr_id: payload.transferToMrId ?? null,
+          },
+        })
+      if (fnErr) throw fnErr
+      if (fnResult?.error) throw new Error(fnResult.error)
+      if (!fnResult?.success) throw new Error('Could not delete MR')
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mrs'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-access'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-sub-areas'] })
     },
   })
 }

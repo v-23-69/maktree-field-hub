@@ -12,9 +12,13 @@ export function useHolidays() {
         .from('holidays')
         .select('*')
         .order('holiday_date', { ascending: true })
-      if (error) throw error
+      if (error) {
+        if (error.code === '42501' || /forbidden/i.test(error.message)) return []
+        throw error
+      }
       return (data ?? []) as Holiday[]
     },
+    retry: false,
   })
 }
 
@@ -28,9 +32,13 @@ export function useMrHolidays(mrId: string) {
         .from('mr_holidays')
         .select('*, holiday:holidays(*)')
         .eq('mr_id', mrId)
-      if (error) throw error
+      if (error) {
+        if (error.code === '42501' || /forbidden/i.test(error.message)) return []
+        throw error
+      }
       return (data ?? []) as MrHoliday[]
     },
+    retry: false,
   })
 }
 

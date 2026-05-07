@@ -47,7 +47,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-card shadow-[0_-2px_10px_rgba(0,0,0,0.06)]">
-      <div className="mx-auto flex max-w-lg items-center justify-around">
+      <div className="mx-auto flex max-w-2xl items-center overflow-x-auto scrollbar-hide">
         {items.map(item => {
           const isActive = location.pathname.startsWith(item.to);
           return (
@@ -55,19 +55,19 @@ export default function BottomNav({ role }: { role: UserRole }) {
               key={item.to}
               to={item.to}
               className={cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-medium transition-colors touch-target',
+                'flex min-w-[72px] flex-1 flex-col items-center gap-1 py-2.5 text-[10px] sm:text-[11px] font-semibold transition-colors touch-target',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
               <span className="relative inline-flex">
-                <item.icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+                <item.icon className={cn('h-5 w-5', isActive && 'stroke-[2.75]')} />
                 {item.to === '/manager/requests' && pendingCount > 0 && (
                   <span className="absolute -top-1 -right-2 min-w-[16px] px-1 h-4 text-[10px] rounded-full bg-destructive text-white flex items-center justify-center border border-background">
                     {pendingCount > 99 ? '99+' : pendingCount}
                   </span>
                 )}
               </span>
-              <span>{item.label}</span>
+              <span className="text-center leading-none">{item.label}</span>
             </NavLink>
           );
         })}

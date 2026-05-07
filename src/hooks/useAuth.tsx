@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react'
 import { User, AuthState, UserRole } from '@/types/database.types'
 import { supabase } from '@/lib/supabase'
 
@@ -16,21 +16,52 @@ interface AuthContextType extends AuthState {
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
+const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
+const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
+const PROFILE_SELECT =
+  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,created_at,updated_at'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  const [authReady, setAuthReady] = useState(() => !supabase)
+  // Keep login UI responsive even if session check is slow.
+  const [authReady, setAuthReady] = useState(true)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
+  const loadingAuthUserIdRef = useRef<string | null>(null)
+  const lastLoadedAuthUserIdRef = useRef<string | null>(null)
+  const lastLoadedAtRef = useRef<number>(0)
 
   const clearBlockedInfo = useCallback(() => setBlockedInfo(null), [])
 
-  const loadProfile = useCallback(async (authUserId: string) => {
+  const loadProfile = useCallback(async (authUserId: string, preferCache = false) => {
     if (!supabase) return
+    if (loadingAuthUserIdRef.current === authUserId) return
+
+    if (preferCache) {
+      try {
+        const raw = sessionStorage.getItem(PROFILE_CACHE_KEY)
+        if (raw) {
+          const cached = JSON.parse(raw) as { ts: number; user: User }
+          if (
+            cached?.user?.auth_user_id === authUserId &&
+            Date.now() - cached.ts < PROFILE_CACHE_TTL_MS
+          ) {
+            setBlockedInfo(null)
+            setUser(cached.user)
+            setAuthReady(true)
+            setIsProfileLoading(false)
+          }
+        }
+      } catch {
+        sessionStorage.removeItem(PROFILE_CACHE_KEY)
+      }
+    }
+
+    loadingAuthUserIdRef.current = authUserId
     setIsProfileLoading(true)
     const { data: profile, error } = await supabase
       .from('users')
-      .select('*')
+      .select(PROFILE_SELECT)
       .eq('auth_user_id', authUserId)
       .maybeSingle()
 
@@ -38,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
+      loadingAuthUserIdRef.current = null
       return
     }
 
@@ -47,14 +79,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
+      loadingAuthUserIdRef.current = null
       await supabase.auth.signOut()
       return
     }
 
     setBlockedInfo(null)
-    setUser(profile as User)
+    const nextUser = profile as User
+    setUser(nextUser)
+    sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: nextUser }))
+    lastLoadedAuthUserIdRef.current = authUserId
+    lastLoadedAtRef.current = Date.now()
     setAuthReady(true)
     setIsProfileLoading(false)
+    loadingAuthUserIdRef.current = null
   }, [])
 
   useEffect(() => {
@@ -63,15 +101,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
     let mounted = true
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!mounted) return
+      if (session?.user) {
+        void loadProfile(session.user.id, true)
+      } else {
+        setUser(null)
+        setAuthReady(true)
+        setIsProfileLoading(false)
+        sessionStorage.removeItem(PROFILE_CACHE_KEY)
+      }
+    })()
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (!mounted) return
         if (session?.user) {
-          await loadProfile(session.user.id)
+          const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
+          const freshLoad = Date.now() - lastLoadedAtRef.current < 20_000
+          if (sameUser && freshLoad) {
+            setAuthReady(true)
+            return
+          }
+          void loadProfile(session.user.id, true)
         } else {
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
+          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          lastLoadedAuthUserIdRef.current = null
+          lastLoadedAtRef.current = 0
         }
       },
     )
@@ -99,7 +159,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
       }
-      await loadProfile(authData.session.user.id)
+      void loadProfile(authData.session.user.id, true)
       return { success: true }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed'
@@ -114,6 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
+      sessionStorage.removeItem(PROFILE_CACHE_KEY)
     }
   }, [])
 

@@ -29,6 +29,7 @@ export default function MRExpense() {
   const [category, setCategory] = useState('Travel')
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
+  const [createAttemptedKey, setCreateAttemptedKey] = useState<string | null>(null)
   const { data: report } = useExpenseReport(user?.id ?? '', date)
   const { data: items = [] } = useExpenseItems(report?.id)
   const addItem = useAddExpenseItem()
@@ -41,10 +42,13 @@ export default function MRExpense() {
   useEffect(() => {
     if (!user?.id || !date) return
     if (report?.id) return
+    const requestKey = `${user.id}-${date}`
+    if (createAttemptedKey === requestKey) return
+    setCreateAttemptedKey(requestKey)
     void getOrCreateReport.mutateAsync({ mrId: user.id, date }).catch(() => {
       // ignore; page already shows read-only error via queries if needed
     })
-  }, [user?.id, date, report?.id, getOrCreateReport])
+  }, [user?.id, date, report?.id, getOrCreateReport, createAttemptedKey])
 
   return (
     <div className="min-h-screen bg-background pb-20">

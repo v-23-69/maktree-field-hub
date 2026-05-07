@@ -61,15 +61,6 @@ export default function Login() {
     );
   }
 
-  if (isProfileLoading) {
-    return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background px-4">
-        <LoadingSpinner />
-        <p className="text-sm text-muted-foreground">Restoring your session…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 w-full max-w-full min-w-0 overflow-x-hidden">
       <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
@@ -81,6 +72,9 @@ export default function Login() {
         </div>
 
         <form onSubmit={handleLogin} className="space-y-4">
+          {isProfileLoading && (
+            <p className="text-xs text-center text-muted-foreground">Restoring previous session...</p>
+          )}
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input

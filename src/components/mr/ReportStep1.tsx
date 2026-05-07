@@ -8,6 +8,7 @@ import { useAllowedReportDates } from '@/hooks/useReport';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
+import { UserCircle2 } from 'lucide-react';
 
 interface Props {
   data: ReportFormData;
@@ -138,6 +139,27 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
               <option key={m.id} value={m.id}>{m.full_name}</option>
             ))}
           </select>
+        )}
+        {!!data.workingWithId && (
+          <div className="rounded-xl bg-card p-3 shadow-sm">
+            {(() => {
+              const selected = managers.find(m => m.id === data.workingWithId)
+              if (!selected) return null
+              return (
+                <div className="flex items-center gap-3">
+                  {selected.profile_photo_url ? (
+                    <img src={selected.profile_photo_url} className="h-9 w-9 rounded-full object-cover" />
+                  ) : (
+                    <UserCircle2 className="h-9 w-9 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{selected.full_name}</p>
+                    <p className="text-xs text-muted-foreground">{selected.employee_code}</p>
+                  </div>
+                </div>
+              )
+            })()}
+          </div>
         )}
         {isError && (
           <p className="text-xs text-destructive">Could not load managers</p>

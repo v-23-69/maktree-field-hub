@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@/types/database.types'
 
-/** Managers list for "Working With" — only columns needed by the UI. */
-export type ManagerRow = Pick<User, 'id' | 'full_name' | 'employee_code' | 'role'>
+/** Managers list for "Working With" — includes profile photo for UI. */
+export type ManagerRow = Pick<User, 'id' | 'full_name' | 'employee_code' | 'role' | 'profile_photo_url'>
 
 /**
  * Loads managers for the MR "Working With" dropdown.
@@ -18,7 +18,20 @@ export function useManagers() {
       try {
         const { data, error } = await supabase.rpc('list_managers_for_mr')
         if (error) throw error
-        return (data ?? []) as ManagerRow[]
+        const managers = (data ?? []) as ManagerRow[]
+        const managerIds = managers.map(m => m.id).filter(Boolean)
+        if (managerIds.length === 0) return managers
+
+        const { data: photoRows } = await supabase
+          .from('users')
+          .select('id, profile_photo_url')
+          .in('id', managerIds)
+
+        const photoById = new Map<string, string | null>(
+          (photoRows ?? []).map((r: { id: string; profile_photo_url: string | null }) => [r.id, r.profile_photo_url]),
+        )
+
+        return managers.map(m => ({ ...m, profile_photo_url: photoById.get(m.id) ?? null }))
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Failed to load managers'
         throw new Error(message)
@@ -37,7 +50,7 @@ export function useManagersForMr(mrId: string) {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('mr_manager_map')
-        .select('manager:users!mr_manager_map_manager_id_fkey(id, full_name, employee_code, role)')
+        .select('manager:users!mr_manager_map_manager_id_fkey(id, full_name, employee_code, role, profile_photo_url)')
         .eq('mr_id', mrId)
         .order('assigned_at', { ascending: true })
       if (error) throw error

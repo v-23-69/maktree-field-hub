@@ -9,6 +9,7 @@ import {
   useToggleUserActive,
   useMrAssignments,
   useSaveMrAssignments,
+  useDeleteMrUser,
   type CreateUserPayload,
 } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
@@ -24,6 +25,7 @@ import type { User, UserRole } from '@/types/database.types';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockUser, useUnblockUser, useBlockComplaints, useResolveComplaint } from '@/hooks/useBlockSystem';
 import { Textarea } from '@/components/ui/textarea';
+import ConfirmDialog from '@/components/shared/ConfirmDialog';
 
 const ROLE_FILTERS = ['All', 'MR', 'Manager', 'Admin'] as const;
 
@@ -47,12 +49,14 @@ export default function AdminUsers() {
   const [activeTab, setActiveTab] = useState<'users' | 'complaints'>('users');
   const [blockReasonByUserId, setBlockReasonByUserId] = useState<Record<string, string>>({});
   const [complaintNotes, setComplaintNotes] = useState<Record<string, string>>({});
+  const [mrToDelete, setMrToDelete] = useState<User | null>(null);
 
   const { data: allUsers = [], isLoading, isError, refetch } = useAdminUsersList();
   const { data: areasData = [] } = useAllAreas();
   const createUser = useCreateUser();
   const toggleActive = useToggleUserActive();
   const saveMrAssignments = useSaveMrAssignments();
+  const deleteMr = useDeleteMrUser();
   const { data: existingAssignments, isLoading: assignLoading } = useMrAssignments(editUser?.id ?? '');
   const blockUser = useBlockUser();
   const unblockUser = useUnblockUser();
@@ -324,6 +328,15 @@ export default function AdminUsers() {
                       <Edit className="h-4 w-4" />
                     </button>
                   )}
+                  {u.role === 'mr' && (
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setMrToDelete(u)}
+                    >
+                      Delete
+                    </Button>
+                  )}
                   <button
                     type="button"
                     className={cn('p-1.5', u.is_active ? 'text-primary' : 'text-muted-foreground')}
@@ -487,6 +500,26 @@ export default function AdminUsers() {
           )}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={!!mrToDelete}
+        onOpenChange={open => { if (!open) setMrToDelete(null); }}
+        title="Delete MR account?"
+        description={mrToDelete ? `Delete ${mrToDelete.full_name}. This disables profile and removes auth login.` : 'Delete MR account'}
+        onConfirm={() => {
+          if (!mrToDelete) return
+          void deleteMr
+            .mutateAsync({ mrId: mrToDelete.id })
+            .then(() => {
+              toast.success('MR deleted')
+              setMrToDelete(null)
+            })
+            .catch(e => toast.error(e instanceof Error ? e.message : 'Delete failed'))
+        }}
+        confirmLabel={deleteMr.isPending ? 'Deleting…' : 'Delete'}
+        destructive
+        confirmDisabled={deleteMr.isPending}
+      />
     </AdminLayout>
   );
 }

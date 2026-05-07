@@ -1,5 +1,5 @@
 /* Maktree Field Hub — minimal app-shell worker for installability + offline bootstrap */
-const CACHE = "maktree-shell-v2";
+const CACHE = "maktree-shell-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

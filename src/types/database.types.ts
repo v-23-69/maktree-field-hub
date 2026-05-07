@@ -12,6 +12,7 @@ export interface User {
   profile_photo_url?: string | null
   dob?: string | null
   aadhaar_number?: string | null
+  pan_number?: string | null
   address?: string | null
   city?: string | null
   state?: string | null
@@ -315,6 +316,7 @@ export interface UserProfile extends User {
   profile_photo_url: string | null
   dob: string | null
   aadhaar_number: string | null
+  pan_number: string | null
   address: string | null
   city: string | null
   state: string | null

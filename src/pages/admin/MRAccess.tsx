@@ -27,7 +27,14 @@ export default function AdminMRAccess() {
       setCheckedSubAreas([]);
       return;
     }
-    setCheckedSubAreas([...serverAccess]);
+    setCheckedSubAreas(prev => {
+      const next = [...serverAccess].sort();
+      const prevSorted = [...prev].sort();
+      if (prevSorted.length === next.length && prevSorted.every((id, idx) => id === next[idx])) {
+        return prev;
+      }
+      return next;
+    });
   }, [selectedMr, serverAccess]);
 
   const toggleSubArea = (id: string) => {

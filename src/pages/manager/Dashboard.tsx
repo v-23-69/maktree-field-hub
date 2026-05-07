@@ -13,16 +13,18 @@ import { Label } from '@/components/ui/label';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useAddDoctor } from '@/hooks/useAdminDoctors';
 import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
-import { useAssignSubAreaToMr } from '@/hooks/useAdminMrAccess';
+import { useAssignSubAreaToMr, useMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
+import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
 import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { todayInputDate } from '@/lib/dateUtils';
+import ConfirmDialog from '@/components/shared/ConfirmDialog';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
-type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | null
+type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'create-mr' | 'delete-mr' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
@@ -38,6 +40,8 @@ export default function ManagerDashboard() {
   const addArea = useAddArea();
   const addSubArea = useAddSubArea();
   const assignSubArea = useAssignSubAreaToMr();
+  const createUser = useCreateUser();
+  const deleteMr = useDeleteMrUser();
 
   const [doctorName, setDoctorName] = useState('');
   const [doctorSpec, setDoctorSpec] = useState('');
@@ -47,6 +51,14 @@ export default function ManagerDashboard() {
   const [subAreaAreaId, setSubAreaAreaId] = useState('');
   const [assignMrId, setAssignMrId] = useState('');
   const [assignSubAreaId, setAssignSubAreaId] = useState('');
+  const [newMrName, setNewMrName] = useState('');
+  const [newMrCode, setNewMrCode] = useState('');
+  const [newMrEmail, setNewMrEmail] = useState('');
+  const [newMrSubAreas, setNewMrSubAreas] = useState<Set<string>>(new Set());
+  const [deleteMrId, setDeleteMrId] = useState('');
+  const [transferToMrId, setTransferToMrId] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const { data: deleteMrSubAreas = [] } = useMrSubAreaAccess(deleteMrId);
 
   const allSubAreas = areas.flatMap(a => (a.sub_areas ?? []).map(sa => ({ ...sa, areaName: a.name })));
   const today = todayInputDate()
@@ -85,6 +97,12 @@ export default function ManagerDashboard() {
     setSubAreaAreaId('');
     setAssignMrId('');
     setAssignSubAreaId('');
+    setNewMrName('');
+    setNewMrCode('');
+    setNewMrEmail('');
+    setNewMrSubAreas(new Set());
+    setDeleteMrId('');
+    setTransferToMrId('');
   };
 
   return (
@@ -137,6 +155,12 @@ export default function ManagerDashboard() {
             <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('assign')}>
               Assign Area to MR
             </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('create-mr')}>
+              Create MR
+            </Button>
+            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('delete-mr')}>
+              Delete MR
+            </Button>
             <Button type="button" variant="outline" className="touch-target rounded-lg col-span-2" onClick={() => navigate('/manager/holidays')}>
               Holidays
             </Button>
@@ -186,6 +210,8 @@ export default function ManagerDashboard() {
               {action === 'area' && 'Add Area'}
               {action === 'subarea' && 'Add Sub-area'}
               {action === 'assign' && 'Assign Area to MR'}
+              {action === 'create-mr' && 'Create New MR'}
+              {action === 'delete-mr' && 'Delete MR'}
             </DrawerTitle>
           </DrawerHeader>
 
@@ -325,9 +351,137 @@ export default function ManagerDashboard() {
                 </Button>
               </>
             )}
+
+            {action === 'create-mr' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">MR Name</Label>
+                  <Input value={newMrName} onChange={e => setNewMrName(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Employee Code</Label>
+                  <Input value={newMrCode} onChange={e => setNewMrCode(e.target.value)} placeholder="MKT-MR-00X" className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Email</Label>
+                  <Input value={newMrEmail} onChange={e => setNewMrEmail(e.target.value)} type="email" className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Assign Sub-areas</Label>
+                  <div className="max-h-56 overflow-y-auto space-y-2 rounded-md border p-2">
+                    {allSubAreas.map(sa => (
+                      <label key={sa.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={newMrSubAreas.has(sa.id)}
+                          onChange={e => {
+                            setNewMrSubAreas(prev => {
+                              const next = new Set(prev)
+                              if (e.target.checked) next.add(sa.id)
+                              else next.delete(sa.id)
+                              return next
+                            })
+                          }}
+                        />
+                        <span>{sa.areaName} - {sa.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  disabled={createUser.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() => {
+                    if (!newMrName.trim() || !newMrCode.trim() || !newMrEmail.trim() || !user?.id) {
+                      toast.error('Name, code, and email are required')
+                      return
+                    }
+                    void createUser
+                      .mutateAsync({
+                        fullName: newMrName.trim(),
+                        employeeCode: newMrCode.trim(),
+                        email: newMrEmail.trim(),
+                        role: 'mr',
+                        managerIds: [user.id],
+                        subAreaIds: [...newMrSubAreas],
+                      })
+                      .then(() => {
+                        toast.success('MR created. Default password: Maktree@123')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not create MR'))
+                  }}
+                >
+                  {createUser.isPending ? 'Creating…' : 'Create MR'}
+                </Button>
+              </>
+            )}
+
+            {action === 'delete-mr' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">MR to delete</Label>
+                  <select value={deleteMrId} onChange={e => setDeleteMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">Choose MR</option>
+                    {mrs.map(m => (
+                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Transfer areas to (optional)</Label>
+                  <select value={transferToMrId} onChange={e => setTransferToMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
+                    <option value="">No transfer</option>
+                    {mrs.filter(m => m.id !== deleteMrId).map(m => (
+                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <Button
+                  type="button"
+                  disabled={deleteMr.isPending}
+                  variant="destructive"
+                  className="w-full touch-target rounded-lg font-semibold"
+                  onClick={() => {
+                    if (!deleteMrId) {
+                      toast.error('Select MR to delete')
+                      return
+                    }
+                    setShowDeleteConfirm(true)
+                  }}
+                >
+                  {deleteMr.isPending ? 'Deleting…' : 'Delete MR'}
+                </Button>
+              </>
+            )}
           </div>
         </DrawerContent>
       </Drawer>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete this MR?"
+        description={
+          transferToMrId
+            ? `This MR has ${deleteMrSubAreas.length} assigned sub-areas. They will be transferred before deletion.`
+            : `This MR has ${deleteMrSubAreas.length} assigned sub-areas. They will be removed on deletion.`
+        }
+        onConfirm={() => {
+          void deleteMr
+            .mutateAsync({ mrId: deleteMrId, transferToMrId: transferToMrId || undefined })
+            .then(() => {
+              toast.success('MR deleted successfully')
+              setShowDeleteConfirm(false)
+              closeDrawer()
+            })
+            .catch(e => toast.error(e instanceof Error ? e.message : 'Could not delete MR'))
+        }}
+        confirmLabel={deleteMr.isPending ? 'Deleting…' : 'Delete MR'}
+        destructive
+        confirmDisabled={deleteMr.isPending}
+      />
 
       <BottomNav role="manager" />
     </div>
