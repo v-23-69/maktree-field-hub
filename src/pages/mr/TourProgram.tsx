@@ -85,7 +85,7 @@ export default function TourProgramPage() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Tour Program" showBack />
 
-      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {/* Month selector */}
         <div className="flex gap-2">
           {monthOptions.map(m => (
@@ -141,6 +141,7 @@ export default function TourProgramPage() {
         {workingDays.length > 0 && (
           <div className="space-y-2">
             <p className="section-title">Daily Plan</p>
+            <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {workingDays.map(day => {
               const entry = entryByDate.get(day.work_date)
               const dateObj = new Date(day.work_date + 'T00:00:00')
@@ -222,6 +223,7 @@ export default function TourProgramPage() {
                 </div>
               )
             })}
+            </div>
           </div>
         )}
 

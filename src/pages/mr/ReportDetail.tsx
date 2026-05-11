@@ -57,7 +57,7 @@ export default function ReportDetail() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Daily Report" showBack />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-3xl mx-auto">
         {isLoading && <LoadingSpinner />}
         {isError && (
           <p className="text-sm text-destructive text-center py-6">Could not load report</p>

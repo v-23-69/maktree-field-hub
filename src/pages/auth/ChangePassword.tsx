@@ -74,8 +74,8 @@ export default function ChangePassword() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 w-full max-w-full min-w-0 overflow-x-hidden">
-      <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 sm:px-6 md:px-8 w-full max-w-full min-w-0 overflow-x-hidden">
+      <div className="w-full max-w-sm md:max-w-md min-w-0 animate-fade-in-up">
         <div className="mb-6 flex flex-col items-center gap-3">
           <AppLogo className="h-20 w-auto" />
           <h1 className="text-xl font-bold text-foreground">Change Password</h1>

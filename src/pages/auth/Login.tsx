@@ -63,7 +63,7 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 w-full max-w-full overflow-x-hidden">
-      <div className="w-full max-w-sm min-w-0 animate-fade-in-up">
+      <div className="w-full max-w-sm md:max-w-md min-w-0 animate-fade-in-up md:glass-card md:p-8 md:rounded-2xl">
         <div className="mb-10 flex flex-col items-center gap-4">
           <AppLogo className="h-24 w-auto drop-shadow-sm" />
           <div className="text-center space-y-1">

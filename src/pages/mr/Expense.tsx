@@ -58,7 +58,7 @@ export default function MRExpense() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Expense Report" showBack />
 
-      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {/* Date selector */}
         <div className="flex gap-2">
           {dateOptions.map((option, i) => (
@@ -160,8 +160,9 @@ export default function MRExpense() {
 
         {/* Items list */}
         {items.length > 0 && (
-          <div className="space-y-2.5">
-            <p className="section-title">Expenses ({items.length})</p>
+          <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
+            <p className="section-title md:col-span-2">Expenses ({items.length})</p>
+            <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {items.map(item => (
               <div key={item.id} className="glass-card p-3.5 flex items-center gap-3">
                 <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
@@ -180,6 +181,7 @@ export default function MRExpense() {
                 </button>
               </div>
             ))}
+            </div>
           </div>
         )}
 

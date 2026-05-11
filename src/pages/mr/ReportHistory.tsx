@@ -77,7 +77,7 @@ export default function ReportHistory() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Report History" showBack />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="flex gap-2">
           <Button
             variant={view === 'calendar' ? 'default' : 'outline'}

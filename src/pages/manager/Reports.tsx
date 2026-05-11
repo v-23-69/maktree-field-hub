@@ -362,7 +362,7 @@ export default function ManagerReports() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="MR Reports" />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-5xl mx-auto">
         <div className="flex gap-2">
           <Button
             type="button"
@@ -474,7 +474,7 @@ export default function ManagerReports() {
             Doctor Visit Filters
           </p>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Speciality</Label>
               <select

@@ -109,7 +109,7 @@ export default function ProfilePage() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Profile" showBack />
 
-      <div className="max-w-md mx-auto space-y-4 px-4 pt-4">
+      <div className="max-w-md md:max-w-xl lg:max-w-2xl mx-auto space-y-4 px-4 md:px-6 pt-4">
         {/* Hero card */}
         <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5">
           <div className="flex items-center gap-4">
@@ -181,7 +181,7 @@ export default function ProfilePage() {
         )}
 
         {/* Quick info cards */}
-        <div className="grid grid-cols-2 gap-2.5">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
           {profile.mobile && (
             <div className="glass-card !rounded-xl p-3 flex items-center gap-2.5">
               <Phone className="h-4 w-4 text-primary shrink-0" />

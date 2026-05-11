@@ -98,7 +98,7 @@ export default function ManagerTargets() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Targets" />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
             {editingId ? 'Edit Target' : 'Set New Target'}

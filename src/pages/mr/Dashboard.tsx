@@ -123,7 +123,7 @@ export default function MRDashboard() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Dashboard" />
 
-      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {/* Welcome hero */}
         <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
           <div className="flex items-center gap-3.5">
@@ -175,7 +175,8 @@ export default function MRDashboard() {
           </div>
         )}
 
-        {/* CTA */}
+        {/* CTA + Daily checklist */}
+        <div className="md:grid md:grid-cols-2 md:gap-4 space-y-5 md:space-y-0 md:items-start">
         <Button
           onClick={() => navigate('/mr/report/new')}
           className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-14 text-[15px] font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
@@ -184,7 +185,6 @@ export default function MRDashboard() {
           Start Today's Report
         </Button>
 
-        {/* Daily checklist */}
         <div className="glass-card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <p className="section-title">Daily Checklist</p>
@@ -225,6 +225,7 @@ export default function MRDashboard() {
             </div>
           )}
         </div>
+        </div>
 
         {/* Strike / Holiday row */}
         <div className="flex gap-2.5">
@@ -251,7 +252,7 @@ export default function MRDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard icon={FileText} value={stats?.reportsThisMonth ?? 0} label="Reports This Month" color="primary" />
           <StatCard icon={Stethoscope} value={stats?.doctorsThisWeek ?? 0} label="Doctors This Week" color="emerald" />
         </div>
@@ -260,7 +261,7 @@ export default function MRDashboard() {
         {!completionLoading && areaProgress.length > 0 && (
           <div className="space-y-3">
             <p className="section-title">Doctor Coverage</p>
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
               {areaProgress.map(a => (
                 <button
                   key={a.areaName}
@@ -297,7 +298,7 @@ export default function MRDashboard() {
         {!targetsLoading && activeTargets.length > 0 && (
           <div className="space-y-3">
             <p className="section-title">Active Targets</p>
-            <div className="space-y-2.5">
+            <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
               {activeTargets.map(t => (
                 <div key={t.target_id} className="glass-card p-4">
                   <div className="flex items-center justify-between gap-3 mb-2">

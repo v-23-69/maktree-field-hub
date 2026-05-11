@@ -263,7 +263,7 @@ export default function NewReport() {
       <PageHeader title="New Daily Report" showBack />
 
       {/* Step indicator */}
-      <div className="px-4 pt-4 pb-2 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
         <div className="flex items-center gap-1">
           {STEPS.map((s, i) => {
             const isActive = i + 1 === step;
@@ -288,7 +288,7 @@ export default function NewReport() {
         </div>
       </div>
 
-      <div className="px-4 py-3 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
         {step === 1 && <ReportStep1 data={formData} onChange={updateData} onNext={() => setStep(2)} />}
         {step === 2 && (
           <ReportStep2

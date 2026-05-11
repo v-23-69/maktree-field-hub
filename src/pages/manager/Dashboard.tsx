@@ -174,7 +174,7 @@ export default function ManagerDashboard() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Manager Dashboard" />
 
-      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
+      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {/* Welcome hero */}
         <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
           <div className="flex items-center gap-3.5">
@@ -199,7 +199,7 @@ export default function ManagerDashboard() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
           <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" color="emerald" />
           <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="This Month" color="blue" />
@@ -218,7 +218,7 @@ export default function ManagerDashboard() {
         {/* Quick Actions — frequently used */}
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
-          <div className="grid grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-4 md:grid-cols-7 gap-2.5">
             <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
@@ -258,7 +258,7 @@ export default function ManagerDashboard() {
               {todaysMrReports.filter(r => r.submitted).length}/{mrs.length} submitted
             </span>
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {mrs.map(mr => {
               const s = todaysMrReports.find(r => r.mrId === mr.id)
               const submitted = !!s?.submitted

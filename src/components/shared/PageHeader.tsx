@@ -20,7 +20,7 @@ export default function PageHeader({ title, showBack, rightAction }: PageHeaderP
     .toUpperCase() ?? '';
 
   return (
-    <header className="sticky top-0 z-30 glass flex items-center gap-3 px-4 h-14">
+    <header className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-6 h-14 md:h-16">
       {showBack ? (
         <button
           onClick={() => navigate(-1)}
@@ -41,10 +41,10 @@ export default function PageHeader({ title, showBack, rightAction }: PageHeaderP
       <div className="flex-1 min-w-0">
         {!showBack ? (
           <div>
-            <p className="text-[15px] font-extrabold text-foreground truncate leading-tight tracking-tight">
+            <p className="text-[15px] md:text-base font-extrabold text-foreground truncate leading-tight tracking-tight">
               MakTree DCR Portal
             </p>
-            <p className="text-[10px] text-muted-foreground/70 font-medium tracking-wide">
+            <p className="text-[10px] md:text-[11px] text-muted-foreground/70 font-medium tracking-wide">
               Field Reporting System
             </p>
           </div>

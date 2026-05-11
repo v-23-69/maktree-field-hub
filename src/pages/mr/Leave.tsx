@@ -22,7 +22,7 @@ export default function MRLeave() {
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Leave" showBack />
-      <div className="p-4 space-y-4">
+      <div className="p-4 md:px-6 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="rounded-xl border p-3 space-y-2">
           <Input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} />
           <select value={leaveType} onChange={e => setLeaveType(e.target.value as typeof leaveType)} className="h-10 w-full border rounded-md px-2">

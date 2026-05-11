@@ -31,7 +31,7 @@ export default function ManagerLeaves() {
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Leaves" />
-      <div className="p-4 space-y-3">
+      <div className="p-4 md:px-6 space-y-3 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="grid grid-cols-4 gap-2">
           <Button variant={tab === 'pending' ? 'default' : 'outline'} onClick={() => setTab('pending')}>Pending</Button>
           <Button variant={tab === 'approved' ? 'default' : 'outline'} onClick={() => setTab('approved')}>Approved</Button>

@@ -46,7 +46,7 @@ export default function ManagerHolidays({ embedded = false, useAdminScope = fals
   return (
     <div className={embedded ? 'space-y-4' : 'min-h-screen bg-background pb-24'}>
       {!embedded && <PageHeader title="Holidays" />}
-      <div className="p-4 space-y-4">
+      <div className="p-4 md:px-6 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="rounded-xl border p-3 space-y-2">
           <p className="text-sm font-medium">Create Holiday</p>
           <Input value={name} onChange={e => setName(e.target.value)} placeholder="Holiday name" />

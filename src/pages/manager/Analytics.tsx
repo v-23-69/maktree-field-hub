@@ -147,7 +147,7 @@ export default function ManagerAnalytics() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Analytics" />
 
-      <div className="px-4 py-4 space-y-4">
+      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-5xl mx-auto">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl bg-card p-3 shadow-sm space-y-1.5">
             <Label className="text-xs text-muted-foreground">From</Label>
@@ -159,7 +159,7 @@ export default function ManagerAnalytics() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           <Button type="button" variant={rangePreset === 'daily' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('daily')}>Daily</Button>
           <Button type="button" variant={rangePreset === 'weekly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('weekly')}>Weekly</Button>
           <Button type="button" variant={rangePreset === 'monthly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('monthly')}>Monthly</Button>

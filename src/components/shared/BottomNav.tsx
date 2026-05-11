@@ -49,7 +49,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
     <nav className="fixed bottom-0 left-0 right-0 z-40 glass border-t"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex max-w-2xl items-stretch">
+      <div className="mx-auto flex max-w-2xl lg:max-w-3xl items-stretch">
         {items.map(item => {
           const isActive = location.pathname.startsWith(item.to);
           return (
@@ -57,7 +57,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
               key={item.to}
               to={item.to}
               className={cn(
-                'relative flex flex-1 flex-col items-center justify-center gap-[3px] pt-2 pb-1.5 text-[10px] font-semibold transition-colors',
+                'relative flex flex-1 flex-col items-center justify-center gap-[3px] pt-2 pb-1.5 text-[10px] md:text-[11px] font-semibold transition-colors',
                 isActive ? 'text-primary' : 'text-muted-foreground/70'
               )}
             >
@@ -65,7 +65,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
                 <span className="absolute top-0 left-1/2 -translate-x-1/2 h-[2.5px] w-5 rounded-full bg-primary" />
               )}
               <span className="relative inline-flex">
-                <item.icon className={cn('h-5 w-5', isActive && 'stroke-[2.5]')} />
+                <item.icon className={cn('h-5 w-5 md:h-6 md:w-6', isActive && 'stroke-[2.5]')} />
                 {item.to === '/manager/requests' && pendingCount > 0 && (
                   <span className="absolute -top-1.5 -right-2.5 min-w-[15px] px-0.5 h-[15px] text-[8px] rounded-full bg-destructive text-white flex items-center justify-center border-[1.5px] border-card font-bold">
                     {pendingCount > 99 ? '99+' : pendingCount}
