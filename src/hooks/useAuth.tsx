@@ -19,7 +19,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const PROFILE_SELECT =
-  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,created_at,updated_at'
+  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,profile_photo_url,designation,mobile,created_at,updated_at'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -102,8 +102,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let mounted = true
     void (async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
       if (!mounted) return
+      if (
+        sessionError &&
+        /refresh token|invalid.*token/i.test(sessionError.message ?? '')
+      ) {
+        await supabase.auth.signOut({ scope: 'local' })
+        setUser(null)
+        setAuthReady(true)
+        setIsProfileLoading(false)
+        sessionStorage.removeItem(PROFILE_CACHE_KEY)
+        return
+      }
       if (session?.user) {
         void loadProfile(session.user.id, true)
       } else {
@@ -115,12 +126,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return
+        if (event === 'TOKEN_REFRESHED') return
         if (session?.user) {
           const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
-          const freshLoad = Date.now() - lastLoadedAtRef.current < 20_000
-          if (sameUser && freshLoad) {
+          if (sameUser) {
             setAuthReady(true)
             return
           }

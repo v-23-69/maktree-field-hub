@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useAddDoctor } from '@/hooks/useAdminDoctors';
 import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
-import { useAssignSubAreaToMr, useMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
+import { useAssignSubAreasToMrBatch, useMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
 import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
@@ -24,7 +24,7 @@ import { todayInputDate } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
-type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'create-mr' | 'delete-mr' | null
+type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'assign-self' | 'create-mr' | 'delete-mr' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
@@ -39,7 +39,7 @@ export default function ManagerDashboard() {
   const addDoctor = useAddDoctor();
   const addArea = useAddArea();
   const addSubArea = useAddSubArea();
-  const assignSubArea = useAssignSubAreaToMr();
+  const assignSubAreasBatch = useAssignSubAreasToMrBatch();
   const createUser = useCreateUser();
   const deleteMr = useDeleteMrUser();
 
@@ -50,7 +50,10 @@ export default function ManagerDashboard() {
   const [subAreaName, setSubAreaName] = useState('');
   const [subAreaAreaId, setSubAreaAreaId] = useState('');
   const [assignMrId, setAssignMrId] = useState('');
-  const [assignSubAreaId, setAssignSubAreaId] = useState('');
+  const [assignPickAreaId, setAssignPickAreaId] = useState('');
+  const [assignSelectedSubAreas, setAssignSelectedSubAreas] = useState<Set<string>>(new Set());
+  const [selfPickAreaId, setSelfPickAreaId] = useState('');
+  const [selfSelectedSubAreas, setSelfSelectedSubAreas] = useState<Set<string>>(new Set());
   const [newMrName, setNewMrName] = useState('');
   const [newMrCode, setNewMrCode] = useState('');
   const [newMrEmail, setNewMrEmail] = useState('');
@@ -60,7 +63,49 @@ export default function ManagerDashboard() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: deleteMrSubAreas = [] } = useMrSubAreaAccess(deleteMrId);
 
-  const allSubAreas = areas.flatMap(a => (a.sub_areas ?? []).map(sa => ({ ...sa, areaName: a.name })));
+  const allSubAreas = useMemo(
+    () =>
+      areas.flatMap(a =>
+        (a.sub_areas ?? []).map(sa => ({
+          ...sa,
+          areaId: a.id,
+          areaName: a.name,
+        })),
+      ),
+    [areas],
+  );
+
+  const assignSubAreasFiltered = useMemo(
+    () =>
+      assignPickAreaId
+        ? allSubAreas.filter(sa => sa.areaId === assignPickAreaId)
+        : allSubAreas,
+    [allSubAreas, assignPickAreaId],
+  );
+
+  const selfSubAreasFiltered = useMemo(
+    () =>
+      selfPickAreaId ? allSubAreas.filter(sa => sa.areaId === selfPickAreaId) : allSubAreas,
+    [allSubAreas, selfPickAreaId],
+  );
+
+  const toggleAssignSubArea = (id: string) => {
+    setAssignSelectedSubAreas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelfSubArea = (id: string) => {
+    setSelfSelectedSubAreas(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const today = todayInputDate()
 
   const { data: todaysMrReports = [] } = useQuery({
@@ -77,11 +122,15 @@ export default function ManagerDashboard() {
 
       const byMr = new Map<string, { submitted: boolean; reportId: string | null }>()
       for (const id of mrIds) byMr.set(id, { submitted: false, reportId: null })
-      for (const r of data ?? []) {
-        byMr.set((r as any).mr_id, {
-          submitted: (r as any).status === 'submitted',
-          reportId: (r as any).id ?? null,
-        })
+      type Row = { mr_id: string; status: string; id: string }
+      for (const r of (data ?? []) as Row[]) {
+        const prev = byMr.get(r.mr_id)
+        const submitted = r.status === 'submitted' || !!prev?.submitted
+        const reportId =
+          r.status === 'submitted'
+            ? r.id
+            : prev?.reportId ?? r.id
+        byMr.set(r.mr_id, { submitted, reportId })
       }
       return mrIds.map(id => ({ mrId: id, ...(byMr.get(id) ?? { submitted: false, reportId: null }) }))
     },
@@ -96,7 +145,10 @@ export default function ManagerDashboard() {
     setSubAreaName('');
     setSubAreaAreaId('');
     setAssignMrId('');
-    setAssignSubAreaId('');
+    setAssignPickAreaId('');
+    setAssignSelectedSubAreas(new Set());
+    setSelfPickAreaId('');
+    setSelfSelectedSubAreas(new Set());
     setNewMrName('');
     setNewMrCode('');
     setNewMrEmail('');
@@ -105,76 +157,112 @@ export default function ManagerDashboard() {
     setTransferToMrId('');
   };
 
+  const primaryActions: { key: QuickAction | 'nav'; label: string; icon: LucideIcon; nav?: string }[] = [
+    { key: 'create-mr', label: 'Create MR', icon: Plus },
+    { key: 'assign', label: 'Assign MR', icon: UserCheck },
+    { key: 'assign-self', label: 'Assign Self', icon: UserPlus },
+    { key: 'delete-mr', label: 'Delete MR', icon: UserMinus },
+  ]
+
+  const moreActions: { key: QuickAction; label: string; icon: LucideIcon }[] = [
+    { key: 'doctor', label: 'Add Doctor', icon: Stethoscope },
+    { key: 'area', label: 'New Territory', icon: MapPin },
+    { key: 'subarea', label: 'New Area', icon: MapPinned },
+  ]
+
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Manager Dashboard" />
 
-      <div className="px-4 py-4 space-y-5">
-        <div className="animate-fade-in-up">
-          <h2 className="text-xl font-bold text-foreground">Welcome, {user?.full_name?.split(' ')[0]}!</h2>
+      <div className="px-4 py-5 space-y-5 max-w-lg mx-auto">
+        {/* Welcome hero */}
+        <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
+          <div className="flex items-center gap-3.5">
+            {user?.profile_photo_url ? (
+              <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow" />
+            ) : (
+              <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15">
+                <span className="text-base font-extrabold text-primary">
+                  {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+              </div>
+            )}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-lg font-extrabold text-foreground tracking-tight truncate">
+                Hi, {user?.full_name?.split(' ')[0]}!
+              </h2>
+              <p className="text-xs text-muted-foreground font-medium mt-0.5">
+                {mrs.length} MR{mrs.length !== 1 ? 's' : ''} in your team
+              </p>
+            </div>
+          </div>
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 gap-3">
-          <StatCard icon={Users} value={mrs.length} label="Total MRs" />
-          <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" />
-          <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="Reports This Month" />
-          <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" />
+          <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
+          <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" color="emerald" />
+          <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="This Month" color="blue" />
+          <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" color="amber" />
         </div>
 
+        {/* Self Report CTA */}
+        <Button
+          onClick={() => navigate('/manager/report/new')}
+          className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
+        >
+          <FilePlus className="mr-2 h-5 w-5" />
+          Create Daily Report
+        </Button>
+
+        {/* Quick Actions — frequently used */}
+        <div className="space-y-3">
+          <p className="section-title">Quick Actions</p>
+          <div className="grid grid-cols-4 gap-2.5">
+            <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/expense')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Expense</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/holidays')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Holidays</span>
+            </button>
+            {primaryActions.map(ab => (
+              <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+                <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><ab.icon className="h-4 w-4 text-primary" /></div>
+                <span className="text-[10px] font-semibold text-foreground text-center leading-tight">{ab.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* More actions — rarely used */}
         <div className="flex gap-2">
-          {FILTERS.map(f => (
-            <button
-              key={f}
-              onClick={() => setActiveFilter(f)}
-              className={cn(
-                'rounded-full px-4 py-2 text-xs font-medium border transition-colors touch-target active:scale-95',
-                activeFilter === f
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-card text-foreground border-border'
-              )}
-            >
-              {f}
+          {moreActions.map(ab => (
+            <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex-1 flex items-center justify-center gap-1.5 glass-subtle rounded-xl py-2 active:scale-95 transition-all">
+              <ab.icon className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] font-medium text-muted-foreground">{ab.label}</span>
             </button>
           ))}
         </div>
 
+        {/* Today's MR Reports */}
         <div className="space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Quick Actions
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('doctor')}>
-              Add Doctor
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('area')}>
-              Add Area
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('subarea')}>
-              Add Sub-area
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('assign')}>
-              Assign Area to MR
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('create-mr')}>
-              Create MR
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg" onClick={() => setAction('delete-mr')}>
-              Delete MR
-            </Button>
-            <Button type="button" variant="outline" className="touch-target rounded-lg col-span-2" onClick={() => navigate('/manager/holidays')}>
-              Holidays
-            </Button>
+          <div className="flex items-center justify-between">
+            <p className="section-title">Today's MR Reports</p>
+            <span className="text-[10px] text-muted-foreground font-medium">
+              {todaysMrReports.filter(r => r.submitted).length}/{mrs.length} submitted
+            </span>
           </div>
-        </div>
-
-        <div className="space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Today Reports by MRs
-          </p>
           <div className="space-y-2">
             {mrs.map(mr => {
               const s = todaysMrReports.find(r => r.mrId === mr.id)
               const submitted = !!s?.submitted
+              const initials = mr.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
               return (
                 <button
                   key={mr.id}
@@ -185,15 +273,29 @@ export default function ManagerDashboard() {
                     window.location.href = `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`
                   }}
                   className={cn(
-                    'w-full text-left rounded-xl border p-3 shadow-sm active:scale-[0.99] transition',
-                    submitted ? 'bg-card border-emerald-600/40' : 'bg-card border-border opacity-80',
+                    'w-full text-left glass-card p-3.5 active:scale-[0.98] transition-all',
+                    submitted && 'ring-1 ring-emerald-500/20',
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-medium text-foreground truncate">{mr.full_name}</p>
-                    <span className={cn('text-xs font-semibold', submitted ? 'text-emerald-700' : 'text-muted-foreground')}>
-                      {submitted ? 'Submitted' : 'Pending'}
-                    </span>
+                  <div className="flex items-center gap-3">
+                    {mr.profile_photo_url ? (
+                      <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
+                        <span className="text-[10px] font-bold text-primary">{initials}</span>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
+                    </div>
+                    {submitted ? (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                        <CheckCircle2 className="h-4 w-4" /> Done
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-semibold text-muted-foreground/60 shrink-0">Pending</span>
+                    )}
                   </div>
                 </button>
               )
@@ -203,19 +305,20 @@ export default function ManagerDashboard() {
       </div>
 
       <Drawer open={action !== null} onOpenChange={v => { if (!v) closeDrawer(); }}>
-        <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[10px] border bg-background p-0 gap-0">
-          <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2">
-            <DrawerTitle className="text-base">
+        <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-2xl border bg-background p-0 gap-0">
+          <DrawerHeader className="shrink-0 border-b border-border/60 px-4 pb-3 pt-3">
+            <DrawerTitle className="text-[15px] font-bold tracking-tight">
               {action === 'doctor' && 'Add Doctor'}
-              {action === 'area' && 'Add Area'}
-              {action === 'subarea' && 'Add Sub-area'}
+              {action === 'area' && 'Add Territory'}
+              {action === 'subarea' && 'Add Area'}
               {action === 'assign' && 'Assign Area to MR'}
+              {action === 'assign-self' && 'Assign Area to Self'}
               {action === 'create-mr' && 'Create New MR'}
               {action === 'delete-mr' && 'Delete MR'}
             </DrawerTitle>
           </DrawerHeader>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4 space-y-4">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 space-y-4">
             {action === 'doctor' && (
               <>
                 <div className="space-y-2">
@@ -227,9 +330,9 @@ export default function ManagerDashboard() {
                   <Input value={doctorSpec} onChange={e => setDoctorSpec(e.target.value)} className="touch-target rounded-lg" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Sub-area</Label>
+                  <Label className="text-xs">Area</Label>
                   <select value={doctorSubAreaId} onChange={e => setDoctorSubAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose Sub-area</option>
+                    <option value="">Choose Area</option>
                     {allSubAreas.map(sa => (
                       <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
                     ))}
@@ -243,7 +346,7 @@ export default function ManagerDashboard() {
                     void addDoctor
                       .mutateAsync({ sub_area_id: doctorSubAreaId, full_name: doctorName, speciality: doctorSpec })
                       .then(() => {
-                        toast.success('Doctor added ✓')
+                        toast.success('Doctor added')
                         closeDrawer()
                       })
                       .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add doctor'))
@@ -257,7 +360,7 @@ export default function ManagerDashboard() {
             {action === 'area' && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-xs">Area Name</Label>
+                  <Label className="text-xs">Territory Name</Label>
                   <Input value={areaName} onChange={e => setAreaName(e.target.value)} className="touch-target rounded-lg" />
                 </div>
                 <Button
@@ -268,7 +371,7 @@ export default function ManagerDashboard() {
                     void addArea
                       .mutateAsync(areaName)
                       .then(() => {
-                        toast.success('Area added ✓')
+                        toast.success('Territory added')
                         closeDrawer()
                       })
                       .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add area'))
@@ -282,16 +385,16 @@ export default function ManagerDashboard() {
             {action === 'subarea' && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-xs">Area</Label>
+                  <Label className="text-xs">Territory</Label>
                   <select value={subAreaAreaId} onChange={e => setSubAreaAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose Area</option>
+                    <option value="">Choose Territory</option>
                     {areas.map(a => (
                       <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Sub-area Name</Label>
+                  <Label className="text-xs">Area Name</Label>
                   <Input value={subAreaName} onChange={e => setSubAreaName(e.target.value)} className="touch-target rounded-lg" />
                 </div>
                 <Button
@@ -302,10 +405,10 @@ export default function ManagerDashboard() {
                     void addSubArea
                       .mutateAsync({ areaId: subAreaAreaId, name: subAreaName })
                       .then(() => {
-                        toast.success('Sub-area added ✓')
+                        toast.success('Area added')
                         closeDrawer()
                       })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add sub-area'))
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add area'))
                   }
                 >
                   {addSubArea.isPending ? 'Saving…' : 'Save'}
@@ -325,29 +428,127 @@ export default function ManagerDashboard() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Sub-area</Label>
-                  <select value={assignSubAreaId} onChange={e => setAssignSubAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose Sub-area</option>
-                    {allSubAreas.map(sa => (
-                      <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
+                  <Label className="text-xs">Area</Label>
+                  <select
+                    value={assignPickAreaId}
+                    onChange={e => {
+                      setAssignPickAreaId(e.target.value)
+                      setAssignSelectedSubAreas(new Set())
+                    }}
+                    className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
+                  >
+                    <option value="">All Territories</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
                     ))}
                   </select>
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Areas (select one or more)</Label>
+                  <div className="max-h-52 overflow-y-auto space-y-2 rounded-lg border border-border p-2">
+                    {assignSubAreasFiltered.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-1">No areas in this territory.</p>
+                    ) : (
+                      assignSubAreasFiltered.map(sa => (
+                        <label key={sa.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={assignSelectedSubAreas.has(sa.id)}
+                            onChange={() => toggleAssignSubArea(sa.id)}
+                          />
+                          <span>{sa.areaName} — {sa.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
                 <Button
                   type="button"
-                  disabled={assignSubArea.isPending}
+                  disabled={assignSubAreasBatch.isPending}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() =>
-                    void assignSubArea
-                      .mutateAsync({ mrId: assignMrId, subAreaId: assignSubAreaId })
+                  onClick={() => {
+                    if (!assignMrId) {
+                      toast.error('Choose an MR')
+                      return
+                    }
+                    if (assignSelectedSubAreas.size === 0) {
+                      toast.error('Select at least one area')
+                      return
+                    }
+                    void assignSubAreasBatch
+                      .mutateAsync({ mrId: assignMrId, subAreaIds: [...assignSelectedSubAreas] })
                       .then(() => {
-                        toast.success('Area assigned to MR ✓')
+                        toast.success('Areas assigned to MR')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not assign areas'))
+                  }}
+                >
+                  {assignSubAreasBatch.isPending ? 'Saving…' : 'Save assignments'}
+                </Button>
+              </>
+            )}
+
+            {action === 'assign-self' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Area</Label>
+                  <select
+                    value={selfPickAreaId}
+                    onChange={e => {
+                      setSelfPickAreaId(e.target.value)
+                      setSelfSelectedSubAreas(new Set())
+                    }}
+                    className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
+                  >
+                    <option value="">All Territories</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>{a.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Areas (select one or more)</Label>
+                  <div className="max-h-52 overflow-y-auto space-y-2 rounded-lg border border-border p-2">
+                    {selfSubAreasFiltered.length === 0 ? (
+                      <p className="text-xs text-muted-foreground px-1">No areas in this territory.</p>
+                    ) : (
+                      selfSubAreasFiltered.map(sa => (
+                        <label key={sa.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={selfSelectedSubAreas.has(sa.id)}
+                            onChange={() => toggleSelfSubArea(sa.id)}
+                          />
+                          <span>{sa.areaName} — {sa.name}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  disabled={assignSubAreasBatch.isPending}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                  onClick={() => {
+                    if (!user?.id) {
+                      toast.error('Not signed in')
+                      return
+                    }
+                    if (selfSelectedSubAreas.size === 0) {
+                      toast.error('Select at least one area')
+                      return
+                    }
+                    void assignSubAreasBatch
+                      .mutateAsync({ mrId: user.id, subAreaIds: [...selfSelectedSubAreas] })
+                      .then(() => {
+                        toast.success('Areas assigned to self')
                         closeDrawer()
                       })
                       .catch(e => toast.error(e instanceof Error ? e.message : 'Could not assign area'))
-                  }
+                  }}
                 >
-                  {assignSubArea.isPending ? 'Saving…' : 'Save'}
+                  {assignSubAreasBatch.isPending ? 'Saving…' : 'Save assignments'}
                 </Button>
               </>
             )}
@@ -359,15 +560,11 @@ export default function ManagerDashboard() {
                   <Input value={newMrName} onChange={e => setNewMrName(e.target.value)} className="touch-target rounded-lg" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Employee Code</Label>
-                  <Input value={newMrCode} onChange={e => setNewMrCode(e.target.value)} placeholder="MKT-MR-00X" className="touch-target rounded-lg" />
-                </div>
-                <div className="space-y-2">
                   <Label className="text-xs">Email</Label>
                   <Input value={newMrEmail} onChange={e => setNewMrEmail(e.target.value)} type="email" className="touch-target rounded-lg" />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Assign Sub-areas</Label>
+                  <Label className="text-xs">Assign Areas</Label>
                   <div className="max-h-56 overflow-y-auto space-y-2 rounded-md border p-2">
                     {allSubAreas.map(sa => (
                       <label key={sa.id} className="flex items-center gap-2 text-sm">
@@ -393,14 +590,15 @@ export default function ManagerDashboard() {
                   disabled={createUser.isPending}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                   onClick={() => {
-                    if (!newMrName.trim() || !newMrCode.trim() || !newMrEmail.trim() || !user?.id) {
-                      toast.error('Name, code, and email are required')
+                    if (!newMrName.trim() || !newMrEmail.trim() || !user?.id) {
+                      toast.error('Name and email are required')
                       return
                     }
+                    const autoCode = newMrEmail.trim().split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')
                     void createUser
                       .mutateAsync({
                         fullName: newMrName.trim(),
-                        employeeCode: newMrCode.trim(),
+                        employeeCode: autoCode,
                         email: newMrEmail.trim(),
                         role: 'mr',
                         managerIds: [user.id],
@@ -465,8 +663,8 @@ export default function ManagerDashboard() {
         title="Delete this MR?"
         description={
           transferToMrId
-            ? `This MR has ${deleteMrSubAreas.length} assigned sub-areas. They will be transferred before deletion.`
-            : `This MR has ${deleteMrSubAreas.length} assigned sub-areas. They will be removed on deletion.`
+            ? `This MR has ${deleteMrSubAreas.length} assigned areas. They will be transferred before deletion.`
+            : `This MR has ${deleteMrSubAreas.length} assigned areas. They will be removed on deletion.`
         }
         onConfirm={() => {
           void deleteMr

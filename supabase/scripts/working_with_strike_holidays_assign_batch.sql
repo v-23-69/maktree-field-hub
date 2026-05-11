@@ -1,0 +1,4 @@
+-- Paste/run the full contents of:
+--   supabase/migrations/20260510120000_working_with_strike_holidays_assign_batch.sql
+-- Prerequisites:
+--   1) assign_sub_area_to_mr exists (assign_sub_area_to_mr_rpc.sql or migrations).

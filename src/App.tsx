@@ -3,6 +3,7 @@ import { HashRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
 
 import Login from "@/pages/auth/Login";
@@ -37,8 +38,10 @@ import InstallPrompt from "@/components/shared/InstallPrompt";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      /** Avoid refetching on every mount/focus during navigation (faster perceived load). */
-      staleTime: 30_000,
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
       retry: 1,
     },
   },
@@ -58,11 +61,12 @@ function RootRedirect() {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Sonner />
-      <AuthProvider>
-        <HashRouter>
+  <ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Sonner />
+        <AuthProvider>
+          <HashRouter>
           <InstallPrompt />
           <Routes>
             <Route path="/" element={<RootRedirect />} />
@@ -89,6 +93,9 @@ const App = () => (
             <Route path="/manager/analytics" element={<ProtectedRoute allowedRoles={['manager']}><ManagerAnalytics /></ProtectedRoute>} />
             <Route path="/manager/leaves" element={<ProtectedRoute allowedRoles={['manager']}><ManagerLeaves /></ProtectedRoute>} />
             <Route path="/manager/holidays" element={<ProtectedRoute allowedRoles={['manager']}><ManagerHolidays /></ProtectedRoute>} />
+            <Route path="/manager/report/new" element={<ProtectedRoute allowedRoles={['manager']}><NewReport /></ProtectedRoute>} />
+            <Route path="/manager/expense" element={<ProtectedRoute allowedRoles={['manager']}><MRExpense /></ProtectedRoute>} />
+            <Route path="/manager/tour-program" element={<ProtectedRoute allowedRoles={['manager']}><MRTourProgram /></ProtectedRoute>} />
 
             {/* Admin Routes */}
             <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
@@ -101,10 +108,11 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </HashRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+          </HashRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ThemeProvider>
 );
 
 export default App;

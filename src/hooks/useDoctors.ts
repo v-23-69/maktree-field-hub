@@ -2,6 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Doctor, Chemist } from '@/types/database.types'
 
+function isForbidden(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42501' || /forbidden/i.test(error.message ?? '')
+}
+
 export function useDoctorsBySubAreas(subAreaIds: string[]) {
   return useQuery({
     queryKey: ['doctors-by-sub-areas', subAreaIds],
@@ -15,7 +20,10 @@ export function useDoctorsBySubAreas(subAreaIds: string[]) {
           .eq('is_active', true)
           .order('sub_area_id', { ascending: true })
           .order('full_name', { ascending: true })
-        if (error) throw error
+        if (error) {
+          if (isForbidden(error)) return []
+          throw error
+        }
         return (data ?? []) as Doctor[]
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Failed to load doctors'
@@ -23,6 +31,7 @@ export function useDoctorsBySubAreas(subAreaIds: string[]) {
       }
     },
     enabled: subAreaIds.length > 0 && !!supabase,
+    retry: false,
   })
 }
 
@@ -41,7 +50,10 @@ export function useChemistsByDoctor(doctorId: string) {
           .from('chemist_doctor_map')
           .select('chemist_id, chemists(id, name, sub_area_id)')
           .eq('doctor_id', doctorId)
-        if (error) throw error
+        if (error) {
+          if (isForbidden(error)) return []
+          throw error
+        }
         const rows = (data ?? []) as ChemistMapRow[]
         return rows
           .map(r => r.chemists)
@@ -59,5 +71,6 @@ export function useChemistsByDoctor(doctorId: string) {
       }
     },
     enabled: !!doctorId && !!supabase,
+    retry: false,
   })
 }

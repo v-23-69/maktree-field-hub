@@ -25,12 +25,12 @@ export default function AdminAreas() {
   const handleAddArea = async () => {
     try {
       await addArea.mutateAsync(newAreaName);
-      toast.success('Area added successfully ✓');
+      toast.success('Territory added successfully');
       setNewAreaName('');
       setAreaDialogOpen(false);
       void refetch();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not add area');
+      toast.error(e instanceof Error ? e.message : 'Could not add territory');
     }
   };
 
@@ -38,12 +38,12 @@ export default function AdminAreas() {
     if (!selectedAreaId) return;
     try {
       await addSubArea.mutateAsync({ areaId: selectedAreaId, name: newSubAreaName });
-      toast.success('Sub-area added successfully ✓');
+      toast.success('Area added successfully');
       setNewSubAreaName('');
       setSubAreaDialogOpen(false);
       void refetch();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not add sub-area');
+      toast.error(e instanceof Error ? e.message : 'Could not add area');
     }
   };
 
@@ -54,15 +54,15 @@ export default function AdminAreas() {
           <Dialog open={areaDialogOpen} onOpenChange={setAreaDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="rounded-lg bg-primary text-primary-foreground hover:bg-primary/90">
-                <Plus className="h-4 w-4 mr-1" /> Add Area
+                <Plus className="h-4 w-4 mr-1" /> Add Territory
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-[340px] rounded-xl backdrop-blur-sm">
-              <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Add Territory</DialogTitle></DialogHeader>
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Area Name</Label>
-                  <Input value={newAreaName} onChange={e => setNewAreaName(e.target.value)} placeholder="Enter area name" className="rounded-lg" />
+                  <Label className="text-xs">Territory Name</Label>
+                  <Input value={newAreaName} onChange={e => setNewAreaName(e.target.value)} placeholder="Enter territory name" className="rounded-lg" />
                 </div>
                 <Button
                   type="button"
@@ -70,7 +70,7 @@ export default function AdminAreas() {
                   onClick={() => void handleAddArea()}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                 >
-                  {addArea.isPending ? 'Adding…' : 'Add Area'}
+                  {addArea.isPending ? 'Adding…' : 'Add Territory'}
                 </Button>
               </div>
             </DialogContent>
@@ -78,9 +78,9 @@ export default function AdminAreas() {
         </div>
 
         {isLoading && <LoadingSpinner />}
-        {isError && <EmptyState message="Could not load areas." />}
+        {isError && <EmptyState message="Could not load territories." />}
         {!isLoading && !isError && areas.length === 0 && (
-          <EmptyState message="No areas yet. Add an area to get started." />
+          <EmptyState message="No territories yet. Add a territory to get started." />
         )}
         {!isLoading && !isError && areas.length > 0 && (
           <div className="space-y-3 overflow-x-auto min-w-0">
@@ -95,10 +95,10 @@ export default function AdminAreas() {
                   <div className="flex items-center justify-between p-4">
                     <div>
                       <p className="font-medium text-foreground text-sm">{area.name}</p>
-                      <p className="text-xs text-muted-foreground">{subAreas.length} sub-areas</p>
+                      <p className="text-xs text-muted-foreground">{subAreas.length} areas</p>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <button type="button" className="p-1.5 text-muted-foreground" aria-label="Edit area (coming soon)">
+                      <button type="button" className="p-1.5 text-muted-foreground" aria-label="Edit territory (coming soon)">
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
@@ -122,7 +122,7 @@ export default function AdminAreas() {
                             <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
                             <span className="text-sm text-foreground">{sa.name}</span>
                           </div>
-                          <button type="button" className="p-1 text-muted-foreground" aria-label="Edit sub-area (coming soon)">
+                          <button type="button" className="p-1 text-muted-foreground" aria-label="Edit area (coming soon)">
                             <Edit className="h-3.5 w-3.5" />
                           </button>
                         </div>
@@ -138,11 +138,11 @@ export default function AdminAreas() {
 
       <Dialog open={subAreaDialogOpen} onOpenChange={setSubAreaDialogOpen}>
         <DialogContent className="max-w-[340px] rounded-xl backdrop-blur-sm">
-          <DialogHeader><DialogTitle>Add Sub-area</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Add Area</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <div className="space-y-1.5">
-              <Label className="text-xs">Sub-area Name</Label>
-              <Input value={newSubAreaName} onChange={e => setNewSubAreaName(e.target.value)} placeholder="Enter sub-area name" className="rounded-lg" />
+              <Label className="text-xs">Area Name</Label>
+              <Input value={newSubAreaName} onChange={e => setNewSubAreaName(e.target.value)} placeholder="Enter area name" className="rounded-lg" />
             </div>
             <Button
               type="button"
@@ -150,7 +150,7 @@ export default function AdminAreas() {
               onClick={() => void handleAddSubArea()}
               className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
             >
-              {addSubArea.isPending ? 'Adding…' : 'Add Sub-area'}
+              {addSubArea.isPending ? 'Adding…' : 'Add Area'}
             </Button>
           </div>
         </DialogContent>

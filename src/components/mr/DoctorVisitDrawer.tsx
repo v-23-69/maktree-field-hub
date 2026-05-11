@@ -95,7 +95,7 @@ export default function DoctorVisitDrawer({
       competitors,
       monthlySupport,
     });
-    toast.success('Visit saved ✓');
+    toast.success('Visit saved');
   };
 
   return (

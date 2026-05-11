@@ -53,7 +53,7 @@ export default function UnlockRequests() {
   const handleApprove = async (requestId: string) => {
     try {
       await resolve.mutateAsync({ requestId, action: 'approved' })
-      toast.success('Unlock request approved ✓')
+      toast.success('Unlock request approved')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Approve failed')
     } finally {
@@ -73,7 +73,7 @@ export default function UnlockRequests() {
         action: 'rejected',
         managerComment: rejectComment,
       })
-      toast.success('Unlock request rejected ✓')
+      toast.success('Unlock request rejected')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Reject failed')
     } finally {
@@ -179,7 +179,7 @@ export default function UnlockRequests() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Requests" />
 
       <div className="px-4 py-4 space-y-4">

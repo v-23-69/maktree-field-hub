@@ -121,14 +121,20 @@ export function useManagerAnalytics(
             .lte('report_date', toDate),
           supabase
             .from('v_area_performance')
-            .select('*'),
+            .select('*')
+            .in('mr_id', mrIds)
+            .gte('report_date', fromDate)
+            .lte('report_date', toDate),
           supabase
             .from('v_doctor_loyalty')
             .select('*')
             .in('mr_id', mrIds),
           supabase
             .from('v_competitor_intelligence')
-            .select('*'),
+            .select('*')
+            .in('mr_id', mrIds)
+            .gte('report_date', fromDate)
+            .lte('report_date', toDate),
         ])
 
         if (msRes.error) throw msRes.error
@@ -162,10 +168,13 @@ export function useManagerAnalytics(
 
         const visitRows = (visitRes.data ?? []) as VisitDetailRow[]
         const visitIds = new Set<string>()
+        const uniqueDoctorIds = new Set<string>()
         const mrVisitMap = new Map<string, number>()
         for (const row of visitRows) {
           const vid = str(row.visit_id)
+          const doctorId = str(row.doctor_id)
           if (vid) visitIds.add(vid)
+          if (doctorId) uniqueDoctorIds.add(doctorId)
           const mrName = str(row.mr_name) || str(row.mr_code) || str(row.mr_id)
           const mrKey = mrName || 'MR'
           mrVisitMap.set(mrKey, (mrVisitMap.get(mrKey) ?? 0) + 1)
@@ -176,7 +185,7 @@ export function useManagerAnalytics(
           .sort((a, b) => b.visits - a.visits)
 
         const totalVisits = visitRows.length
-        const uniqueDoctorVisits = visitIds.size || totalVisits
+        const uniqueDoctorVisits = uniqueDoctorIds.size || totalVisits
 
         const areaMap = new Map<string, number>()
         for (const raw of (areaRes.data ?? []) as Record<string, unknown>[]) {

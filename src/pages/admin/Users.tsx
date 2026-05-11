@@ -42,8 +42,6 @@ export default function AdminUsers() {
   const [fullName, setFullName] = useState('');
   const [employeeCode, setEmployeeCode] = useState('');
   const [email, setEmail] = useState('');
-  const [selectedManagers, setSelectedManagers] = useState<Set<string>>(new Set());
-  const [selectedSubAreas, setSelectedSubAreas] = useState<Set<string>>(new Set());
   const [editManagers, setEditManagers] = useState<Set<string>>(new Set());
   const [editSubAreas, setEditSubAreas] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState<'users' | 'complaints'>('users');
@@ -80,8 +78,6 @@ export default function AdminUsers() {
     setEmployeeCode('');
     setEmail('');
     setNewRole('mr');
-    setSelectedManagers(new Set());
-    setSelectedSubAreas(new Set());
   };
 
   const openEditMr = (u: User) => {
@@ -97,17 +93,18 @@ export default function AdminUsers() {
   }, [editUser, existingAssignments]);
 
   const handleCreate = async () => {
-    if (!fullName.trim() || !employeeCode.trim() || !email.trim()) {
-      toast.error('Fill in name, employee code, and email');
+    if (!fullName.trim() || !email.trim()) {
+      toast.error('Fill in name and email');
       return;
     }
+    const autoCode = email.trim().split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '');
     const payload: CreateUserPayload = {
       fullName: fullName.trim(),
-      employeeCode: employeeCode.trim(),
+      employeeCode: autoCode,
       email: email.trim(),
       role: newRole,
-      managerIds: newRole === 'mr' ? [...selectedManagers] : [],
-      subAreaIds: newRole === 'mr' ? [...selectedSubAreas] : [],
+      managerIds: [],
+      subAreaIds: [],
     };
     try {
       await createUser.mutateAsync(payload);
@@ -191,10 +188,6 @@ export default function AdminUsers() {
                   <Input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Enter full name" className="rounded-lg" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Employee Code</Label>
-                  <Input value={employeeCode} onChange={e => setEmployeeCode(e.target.value)} placeholder="MKT-MR-004" className="rounded-lg" />
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-xs">Role</Label>
                   <select
                     value={newRole}
@@ -215,56 +208,9 @@ export default function AdminUsers() {
                 </p>
 
                 {newRole === 'mr' && (
-                  <div className="space-y-2 pt-2 border-t border-border">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Managers</Label>
-                    <div className="space-y-2">
-                      {managers.map(m => (
-                        <label key={m.id} className="flex items-center gap-3 cursor-pointer">
-                          <Checkbox
-                            checked={selectedManagers.has(m.id)}
-                            onCheckedChange={checked => {
-                              setSelectedManagers(prev => {
-                                const next = new Set(prev);
-                                if (checked) next.add(m.id);
-                                else next.delete(m.id);
-                                return next;
-                              });
-                            }}
-                          />
-                          <span className="text-sm text-foreground">{m.full_name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {newRole === 'mr' && (
-                  <div className="space-y-3 pt-2 border-t border-border">
-                    <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assign Sub-areas</Label>
-                    {areasData.map(area => (
-                      <div key={area.id}>
-                        <p className="text-xs font-medium text-foreground mb-1.5">{area.name}</p>
-                        <div className="space-y-1.5 pl-1">
-                          {(area.sub_areas ?? []).map(sa => (
-                            <label key={sa.id} className="flex items-center gap-3 cursor-pointer">
-                              <Checkbox
-                                checked={selectedSubAreas.has(sa.id)}
-                                onCheckedChange={checked => {
-                                  setSelectedSubAreas(prev => {
-                                    const next = new Set(prev);
-                                    if (checked) next.add(sa.id);
-                                    else next.delete(sa.id);
-                                    return next;
-                                  });
-                                }}
-                              />
-                              <span className="text-xs text-foreground">{sa.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-[11px] text-muted-foreground pt-1 border-t border-border">
+                    Managers can assign territories and areas after the user is created.
+                  </p>
                 )}
 
                 <Button
@@ -304,7 +250,7 @@ export default function AdminUsers() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm truncate">{u.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{u.employee_code} · <span className="capitalize">{u.role}</span></p>
+                  <p className="text-xs text-muted-foreground">{u.email ?? '—'} · <span className="capitalize">{u.role}</span></p>
                   {u.role !== 'admin' && !u.is_blocked && (
                     <Input
                       className="mt-2 h-8 text-xs"
@@ -465,7 +411,7 @@ export default function AdminUsers() {
                 ))}
               </div>
               <div className="space-y-3">
-                <Label className="text-xs font-semibold text-muted-foreground uppercase">Sub-areas</Label>
+                <Label className="text-xs font-semibold text-muted-foreground uppercase">Areas</Label>
                 {areasData.map(area => (
                   <div key={area.id}>
                     <p className="text-xs font-medium mb-1">{area.name}</p>

@@ -29,6 +29,7 @@ export interface VisitFormEntry {
 export interface ReportFormData {
   date: string
   workingWithId: string
+  workingWithIds: string[]
   selectedSubAreaIds: string[]
   visits: Record<string, VisitFormEntry>
   tpAutoFilled?: boolean
@@ -44,6 +45,11 @@ function migrateDraft(raw: unknown): ReportFormData | null {
   return {
     date: o.date,
     workingWithId: typeof o.workingWithId === 'string' ? o.workingWithId : '',
+    workingWithIds: Array.isArray(o.workingWithIds)
+      ? (o.workingWithIds as string[])
+      : typeof o.workingWithId === 'string' && o.workingWithId
+        ? [o.workingWithId]
+        : [],
     selectedSubAreaIds: Array.isArray(o.selectedSubAreaIds)
       ? (o.selectedSubAreaIds as string[])
       : [],
@@ -97,6 +103,7 @@ export default function NewReport() {
     return draft || {
       date: todayInputDate(),
       workingWithId: '',
+      workingWithIds: [],
       selectedSubAreaIds: [],
       visits: {},
       tpAutoFilled: false,
@@ -160,7 +167,7 @@ export default function NewReport() {
         <div className="px-4 py-6">
           <LoadingSpinner />
         </div>
-        <BottomNav role="mr" />
+        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
       </div>
     )
   }
@@ -172,7 +179,7 @@ export default function NewReport() {
         <div className="px-4 py-6">
           <p className="text-sm text-destructive">Could not load report block status.</p>
         </div>
-        <BottomNav role="mr" />
+        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
       </div>
     )
   }
@@ -193,7 +200,7 @@ export default function NewReport() {
               </div>
             </div>
           </div>
-          <BottomNav role="mr" />
+          <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
         </div>
       )
     }
@@ -235,7 +242,7 @@ export default function NewReport() {
                   mrId,
                   reason: unlockReason,
                 })
-                toast.success('Unlock request sent ✓')
+                toast.success('Unlock request sent')
                 setUnlockReason('')
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Request failed')
@@ -246,33 +253,32 @@ export default function NewReport() {
             {requestUnlock.isPending ? 'Sending…' : 'Send Unlock Request'}
           </Button>
         </div>
-        <BottomNav role="mr" />
+        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="New Daily Report" showBack />
 
-      <div className="px-4 pt-3 pb-2">
-        <div className="flex items-center gap-0">
+      {/* Step indicator */}
+      <div className="px-4 pt-4 pb-2 max-w-lg mx-auto">
+        <div className="flex items-center gap-1">
           {STEPS.map((s, i) => {
             const isActive = i + 1 === step;
             const isCompleted = i + 1 < step;
             return (
-              <div key={s} className="flex-1 flex flex-col items-center">
+              <div key={s} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="w-full flex items-center">
                   <div className={cn(
-                    'h-1.5 w-full transition-colors duration-300',
-                    i === 0 && 'rounded-l-full',
-                    i === STEPS.length - 1 && 'rounded-r-full',
+                    'h-[5px] w-full rounded-full transition-colors duration-300',
                     isCompleted || isActive ? 'bg-primary' : 'bg-muted'
                   )} />
                 </div>
                 <span className={cn(
-                  'text-[10px] mt-1.5 font-medium transition-colors',
-                  isActive ? 'text-primary' : isCompleted ? 'text-primary/70' : 'text-muted-foreground'
+                  'text-[10px] font-semibold transition-colors tracking-wide',
+                  isActive ? 'text-primary' : isCompleted ? 'text-primary/60' : 'text-muted-foreground/50'
                 )}>
                   {s}
                 </span>
@@ -282,7 +288,7 @@ export default function NewReport() {
         </div>
       </div>
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 max-w-lg mx-auto">
         {step === 1 && <ReportStep1 data={formData} onChange={updateData} onNext={() => setStep(2)} />}
         {step === 2 && (
           <ReportStep2
@@ -309,7 +315,7 @@ export default function NewReport() {
         )}
       </div>
 
-      <BottomNav role="mr" />
+      <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
     </div>
   );
 }

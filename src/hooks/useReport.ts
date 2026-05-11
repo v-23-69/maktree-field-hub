@@ -332,6 +332,7 @@ export function useCreateReport() {
     mutationFn: async (p: {
       mrId: string
       managerId: string | null
+      workingWithIds?: string[]
       reportDate: string
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
@@ -341,6 +342,7 @@ export function useCreateReport() {
           .insert({
             mr_id: p.mrId,
             manager_id: p.managerId || null,
+            working_with_ids: p.workingWithIds ?? [],
             report_date: p.reportDate,
             status: 'draft',
           })

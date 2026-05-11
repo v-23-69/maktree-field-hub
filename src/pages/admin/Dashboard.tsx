@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@/hooks/useAuth';
 import AdminLayout from '@/components/admin/AdminLayout';
 import StatCard from '@/components/shared/StatCard';
 import { Users, Stethoscope, MapPin, UserPlus, Plus, FileText, Clock } from 'lucide-react';
@@ -10,6 +11,7 @@ import { formatDisplayDate } from '@/lib/dateUtils';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { data: stats } = useAdminDashboardStats();
   const { data: recentReports = [] } = useQuery({
     queryKey: ['admin-recent-reports'],
@@ -32,14 +34,17 @@ export default function AdminDashboard() {
   })
   const { data: pendingComplaints = 0 } = useQuery({
     queryKey: ['admin-pending-complaints-count'],
-    enabled: !!supabase,
+    enabled: !!supabase && user?.role === 'admin',
     queryFn: async (): Promise<number> => {
       if (!supabase) return 0
       const { count, error } = await supabase
         .from('block_complaints')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'pending')
-      if (error) throw error
+      if (error) {
+        if (error.code === '42501' || error.code === 'PGRST301') return 0
+        throw error
+      }
       return count ?? 0
     },
   })
@@ -58,7 +63,7 @@ export default function AdminDashboard() {
             <StatCard icon={Stethoscope} value={stats?.totalDoctors ?? 0} label="Total Doctors" />
           </button>
           <button onClick={() => navigate('/admin/areas')} className="text-left active:scale-[0.97] transition-transform">
-            <StatCard icon={MapPin} value={stats?.totalAreas ?? 0} label="Total Areas" />
+            <StatCard icon={MapPin} value={stats?.totalAreas ?? 0} label="Total Territories" />
           </button>
         </div>
 
@@ -68,7 +73,7 @@ export default function AdminDashboard() {
             {[
               { label: 'Add User', icon: UserPlus, to: '/admin/users' },
               { label: 'Add Doctor', icon: Plus, to: '/admin/doctors' },
-              { label: 'Add Area', icon: MapPin, to: '/admin/areas' },
+              { label: 'Add Territory', icon: MapPin, to: '/admin/areas' },
               { label: `Pending Complaints (${pendingComplaints})`, icon: FileText, to: '/admin/users' },
             ].map(action => (
               <Button

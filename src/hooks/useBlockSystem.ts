@@ -54,13 +54,17 @@ export function useBlockComplaints() {
   return useQuery({
     queryKey: ['block-complaints'],
     enabled: !!supabase,
+    retry: false,
     queryFn: async (): Promise<BlockComplaint[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('block_complaints')
         .select('*')
         .order('created_at', { ascending: false })
-      if (error) throw error
+      if (error) {
+        if (error.code === '42501' || error.code === 'PGRST301' || /forbidden/i.test(error.message ?? '')) return []
+        throw error
+      }
       return (data ?? []) as BlockComplaint[]
     },
   })

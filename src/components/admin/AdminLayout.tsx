@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert, LogOut } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/shared/BottomNav';
 import AppLogo from '@/components/shared/AppLogo';
@@ -10,7 +10,7 @@ const SIDEBAR_ITEMS = [
   { to: '/admin/dashboard', icon: Home, label: 'Dashboard' },
   { to: '/admin/users', icon: Users, label: 'Users' },
   { to: '/admin/doctors', icon: Stethoscope, label: 'Doctors' },
-  { to: '/admin/areas', icon: MapPin, label: 'Areas' },
+  { to: '/admin/areas', icon: MapPin, label: 'Territories' },
   { to: '/admin/mr-access', icon: Settings, label: 'MR Access' },
   { to: '/admin/targets', icon: Target, label: 'Targets' },
   { to: '/admin/holidays', icon: CalendarDays, label: 'Holidays' },
@@ -20,7 +20,15 @@ const SIDEBAR_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
-  const { logout } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const initials = user?.full_name
+    ?.split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() ?? '';
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,7 +36,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <aside className="hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-card">
         <div className="flex h-14 items-center gap-2 px-4 border-b border-border">
           <AppLogo className="h-8 w-auto" />
-          <span className="font-semibold text-sm text-foreground">Admin Panel</span>
+          <span className="font-bold text-sm text-foreground tracking-tight">MakTree Admin</span>
         </div>
         <nav className="flex-1 p-3 space-y-1">
           {SIDEBAR_ITEMS.map(item => {
@@ -65,7 +73,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex h-14 items-center justify-between px-4 border-b border-border">
               <div className="flex items-center gap-2">
                 <AppLogo className="h-8 w-auto" />
-                <span className="font-semibold text-sm text-foreground">Admin</span>
+                <span className="font-bold text-sm text-foreground tracking-tight">Admin</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5">
                 <X className="h-5 w-5 text-foreground" />
@@ -117,15 +125,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </div>
           </div>
           <button
-            onClick={async () => {
-              await logout();
-              window.location.hash = '#/login';
-            }}
-            className="touch-target rounded-lg p-2 text-muted-foreground hover:text-foreground"
-            aria-label="Logout"
-            title="Logout"
+            onClick={() => navigate('/profile')}
+            className="shrink-0 active:scale-95 transition-transform"
+            aria-label="Profile"
           >
-            <LogOut className="h-5 w-5" />
+            {user?.profile_photo_url ? (
+              <img src={user.profile_photo_url} alt={user.full_name} className="h-8 w-8 rounded-full object-cover ring-2 ring-primary/20" />
+            ) : (
+              <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center ring-2 ring-primary/20">
+                <span className="text-xs font-bold text-primary">{initials}</span>
+              </div>
+            )}
           </button>
         </header>
 

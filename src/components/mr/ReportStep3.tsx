@@ -26,7 +26,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
 
   const grouped = data.selectedSubAreaIds.map(saId => {
     const subAreaName =
-      doctors.find(d => d.sub_area_id === saId)?.sub_area?.name ?? 'Sub-area';
+      doctors.find(d => d.sub_area_id === saId)?.sub_area?.name ?? 'Area';
     const docs = doctors.filter(d => d.sub_area_id === saId);
     return { subAreaId: saId, subAreaName, docs };
   }).filter(g => g.docs.length > 0);
@@ -52,7 +52,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
   if (isError) {
     return (
       <div className="space-y-4 pb-20">
-        <EmptyState message="Could not load doctors for the selected sub-areas." />
+        <EmptyState message="Could not load doctors for the selected areas." />
         <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
       </div>
     );
@@ -66,7 +66,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
       </div>
 
       {grouped.length === 0 ? (
-        <EmptyState message="No doctors found in selected sub-areas." />
+        <EmptyState message="No doctors found in selected areas." />
       ) : (
         <div className="space-y-4">
           {grouped.map(({ subAreaId, subAreaName, docs }) => (

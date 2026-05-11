@@ -65,7 +65,7 @@ export default function AdminDoctors() {
 
   const handleAdd = async () => {
     if (!newSubAreaId || !newName.trim()) {
-      toast.error('Select sub-area and enter doctor name');
+      toast.error('Select area and enter doctor name');
       return;
     }
     try {
@@ -74,7 +74,7 @@ export default function AdminDoctors() {
         full_name: newName,
         speciality: newSpec,
       });
-      toast.success('Doctor added successfully ✓');
+      toast.success('Doctor added successfully');
       setDialogOpen(false);
       void refetch();
     } catch (e) {
@@ -117,7 +117,7 @@ export default function AdminDoctors() {
             onChange={e => { setAreaFilter(e.target.value); setSubAreaFilter(''); }}
             className="flex-1 h-10 rounded-lg border border-input bg-card px-3 text-sm"
           >
-            <option value="">All Areas</option>
+            <option value="">All Territories</option>
             {allAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
           </select>
           <select
@@ -125,7 +125,7 @@ export default function AdminDoctors() {
             onChange={e => setSubAreaFilter(e.target.value)}
             className="flex-1 h-10 rounded-lg border border-input bg-card px-3 text-sm"
           >
-            <option value="">All Sub-areas</option>
+            <option value="">All Areas</option>
             {filteredSubAreas.map(sa => <option key={sa.id} value={sa.id}>{sa.name}</option>)}
           </select>
         </div>
@@ -198,24 +198,24 @@ export default function AdminDoctors() {
               <Input value={newSpec} onChange={e => setNewSpec(e.target.value)} placeholder="General Physician" className="rounded-lg" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Area</Label>
+              <Label className="text-xs">Territory</Label>
               <select
                 value={newDocArea}
                 onChange={e => { setNewDocArea(e.target.value); setNewSubAreaId(''); }}
                 className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               >
-                <option value="">Select area</option>
+                <option value="">Select territory</option>
                 {allAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
               </select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">Sub-area</Label>
+              <Label className="text-xs">Area</Label>
               <select
                 value={newSubAreaId}
                 onChange={e => setNewSubAreaId(e.target.value)}
                 className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
               >
-                <option value="">Select sub-area</option>
+                <option value="">Select area</option>
                 {allAreas.find(a => a.id === newDocArea)?.sub_areas.map(sa => (
                   <option key={sa.id} value={sa.id}>{sa.name}</option>
                 ))}

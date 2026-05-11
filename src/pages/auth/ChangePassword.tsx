@@ -49,7 +49,7 @@ export default function ChangePassword() {
       ])) as { success: boolean; error?: string };
 
       if (result.success) {
-        toast.success('Password changed successfully ✓');
+        toast.success('Password changed successfully');
         if (user?.role === 'mr') navigate('/mr/dashboard');
         else if (user?.role === 'manager') navigate('/manager/dashboard');
         else navigate('/admin/dashboard');

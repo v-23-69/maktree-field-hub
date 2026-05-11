@@ -2,6 +2,19 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { User } from '@/types/database.types'
 
+/** Stable sort + one row per MR (duplicate mr_manager_map rows or RPC oddities). */
+function dedupeManagersMrs(rows: User[]): User[] {
+  const seen = new Set<string>()
+  const out: User[] = []
+  for (const r of rows) {
+    if (!r?.id || seen.has(r.id)) continue
+    seen.add(r.id)
+    out.push(r)
+  }
+  out.sort((a, b) => (a.full_name ?? '').localeCompare(b.full_name ?? '', undefined, { sensitivity: 'base' }))
+  return out
+}
+
 /** MRs assigned to the current manager via mr_manager_map. */
 export function useManagerMrs(managerId: string) {
   return useQuery({
@@ -12,7 +25,7 @@ export function useManagerMrs(managerId: string) {
         // Preferred path: security-definer RPC, robust against RLS joins.
         const rpcRes = await supabase.rpc('list_mrs_for_manager')
         if (!rpcRes.error) {
-          return (rpcRes.data ?? []) as User[]
+          return dedupeManagersMrs((rpcRes.data ?? []) as User[])
         }
 
         // Fallback path for environments where migration isn't applied yet.
@@ -30,7 +43,7 @@ export function useManagerMrs(managerId: string) {
             .eq('is_active', true)
             .order('full_name')
           if (fbErr) throw fbErr
-          return (fallbackMrs ?? []) as User[]
+          return dedupeManagersMrs((fallbackMrs ?? []) as User[])
         }
         const { data: users, error: uErr } = await supabase
           .from('users')
@@ -39,7 +52,7 @@ export function useManagerMrs(managerId: string) {
           .eq('is_active', true)
           .order('full_name')
         if (uErr) throw uErr
-        return (users ?? []) as User[]
+        return dedupeManagersMrs((users ?? []) as User[])
       } catch (e) {
         const message =
           e instanceof Error ? e.message : 'Failed to load medical representatives'

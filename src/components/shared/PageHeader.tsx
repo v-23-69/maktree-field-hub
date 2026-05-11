@@ -1,6 +1,5 @@
-import { ArrowLeft, LogOut } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { UserCircle2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 interface PageHeaderProps {
@@ -11,39 +10,68 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, showBack, rightAction }: PageHeaderProps) {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
+
+  const initials = user?.full_name
+    ?.split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() ?? '';
 
   return (
-    <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-border/80 bg-card px-3 sm:px-4 py-2.5 shadow-sm">
-      {showBack && (
-        <button onClick={() => navigate(-1)} className="touch-target flex items-center justify-center rounded-lg p-1.5 active:scale-95 transition-transform">
+    <header className="sticky top-0 z-30 glass flex items-center gap-3 px-4 h-14">
+      {showBack ? (
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-foreground/5 active:scale-90 transition-all"
+        >
           <ArrowLeft className="h-5 w-5 text-foreground" />
         </button>
+      ) : (
+        <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 bg-primary/5 flex items-center justify-center">
+          <img
+            src="/icons/icon-192-v2.png"
+            alt="MakTree"
+            className="h-[150%] w-[150%] object-cover"
+          />
+        </div>
       )}
-      <h1 className="text-base sm:text-lg font-semibold text-foreground flex-1 truncate">{title}</h1>
+
+      <div className="flex-1 min-w-0">
+        {!showBack ? (
+          <div>
+            <p className="text-[15px] font-extrabold text-foreground truncate leading-tight tracking-tight">
+              MakTree DCR Portal
+            </p>
+            <p className="text-[10px] text-muted-foreground/70 font-medium tracking-wide">
+              Field Reporting System
+            </p>
+          </div>
+        ) : (
+          <h1 className="text-[15px] font-bold text-foreground truncate tracking-tight">{title}</h1>
+        )}
+      </div>
+
       {rightAction ?? (
         user ? (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('/profile')}
-              className="touch-target rounded-full"
-              aria-label="Open profile"
-              title="Profile"
-            >
-              <UserCircle2 className="h-6 w-6 text-muted-foreground" />
-            </button>
-            <button
-              onClick={async () => {
-                await logout();
-                navigate('/login', { replace: true });
-              }}
-              className="touch-target rounded-full p-1"
-              aria-label="Logout"
-              title="Logout"
-            >
-              <LogOut className="h-5 w-5 text-muted-foreground" />
-            </button>
-          </div>
+          <button
+            onClick={() => navigate('/profile')}
+            className="shrink-0 active:scale-90 transition-transform"
+            aria-label="Open profile"
+          >
+            {user.profile_photo_url ? (
+              <img
+                src={user.profile_photo_url}
+                alt={user.full_name}
+                className="h-9 w-9 rounded-full object-cover ring-2 ring-foreground/[0.06]"
+              />
+            ) : (
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-foreground/[0.04]">
+                <span className="text-xs font-bold text-primary">{initials}</span>
+              </div>
+            )}
+          </button>
         ) : null
       )}
     </header>

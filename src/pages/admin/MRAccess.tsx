@@ -58,7 +58,7 @@ export default function AdminMRAccess() {
     if (!selectedMr) return;
     try {
       await saveAccess.mutateAsync({ mrId: selectedMr, subAreaIds: checkedSubAreas });
-      toast.success('MR area access saved ✓');
+      toast.success('MR area access saved');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Save failed');
     }
@@ -89,7 +89,7 @@ export default function AdminMRAccess() {
         {selectedMr && !loading && (
           <div className="space-y-4 animate-fade-in">
             <p className="text-xs font-medium text-primary">
-              {checkedSubAreas.length} of {allSubAreaIds.length} sub-areas selected
+              {checkedSubAreas.length} of {allSubAreaIds.length} areas selected
             </p>
 
             {areas.map(area => {

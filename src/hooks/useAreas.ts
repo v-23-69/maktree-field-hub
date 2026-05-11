@@ -35,6 +35,11 @@ function normalizeSubAreaEmbed(
   return Array.isArray(embed) ? embed[0] ?? null : embed
 }
 
+function isForbidden(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false
+  return error.code === '42501' || /forbidden/i.test(error.message ?? '')
+}
+
 /** MR: sub-areas from mr_sub_area_access, grouped by parent area (for chip UI). */
 export function useMrSubAreas(mrId: string) {
   return useQuery({
@@ -59,7 +64,10 @@ export function useMrSubAreas(mrId: string) {
             )
           `)
           .eq('mr_id', mrId)
-        if (error) throw error
+        if (error) {
+          if (isForbidden(error)) return []
+          throw error
+        }
         const rows = (data ?? []) as MrAccessRow[]
         const list: SubArea[] = []
         for (const r of rows) {
@@ -97,6 +105,7 @@ export function useMrSubAreas(mrId: string) {
       }
     },
     enabled: !!mrId && !!supabase,
+    retry: false,
   })
 }
 
@@ -163,7 +172,10 @@ export function useAllAreas() {
           .select('*, sub_areas(*)')
           .eq('is_active', true)
           .order('name')
-        if (error) throw error
+        if (error) {
+          if (isForbidden(error)) return []
+          throw error
+        }
         const areas = (data ?? []) as (Area & { sub_areas: SubArea[] })[]
         return areas.map(a => ({
           ...a,
@@ -175,5 +187,6 @@ export function useAllAreas() {
       }
     },
     enabled: !!supabase,
+    retry: false,
   })
 }

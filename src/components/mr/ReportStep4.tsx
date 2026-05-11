@@ -20,7 +20,7 @@ import {
   useCreateReport,
   useSubmitReport,
 } from '@/hooks/useReport';
-import { useManagers } from '@/hooks/useManagers';
+import { useManagers, useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
@@ -40,6 +40,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsBySubAreas(data.selectedSubAreaIds);
   const { data: subAreasFlat = [], isLoading: subAreasLoading } = useMrSubAreas(user?.id ?? '');
+  const { data: workingOpts = [] } = useWorkingWithReportOptions(user?.id);
   const { data: managers = [] } = useManagers();
 
   const createReport = useCreateReport();
@@ -74,10 +75,21 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
     id => subAreaNameById.get(id) ?? id,
   );
 
-  const manager = useMemo(
-    () => managers.find(m => m.id === data.workingWithId),
-    [managers, data.workingWithId],
-  );
+  const colleagues = useMemo(() => {
+    const ids = data.workingWithIds?.length
+      ? data.workingWithIds
+      : data.workingWithId
+        ? [data.workingWithId]
+        : []
+    if (ids.length === 0) return []
+    return ids
+      .map(id =>
+        workingOpts.find(o => o.id === id) ?? managers.find(m => m.id === id),
+      )
+      .filter(Boolean)
+  }, [workingOpts, managers, data.workingWithIds, data.workingWithId])
+
+  const colleague = colleagues[0] ?? null
 
   const visitedDoctorIds = Object.keys(data.visits);
   const visitedDoctors = visitedDoctorIds
@@ -119,7 +131,8 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
       } else {
         const row = await createReport.mutateAsync({
           mrId: user.id,
-          managerId: data.workingWithId || null,
+          managerId: data.workingWithIds?.[0] || data.workingWithId || null,
+          workingWithIds: data.workingWithIds ?? (data.workingWithId ? [data.workingWithId] : []),
           reportDate: data.date,
         });
         reportId = row.id;
@@ -149,10 +162,11 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
 
       await queryClient.invalidateQueries({ queryKey: ['mr-reports'] });
       await queryClient.invalidateQueries({ queryKey: ['daily-report'] });
+      await queryClient.invalidateQueries({ queryKey: ['mr-sub-areas', user.id] });
 
-      toast.success('Report submitted successfully! ✓');
+      toast.success('Report submitted successfully!');
       onClearDraft();
-      navigate('/mr/report/history');
+      navigate(user?.role === 'manager' ? '/manager/reports' : '/mr/report/history');
     } catch (e) {
       console.error(e);
       toast.error('Failed to submit report. Please try again.');
@@ -173,7 +187,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
       <h3 className="text-base font-semibold text-foreground">Review Your Report</h3>
 
       <div className="space-y-3">
-        <div className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-sm">
+        <div className="flex items-center gap-3 glass-card !rounded-xl p-3">
           <Calendar className="h-5 w-5 text-primary shrink-0" />
           <div>
             <p className="text-xs text-muted-foreground">Date</p>
@@ -181,17 +195,46 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
           </div>
         </div>
 
-        {manager && (
-          <div className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-sm">
-            <Users className="h-5 w-5 text-primary shrink-0" />
+        {colleagues.length > 0 && (
+          <div className="glass-card !rounded-xl p-3 space-y-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-primary shrink-0" />
+              <p className="text-xs text-muted-foreground">Working With</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {colleagues.map(c => {
+                const photo = 'profile_photo_url' in c! ? (c as any).profile_photo_url : null
+                const initials = (c!.full_name ?? '').split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase()
+                const kind = 'option_kind' in c! ? (c as any).option_kind : ''
+                return (
+                  <div key={c!.id} className="flex items-center gap-2 bg-muted/50 rounded-full pl-1 pr-3 py-1">
+                    {photo ? (
+                      <img src={photo} alt={c!.full_name} className="h-6 w-6 rounded-full object-cover" />
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-[9px] font-bold text-primary">{initials}</span>
+                      </div>
+                    )}
+                    <span className="text-xs font-medium text-foreground">{c!.full_name}</span>
+                    {kind === 'team_mr' && <span className="text-[10px] text-muted-foreground">(MR)</span>}
+                    {(kind === 'peer_manager' || kind === 'linked_manager') && <span className="text-[10px] text-muted-foreground">(Mgr)</span>}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {colleagues.length === 0 && (
+          <div className="flex items-center gap-3 glass-card !rounded-xl p-3">
+            <Users className="h-5 w-5 text-muted-foreground shrink-0" />
             <div>
               <p className="text-xs text-muted-foreground">Working With</p>
-              <p className="text-sm font-medium text-foreground">{manager.full_name}</p>
+              <p className="text-sm font-medium text-foreground">Solo visit</p>
             </div>
           </div>
         )}
 
-        <div className="flex items-start gap-3 rounded-xl bg-card p-3 shadow-sm">
+        <div className="flex items-start gap-3 glass-card !rounded-xl p-3">
           <MapPin className="h-5 w-5 text-primary shrink-0 mt-0.5" />
           <div>
             <p className="text-xs text-muted-foreground">Areas Covered</p>
@@ -214,7 +257,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
               return (
                 <Collapsible key={doc.id} open={isOpen} onOpenChange={() => toggleCard(doc.id)}>
                   <CollapsibleTrigger className="w-full">
-                    <div className="flex items-center gap-3 rounded-xl bg-card p-3 shadow-sm text-left w-full active:scale-[0.98] transition-transform">
+                    <div className="flex items-center gap-3 glass-card !rounded-xl p-3 text-left w-full active:scale-[0.98] transition-transform">
                       <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-foreground truncate">{doc.full_name}</p>

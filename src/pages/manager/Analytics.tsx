@@ -16,6 +16,8 @@ import { supabase } from '@/lib/supabase';
 
 export default function ManagerAnalytics() {
   const { user } = useAuth();
+  const [includeSelf, setIncludeSelf] = useState(true);
+  const [rangePreset, setRangePreset] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [run, setRun] = useState(false);
@@ -25,9 +27,14 @@ export default function ManagerAnalytics() {
 
   const { data: mrs = [], isLoading: mrsLoading } = useManagerMrs(user?.id ?? '');
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
+  const effectiveMrIds = useMemo(() => {
+    const ids = new Set(mrIds)
+    if (includeSelf && user?.id) ids.add(user.id)
+    return Array.from(ids)
+  }, [mrIds, includeSelf, user?.id])
 
   const { data: charts, isLoading: chartsLoading, isError } = useManagerAnalytics(
-    mrIds,
+    effectiveMrIds,
     fromDate,
     toDate,
     run,
@@ -49,30 +56,52 @@ export default function ManagerAnalytics() {
   const hasAnyChart =
     productData.length > 0 || mrData.length > 0 || competitorData.length > 0 || areaPerformance.length > 0 || doctorLoyalty.length > 0 || competitorIntel.length > 0;
 
+  const applyPreset = (preset: 'daily' | 'weekly' | 'monthly' | 'custom') => {
+    setRangePreset(preset)
+    if (preset === 'custom') return
+    const today = new Date()
+    const y = today.getFullYear()
+    const m = String(today.getMonth() + 1).padStart(2, '0')
+    const d = String(today.getDate()).padStart(2, '0')
+    const to = `${y}-${m}-${d}`
+    let from = to
+    if (preset === 'weekly') {
+      const start = new Date(today)
+      start.setDate(today.getDate() - 6)
+      from = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
+    }
+    if (preset === 'monthly') {
+      from = `${y}-${m}-01`
+    }
+    setFromDate(from)
+    setToDate(to)
+    setRun(false)
+  }
+
   const monthLabel = toDate ? toDate.slice(0, 7) : ''
   const { data: expenseSummaryRows = [] } = useQuery({
-    queryKey: ['manager-expense-summary-overview', mrIds, monthLabel, run],
-    enabled: run && !!monthLabel && mrIds.length > 0 && !!supabase,
+    queryKey: ['manager-expense-summary-overview', effectiveMrIds, monthLabel, run],
+    enabled: run && !!monthLabel && effectiveMrIds.length > 0 && !!supabase,
     queryFn: async () => {
       if (!supabase) return []
       const { data, error } = await supabase
         .from('v_expense_monthly_summary')
         .select('*')
-        .in('mr_id', mrIds)
+        .in('mr_id', effectiveMrIds)
         .eq('month', `${monthLabel}-01`)
       if (error) throw error
       return data ?? []
     },
   })
   const { data: expenseByCategoryRows = [] } = useQuery({
-    queryKey: ['manager-expense-category-overview', mrIds, monthLabel, run],
-    enabled: run && !!monthLabel && mrIds.length > 0 && !!supabase,
+    queryKey: ['manager-expense-category-overview', effectiveMrIds, monthLabel, run],
+    enabled: run && !!monthLabel && effectiveMrIds.length > 0 && !!supabase,
     queryFn: async () => {
       if (!supabase) return []
       const { data, error } = await supabase
         .from('v_expense_by_category')
         .select('*')
-        .in('mr_id', mrIds)
+        .in('mr_id', effectiveMrIds)
         .eq('month', `${monthLabel}-01`)
       if (error) throw error
       return data ?? []
@@ -115,7 +144,7 @@ export default function ManagerAnalytics() {
   )
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Analytics" />
 
       <div className="px-4 py-4 space-y-4">
@@ -130,9 +159,21 @@ export default function ManagerAnalytics() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-2">
+          <Button type="button" variant={rangePreset === 'daily' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('daily')}>Daily</Button>
+          <Button type="button" variant={rangePreset === 'weekly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('weekly')}>Weekly</Button>
+          <Button type="button" variant={rangePreset === 'monthly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('monthly')}>Monthly</Button>
+          <Button type="button" variant={rangePreset === 'custom' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('custom')}>Custom</Button>
+        </div>
+
+        <label className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-xs">
+          <input type="checkbox" checked={includeSelf} onChange={e => setIncludeSelf(e.target.checked)} />
+          Include self data with MR team
+        </label>
+
         <Button
           onClick={() => setRun(true)}
-          disabled={!fromDate || !toDate || mrIds.length === 0 || (run && chartsLoading)}
+          disabled={!fromDate || !toDate || effectiveMrIds.length === 0 || (run && chartsLoading)}
           className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
         >
           {run && chartsLoading ? 'Loading…' : 'Generate Report'}
@@ -140,13 +181,13 @@ export default function ManagerAnalytics() {
 
         <div className="grid grid-cols-4 gap-2">
           <Button type="button" variant={activeTab === 'overview' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('overview')}>Overview</Button>
-          <Button type="button" variant={activeTab === 'area' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('area')}>Area Performance</Button>
+          <Button type="button" variant={activeTab === 'area' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('area')}>Territory Performance</Button>
           <Button type="button" variant={activeTab === 'loyalty' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('loyalty')}>Doctor Loyalty</Button>
           <Button type="button" variant={activeTab === 'intel' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('intel')}>Competitor Intel</Button>
         </div>
 
         {mrsLoading && <LoadingSpinner />}
-        {!mrsLoading && mrIds.length === 0 && (
+        {!mrsLoading && effectiveMrIds.length === 0 && (
           <EmptyState message="No medical representatives are assigned to you yet." />
         )}
 
@@ -156,7 +197,7 @@ export default function ManagerAnalytics() {
             Could not load analytics. Ensure database views exist (v_monthly_support_summary, v_competitor_summary, v_visit_detail).
           </p>
         )}
-        {run && !chartsLoading && !isError && !hasAnyChart && mrIds.length > 0 && (
+        {run && !chartsLoading && !isError && !hasAnyChart && effectiveMrIds.length > 0 && (
           <EmptyState message="No data for selected period" />
         )}
 
@@ -257,10 +298,10 @@ export default function ManagerAnalytics() {
         {run && !chartsLoading && !isError && activeTab === 'area' && (
           <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Area Ranking by Quantity
+              Territory Ranking by Quantity
             </p>
             {areaPerformance.length === 0 ? (
-              <EmptyState message="No area performance data for selected period" />
+              <EmptyState message="No territory performance data for selected period" />
             ) : (
               <div className="min-w-[340px] h-64 overflow-x-auto">
                 <ResponsiveContainer width="100%" height="100%">
@@ -299,7 +340,7 @@ export default function ManagerAnalytics() {
                 onChange={e => setLoyaltyArea(e.target.value)}
                 className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
               >
-                <option value="">All Areas</option>
+                <option value="">All Territories</option>
                 {loyaltyAreas.map(a => (
                   <option key={a} value={a}>{a}</option>
                 ))}
@@ -314,7 +355,7 @@ export default function ManagerAnalytics() {
                   <div key={`${row.doctor_name}-${row.product_name}-${idx}`} className="rounded-lg border border-border bg-background p-3">
                     <p className="text-sm font-medium text-foreground">{row.doctor_name}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {row.product_name} | {row.area || 'Area'}
+                      {row.product_name} | {row.area || 'Territory'}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Months written: {row.months_written} | Total qty: {row.total_qty}

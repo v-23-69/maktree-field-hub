@@ -100,6 +100,7 @@ export interface DailyReport {
   id: string
   mr_id: string
   manager_id: string | null
+  working_with_ids: string[]
   report_date: string
   status: ReportStatus
   submitted_at: string | null

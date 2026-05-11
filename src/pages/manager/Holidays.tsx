@@ -44,7 +44,7 @@ export default function ManagerHolidays({ embedded = false, useAdminScope = fals
   const [selectedMrs, setSelectedMrs] = useState<string[]>([])
 
   return (
-    <div className={embedded ? 'space-y-4' : 'min-h-screen bg-background pb-20'}>
+    <div className={embedded ? 'space-y-4' : 'min-h-screen bg-background pb-24'}>
       {!embedded && <PageHeader title="Holidays" />}
       <div className="p-4 space-y-4">
         <div className="rounded-xl border p-3 space-y-2">

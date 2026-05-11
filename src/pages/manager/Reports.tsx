@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerMrReportDates, useManagerReportByMrAndDate } from '@/hooks/useReport';
 import { useManagerReportIssues, useUpdateReportIssue } from '@/hooks/useReportIssues';
@@ -24,12 +25,27 @@ import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
 import { useManagerExpenses, useDownloadExpenseExcel } from '@/hooks/useManagerExpense';
 
+function toDateInput(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+type SummaryRow = {
+  id: string;
+  mr_id: string;
+  report_date: string;
+  status: string;
+};
+
 export default function ManagerReports() {
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [selectedMr, setSelectedMr] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [showReport, setShowReport] = useState(false);
+  const [includeSelf, setIncludeSelf] = useState(true);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [activeTab, setActiveTab] = useState<'reports' | 'issues' | 'expenses'>('reports');
   const [filterSpeciality, setFilterSpeciality] = useState('');
@@ -39,8 +55,29 @@ export default function ManagerReports() {
   const [filterMrId, setFilterMrId] = useState('');
   const [filterFromDate, setFilterFromDate] = useState('');
   const [filterToDate, setFilterToDate] = useState('');
+  const today = useMemo(() => toDateInput(new Date()), []);
+  const weekStart = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay();
+    const diff = (day + 6) % 7;
+    const start = new Date(now);
+    start.setDate(now.getDate() - diff);
+    return toDateInput(start);
+  }, []);
+  const monthStart = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  }, []);
 
   const { data: mrs = [], isLoading: mrsLoading, isError: mrsError } = useManagerMrs(user?.id ?? '');
+  const reportUsers = useMemo(() => {
+    const base = [...mrs]
+    if (includeSelf && user) {
+      const exists = base.some(u => u.id === user.id)
+      if (!exists) base.unshift({ ...user } as any)
+    }
+    return base
+  }, [mrs, includeSelf, user])
   const { data: allAreas = [] } = useAllAreas();
   const { data: availableDates = [] } = useManagerMrReportDates(selectedMr);
   const { data: report, isLoading: reportLoading, isError: reportError } = useManagerReportByMrAndDate(
@@ -54,6 +91,26 @@ export default function ManagerReports() {
   const { data: expenseRows = [] } = useManagerExpenses(user?.id ?? '', currentMonth)
   const downloadExpenseExcel = useDownloadExpenseExcel()
   const updateIssue = useUpdateReportIssue();
+  const selectedMrIds = useMemo(() => {
+    const ids = reportUsers.map(u => u.id);
+    if (selectedMr) return ids.includes(selectedMr) ? [selectedMr] : [];
+    return ids;
+  }, [reportUsers, selectedMr]);
+
+  const { data: summaryRows = [] } = useQuery<SummaryRow[]>({
+    queryKey: ['manager-report-summary', selectedMrIds, includeSelf, user?.id],
+    enabled: !!supabase && selectedMrIds.length > 0,
+    queryFn: async () => {
+      if (!supabase) return [];
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select('id, mr_id, report_date, status')
+        .in('mr_id', selectedMrIds)
+        .eq('status', 'submitted');
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const [managerNotesByIssueId, setManagerNotesByIssueId] = useState<Record<string, string>>({});
 
@@ -91,7 +148,7 @@ export default function ManagerReports() {
     setShowReport(false)
   }, [selectedMr, availableDates, selectedDate])
 
-  const mrUser = useMemo(() => mrs.find(u => u.id === selectedMr), [mrs, selectedMr]);
+  const mrUser = useMemo(() => reportUsers.find(u => u.id === selectedMr), [reportUsers, selectedMr]);
 
   const visits: ReportVisit[] = report?.visits ?? [];
   const sortedVisits = useMemo(
@@ -176,6 +233,39 @@ export default function ManagerReports() {
     areaNameBySubAreaId,
   ])
 
+  const summaryStats = useMemo(() => {
+    const isInRange = (date: string, from: string, to: string) => date >= from && date <= to;
+    const teamDaily = summaryRows.filter(r => r.report_date === today).length;
+    const teamWeekly = summaryRows.filter(r => isInRange(r.report_date, weekStart, today)).length;
+    const teamMonthly = summaryRows.filter(r => isInRange(r.report_date, monthStart, today)).length;
+
+    const selfDaily = summaryRows.filter(r => r.mr_id === user?.id && r.report_date === today).length;
+    const selfWeekly = summaryRows.filter(r => r.mr_id === user?.id && isInRange(r.report_date, weekStart, today)).length;
+    const selfMonthly = summaryRows.filter(r => r.mr_id === user?.id && isInRange(r.report_date, monthStart, today)).length;
+
+    const selectedDaily = selectedMr
+      ? summaryRows.filter(r => r.mr_id === selectedMr && r.report_date === today).length
+      : teamDaily;
+    const selectedWeekly = selectedMr
+      ? summaryRows.filter(r => r.mr_id === selectedMr && isInRange(r.report_date, weekStart, today)).length
+      : teamWeekly;
+    const selectedMonthly = selectedMr
+      ? summaryRows.filter(r => r.mr_id === selectedMr && isInRange(r.report_date, monthStart, today)).length
+      : teamMonthly;
+
+    return {
+      teamDaily,
+      teamWeekly,
+      teamMonthly,
+      selfDaily,
+      selfWeekly,
+      selfMonthly,
+      selectedDaily,
+      selectedWeekly,
+      selectedMonthly,
+    };
+  }, [summaryRows, today, weekStart, monthStart, user?.id, selectedMr]);
+
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleViewReport = () => {
@@ -191,8 +281,8 @@ export default function ManagerReports() {
     const rows = (report.visits ?? []).map(visit => ({
       'Doctor Name': visit.doctor?.full_name ?? '',
       Speciality: visit.doctor?.speciality ?? '',
-      'Sub Area': visit.doctor?.sub_area?.name ?? '',
-      Area: (visit.doctor?.sub_area as any)?.area?.name ?? '',
+      Area: visit.doctor?.sub_area?.name ?? '',
+      Territory: (visit.doctor?.sub_area as any)?.area?.name ?? '',
       Chemist: visit.chemist?.name ?? '',
       'Products Promoted': (visit.promoted_products ?? [])
         .map(p => p.product?.name)
@@ -244,8 +334,8 @@ export default function ManagerReports() {
         Date: r.report_date ?? '',
         MR: r.mr_name ?? '',
         'Doctor Name': r.doctor_name ?? '',
-        Area: r.area ?? '',
-        'Sub Area': r.sub_area ?? '',
+        Territory: r.area ?? '',
+        Area: r.sub_area ?? '',
         'Doctor Id': r.doctor_id ?? '',
         'Visit Id': r.visit_id ?? '',
       }))
@@ -262,14 +352,14 @@ export default function ManagerReports() {
         wb,
         `MR_Visits_${filterFromDate}_to_${filterToDate}.xlsx`,
       )
-      toast.success('Excel downloaded ✓')
+      toast.success('Excel downloaded')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Excel download failed')
     }
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="MR Reports" />
 
       <div className="px-4 py-4 space-y-4">
@@ -310,6 +400,28 @@ export default function ManagerReports() {
 
         {activeTab === 'reports' && (
         <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          <div className="rounded-xl border bg-card p-3 text-center">
+            <p className="text-[11px] text-muted-foreground uppercase">Self</p>
+            <p className="mt-1 text-xs text-foreground">
+              D {summaryStats.selfDaily} | W {summaryStats.selfWeekly} | M {summaryStats.selfMonthly}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card p-3 text-center">
+            <p className="text-[11px] text-muted-foreground uppercase">
+              {selectedMr ? 'Selected MR' : 'Selection'}
+            </p>
+            <p className="mt-1 text-xs text-foreground">
+              D {summaryStats.selectedDaily} | W {summaryStats.selectedWeekly} | M {summaryStats.selectedMonthly}
+            </p>
+          </div>
+          <div className="rounded-xl border bg-card p-3 text-center">
+            <p className="text-[11px] text-muted-foreground uppercase">Team</p>
+            <p className="mt-1 text-xs text-foreground">
+              D {summaryStats.teamDaily} | W {summaryStats.teamWeekly} | M {summaryStats.teamMonthly}
+            </p>
+          </div>
+        </div>
         <div className="space-y-3 rounded-xl bg-card p-4 shadow-sm animate-fade-in">
           <div className="space-y-2">
             <Label className="text-xs">Select MR</Label>
@@ -322,7 +434,7 @@ export default function ManagerReports() {
                 className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
               >
                 <option value="">Choose MR</option>
-                {mrs.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.employee_code})</option>)}
+                {reportUsers.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.employee_code})</option>)}
               </select>
             )}
             {mrsError && (
@@ -332,6 +444,11 @@ export default function ManagerReports() {
               <p className="text-xs text-muted-foreground">No MRs assigned to you yet.</p>
             )}
           </div>
+
+          <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs">
+            <input type="checkbox" checked={includeSelf} onChange={e => setIncludeSelf(e.target.checked)} />
+            Include self in report selection
+          </label>
 
           <div className="space-y-2">
             <Label className="text-xs">Select Date</Label>
@@ -387,7 +504,7 @@ export default function ManagerReports() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Area</Label>
+              <Label className="text-xs">Territory</Label>
               <select
                 value={filterAreaId}
                 onChange={e => {
@@ -404,7 +521,7 @@ export default function ManagerReports() {
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs">Sub-area</Label>
+              <Label className="text-xs">Area</Label>
               <select
                 value={filterSubAreaId}
                 onChange={e => setFilterSubAreaId(e.target.value)}
@@ -428,7 +545,7 @@ export default function ManagerReports() {
                 className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
               >
                 <option value="">All</option>
-                {mrs.map(m => (
+                {reportUsers.map(m => (
                   <option key={m.id} value={m.id}>{m.full_name}</option>
                 ))}
               </select>
@@ -725,7 +842,7 @@ export default function ManagerReports() {
                                 status: 'reviewed',
                                 managerNote: noteValue,
                               })
-                              .then(() => toast.success('Marked as reviewed ✓'))
+                              .then(() => toast.success('Marked as reviewed'))
                           }
                         >
                           Mark Reviewed
@@ -743,7 +860,7 @@ export default function ManagerReports() {
                                 status: 'resolved',
                                 managerNote: noteValue,
                               })
-                              .then(() => toast.success('Issue resolved ✓'))
+                              .then(() => toast.success('Issue resolved'))
                           }
                         >
                           Resolve

@@ -45,7 +45,7 @@ export default function ReportDetail() {
 
   if (!id) {
     return (
-      <div className="min-h-screen bg-background pb-20">
+      <div className="min-h-screen bg-background pb-24">
         <PageHeader title="Report" showBack />
         <EmptyState message="Invalid report." />
         <BottomNav role="mr" />
@@ -54,7 +54,7 @@ export default function ReportDetail() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Daily Report" showBack />
 
       <div className="px-4 py-4 space-y-4">
@@ -263,7 +263,7 @@ export default function ReportDetail() {
                     })
                   if (insErr) throw insErr
 
-                  toast.success('Issue submitted ✓')
+                  toast.success('Issue submitted')
                   setIssueDrawerOpen(false)
                   setIssueText('')
                 } catch (e) {

@@ -69,7 +69,7 @@ export default function AdminTargets() {
         end_date: endDate,
         set_by: adminId,
       })
-      toast.success(editingId ? 'Target updated ✓' : 'Target created ✓')
+      toast.success(editingId ? 'Target updated' : 'Target created')
       resetForm()
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not save target')
@@ -138,17 +138,17 @@ export default function AdminTargets() {
           </div>
 
           <div className="space-y-2">
-            <Label className="text-xs">Select Sub-area (Optional)</Label>
+            <Label className="text-xs">Select Area (Optional)</Label>
             <select
               value={subAreaId}
               onChange={e => setSubAreaId(e.target.value)}
               className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
               disabled={!mrId}
             >
-              <option value="">All assigned sub-areas</option>
+              <option value="">All assigned areas</option>
               {mrSubAreas.map(sa => (
                 <option key={sa.id} value={sa.id}>
-                  {(sa.area?.name ?? 'Area')} - {sa.name}
+                  {(sa.area?.name ?? 'Territory')} - {sa.name}
                 </option>
               ))}
             </select>
@@ -235,7 +235,7 @@ export default function AdminTargets() {
                       onClick={() =>
                         void deleteTarget
                           .mutateAsync(t.id)
-                          .then(() => toast.success('Target deleted ✓'))
+                          .then(() => toast.success('Target deleted'))
                           .catch(e => toast.error(e instanceof Error ? e.message : 'Delete failed'))
                       }
                     >

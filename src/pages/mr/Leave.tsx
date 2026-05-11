@@ -20,7 +20,7 @@ export default function MRLeave() {
   const [reason, setReason] = useState('')
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Leave" showBack />
       <div className="p-4 space-y-4">
         <div className="rounded-xl border p-3 space-y-2">

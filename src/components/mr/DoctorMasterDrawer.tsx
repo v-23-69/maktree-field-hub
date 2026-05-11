@@ -88,7 +88,7 @@ export default function DoctorMasterDrawer({
           visit_frequency: visitFrequency ? (visitFrequency as any) : null,
           speciality,
         })
-        toast.success('Doctor details saved ✓')
+        toast.success('Doctor details saved')
         onSaved()
         onClose()
         return
@@ -112,7 +112,7 @@ export default function DoctorMasterDrawer({
         marriage_anniversary: marriageAnniversary,
         visit_frequency: visitFrequency ? (visitFrequency as any) : null,
       })
-      toast.success('New doctor added ✓')
+      toast.success('New doctor added')
       onSaved()
       onClose()
     } catch (e) {
@@ -147,7 +147,7 @@ export default function DoctorMasterDrawer({
                 )}
               </>
             ) : (
-              <span>Sub-area: {subAreaId}</span>
+              <span>Area: {subAreaId}</span>
             )}
           </div>
         </DrawerHeader>

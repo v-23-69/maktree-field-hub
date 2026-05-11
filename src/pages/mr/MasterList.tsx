@@ -181,7 +181,7 @@ export default function MasterList() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Master List" />
 
       <div className="px-4 py-4 space-y-4">
@@ -249,7 +249,7 @@ export default function MasterList() {
 
                     <div className="mt-3 space-y-2">
                       {docs.length === 0 ? (
-                        <EmptyState message="No doctors in this sub-area yet." />
+                        <EmptyState message="No doctors in this area yet." />
                       ) : (
                         docs.map(doc => {
                           const completeDoc = !!doc.master_list_complete

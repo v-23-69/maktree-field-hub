@@ -5,6 +5,7 @@ import { useMrSubAreasGrouped } from '@/hooks/useAreas';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import EmptyState from '@/components/shared/EmptyState';
 import type { ReportFormData } from '@/pages/mr/NewReport';
+import { Check } from 'lucide-react';
 
 interface Props {
   data: ReportFormData;
@@ -26,15 +27,13 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
 
   const canProceed = data.selectedSubAreaIds.length > 0;
 
-  if (isLoading) {
-    return <LoadingSpinner />;
-  }
+  if (isLoading) return <LoadingSpinner />;
 
   if (isError) {
     return (
       <div className="space-y-4">
         <EmptyState message="Could not load your assigned areas. Try again later." />
-        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
+        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-2xl">Back</Button>
       </div>
     );
   }
@@ -42,26 +41,33 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
   if (grouped.length === 0) {
     return (
       <div className="space-y-4">
-        <EmptyState message="No sub-areas assigned to your account. Contact your administrator." />
-        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
+        <EmptyState
+          message={
+            user?.role === 'manager'
+              ? 'No territory/area assigned to your account. Assign an area to self from Manager Dashboard.'
+              : 'No territory/area assigned to your account. Contact your manager.'
+          }
+        />
+        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-2xl">Back</Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden">
+    <div className="space-y-5 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden">
       {data.tpAutoFilled && (
-        <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
-          <p className="text-xs text-primary font-medium">
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
+          <p className="text-xs text-primary font-semibold">
             Auto-filled from your tour program for this date
           </p>
         </div>
       )}
-      <p className="text-sm font-medium text-foreground">Select the sub-areas you worked in today</p>
+
+      <p className="text-sm font-semibold text-foreground">Select the areas you worked in today</p>
 
       {grouped.map(({ area, sub_areas }) => (
         <div key={area.id} className="animate-fade-in min-w-0">
-          <p className="text-sm font-semibold text-foreground mb-2.5 break-words">{area.name}</p>
+          <p className="section-title mb-2.5">{area.name}</p>
           <div className="flex flex-wrap gap-2 max-w-full">
             {sub_areas.map(sa => {
               const selected = data.selectedSubAreaIds.includes(sa.id);
@@ -71,12 +77,13 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
                   type="button"
                   onClick={() => toggleSubArea(sa.id)}
                   className={cn(
-                    'shrink-0 rounded-full px-3 py-1.5 text-xs font-medium border transition-all duration-150 touch-target active:scale-95',
+                    'inline-flex items-center gap-1.5 shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold border-2 transition-all duration-150 active:scale-95',
                     selected
-                      ? 'bg-primary text-primary-foreground border-primary'
-                      : 'bg-card text-primary border-primary/40 hover:border-primary'
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20'
+                      : 'bg-card text-foreground border-border/60 hover:border-primary/40'
                   )}
                 >
+                  {selected && <Check className="h-3 w-3" />}
                   {sa.name}
                 </button>
               );
@@ -85,10 +92,16 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
         </div>
       ))}
 
-      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-sm border-t border-border">
+      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-md border-t border-border/40">
         <div className="flex gap-3 max-w-lg mx-auto">
-          <Button variant="outline" onClick={onBack} className="flex-1 touch-target rounded-lg">Back</Button>
-          <Button onClick={onNext} disabled={!canProceed} className="flex-1 touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold">Next</Button>
+          <Button variant="outline" onClick={onBack} className="flex-1 touch-target rounded-2xl font-semibold">Back</Button>
+          <Button
+            onClick={onNext}
+            disabled={!canProceed}
+            className="flex-1 touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold shadow-lg shadow-primary/20"
+          >
+            Next
+          </Button>
         </div>
       </div>
     </div>
