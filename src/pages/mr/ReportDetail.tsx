@@ -178,15 +178,32 @@ export default function ReportDetail() {
                                       <tr className="bg-muted/50">
                                         <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Product</th>
                                         <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
+                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">PTR</th>
+                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Rupee-wise</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {monthly.map((row, i) => (
-                                        <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                                          <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
-                                          <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
-                                        </tr>
-                                      ))}
+                                      {monthly.map((row, i) => {
+                                        const ptr = row.product?.ptr ?? 0;
+                                        const rupeeWise = ptr * (row.quantity || 0);
+                                        return (
+                                          <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                                            <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
+                                            <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
+                                            <td className="px-3 py-1.5 text-right text-muted-foreground">{ptr > 0 ? `Rs ${ptr}` : '—'}</td>
+                                            <td className="px-3 py-1.5 text-right font-semibold text-primary">{rupeeWise > 0 ? `Rs ${rupeeWise.toLocaleString('en-IN')}` : '—'}</td>
+                                          </tr>
+                                        );
+                                      })}
+                                      {(() => {
+                                        const total = monthly.reduce((sum, row) => sum + ((row.product?.ptr ?? 0) * (row.quantity || 0)), 0);
+                                        return total > 0 ? (
+                                          <tr className="border-t border-border bg-primary/5">
+                                            <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]">Total Rupee-wise</td>
+                                            <td className="px-3 py-1.5 text-right font-bold text-primary">Rs {total.toLocaleString('en-IN')}</td>
+                                          </tr>
+                                        ) : null;
+                                      })()}
                                     </tbody>
                                   </table>
                                 </div>

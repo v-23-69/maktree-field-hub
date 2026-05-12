@@ -7,7 +7,7 @@ import { Plus, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Doctor, Product } from '@/types/database.types';
 import type { VisitFormEntry } from '@/pages/mr/NewReport';
-import { useChemistsByDoctor } from '@/hooks/useDoctors';
+import { useChemistsByDoctor, useChemistsBySubArea } from '@/hooks/useDoctors';
 import { toast } from 'sonner';
 
 const defaultCompetitors = (): { brandName: string; quantity: number }[] => [
@@ -44,6 +44,7 @@ export default function DoctorVisitDrawer({
   const [monthlySupport, setMonthlySupport] = useState(defaultMonthly);
 
   const { data: linkedChemists = [] } = useChemistsByDoctor(doctorId ?? '');
+  const { data: areaChemists = [] } = useChemistsBySubArea(subAreaId);
 
   useEffect(() => {
     if (existingVisit) {
@@ -76,10 +77,17 @@ export default function DoctorVisitDrawer({
   };
 
   const q = chemistName.trim().toLowerCase();
+  const allChemists = (() => {
+    const seen = new Set<string>();
+    const merged = [];
+    for (const c of linkedChemists) { if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); } }
+    for (const c of areaChemists) { if (!seen.has(c.id)) { seen.add(c.id); merged.push(c); } }
+    return merged;
+  })();
   const suggestChemists = (
     q
-      ? linkedChemists.filter(c => c.name.toLowerCase().includes(q))
-      : linkedChemists
+      ? allChemists.filter(c => c.name.toLowerCase().includes(q))
+      : allChemists
   ).slice(0, 10);
 
   const handleSave = () => {
@@ -226,53 +234,82 @@ export default function DoctorVisitDrawer({
               Monthly Support
             </Label>
             <div className="space-y-2 mt-2">
-              {monthlySupport.map((ms, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-xl bg-muted/50 p-3">
-                  <select
-                    value={ms.productId}
-                    onChange={e => {
-                      const next = [...monthlySupport];
-                      next[i] = { ...next[i], productId: e.target.value };
-                      setMonthlySupport(next);
-                    }}
-                    className="flex-1 h-9 rounded-lg border border-input bg-card px-2 text-sm"
-                  >
-                    <option value="">Select product</option>
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={ms.quantity || ''}
-                    onChange={e => {
-                      const next = [...monthlySupport];
-                      next[i] = {
-                        ...next[i],
-                        quantity: parseInt(e.target.value, 10) || 0,
-                      };
-                      setMonthlySupport(next);
-                    }}
-                    placeholder="Qty"
-                    className="w-16 rounded-lg text-sm h-9"
-                  />
-                  {monthlySupport.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setMonthlySupport(monthlySupport.filter((_, j) => j !== i))
-                      }
-                      className="text-destructive p-1.5 shrink-0"
-                      aria-label="Remove row"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                </div>
-              ))}
+              {monthlySupport.map((ms, i) => {
+                const selectedProduct = products.find(p => p.id === ms.productId);
+                const ptr = selectedProduct?.ptr ?? 0;
+                const rupeeWise = ptr * (ms.quantity || 0);
+                return (
+                  <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={ms.productId}
+                        onChange={e => {
+                          const next = [...monthlySupport];
+                          next[i] = { ...next[i], productId: e.target.value };
+                          setMonthlySupport(next);
+                        }}
+                        className="flex-1 h-9 rounded-lg border border-input bg-card px-2 text-sm"
+                      >
+                        <option value="">Select product</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}{p.ptr ? ` (PTR: Rs ${p.ptr})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={ms.quantity || ''}
+                        onChange={e => {
+                          const next = [...monthlySupport];
+                          next[i] = {
+                            ...next[i],
+                            quantity: parseInt(e.target.value, 10) || 0,
+                          };
+                          setMonthlySupport(next);
+                        }}
+                        placeholder="Qty"
+                        className="w-16 rounded-lg text-sm h-9"
+                      />
+                      {monthlySupport.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMonthlySupport(monthlySupport.filter((_, j) => j !== i))
+                          }
+                          className="text-destructive p-1.5 shrink-0"
+                          aria-label="Remove row"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {ms.productId && ms.quantity > 0 && ptr > 0 && (
+                      <div className="flex items-center justify-between px-1">
+                        <span className="text-[10px] text-muted-foreground">
+                          PTR Rs {ptr} x {ms.quantity} qty
+                        </span>
+                        <span className="text-xs font-bold text-primary">
+                          Rs {rupeeWise.toLocaleString('en-IN')}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+              {(() => {
+                const totalRupeeWise = monthlySupport.reduce((sum, ms) => {
+                  const p = products.find(pr => pr.id === ms.productId);
+                  return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
+                }, 0);
+                return totalRupeeWise > 0 ? (
+                  <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
+                    <span className="text-xs font-semibold text-foreground">Total Rupee-wise</span>
+                    <span className="text-sm font-bold text-primary">Rs {totalRupeeWise.toLocaleString('en-IN')}</span>
+                  </div>
+                ) : null;
+              })()}
               <Button
                 variant="outline"
                 size="sm"

@@ -74,3 +74,37 @@ export function useChemistsByDoctor(doctorId: string) {
     retry: false,
   })
 }
+
+export function useChemistsBySubArea(subAreaId: string) {
+  return useQuery({
+    queryKey: ['chemists-by-subarea', subAreaId],
+    queryFn: async (): Promise<Chemist[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      try {
+        const { data, error } = await supabase
+          .from('chemists')
+          .select('id, name, sub_area_id')
+          .eq('sub_area_id', subAreaId)
+          .eq('is_active', true)
+          .order('name')
+          .limit(100)
+        if (error) {
+          if (isForbidden(error)) return []
+          throw error
+        }
+        return (data ?? []).map(c => ({
+          id: c.id,
+          sub_area_id: c.sub_area_id,
+          name: c.name,
+          is_active: true,
+          created_at: '',
+        }))
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Failed to load chemists'
+        throw new Error(message)
+      }
+    },
+    enabled: !!subAreaId && !!supabase,
+    retry: false,
+  })
+}

@@ -127,12 +127,6 @@ export default function MasterList() {
     setDrawerOpen(true)
   }
 
-  const openNew = (subAreaId: string) => {
-    setDrawerDoctorId(null)
-    setDrawerSubAreaId(subAreaId)
-    setDrawerOpen(true)
-  }
-
   const activeDoctor = useMemo(() => {
     if (!drawerDoctorId) return null
     return doctors.find(d => d.id === drawerDoctorId) ?? null
@@ -297,16 +291,7 @@ export default function MasterList() {
                       )}
                     </div>
 
-                    <div className="mt-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => openNew(sa.id)}
-                        className="w-full touch-target rounded-lg border-primary/50 text-primary hover:bg-primary/5"
-                      >
-                        Add New Doctor
-                      </Button>
-                    </div>
+                    
                   </section>
                 )
               })}

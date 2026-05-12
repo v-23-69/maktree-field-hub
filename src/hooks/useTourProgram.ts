@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { TourProgram, TourProgramEntry } from '@/types/database.types'
+import type { TourProgram, TourProgramEntry, TpStatus, TodayTpPlan } from '@/types/database.types'
 
 export function useTourProgram(mrId: string, month: string) {
   return useQuery({
@@ -65,6 +65,21 @@ export function useSaveTourProgramEntry() {
       const { error } = await supabase
         .from('tour_program_entries')
         .upsert(payload, { onConflict: 'tour_program_id,work_date' })
+      if (error) throw error
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tour-program-entries'] }),
+  })
+}
+
+export function useBatchSaveTourProgramEntries() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (rows: Array<Omit<TourProgramEntry, 'id'>>) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      if (rows.length === 0) return
+      const { error } = await supabase
+        .from('tour_program_entries')
+        .upsert(rows, { onConflict: 'tour_program_id,work_date' })
       if (error) throw error
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tour-program-entries'] }),
@@ -162,6 +177,50 @@ export function useTourProgramHistory(mrId: string) {
         .order('month', { ascending: false })
       if (error) throw error
       return data ?? []
+    },
+  })
+}
+
+export function useTpStatus(userId: string) {
+  return useQuery({
+    queryKey: ['tp-status', userId],
+    enabled: !!userId && !!supabase,
+    queryFn: async (): Promise<TpStatus> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('get_tp_status_for_user', { p_user_id: userId })
+      if (error) throw error
+      return data as TpStatus
+    },
+    staleTime: 60_000,
+  })
+}
+
+export function useTodayTpPlan(userId: string) {
+  return useQuery({
+    queryKey: ['today-tp-plan', userId],
+    enabled: !!userId && !!supabase,
+    queryFn: async (): Promise<TodayTpPlan | null> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('get_today_tp_plan', { p_user_id: userId })
+      if (error) throw error
+      if (!data || Object.keys(data).length === 0) return null
+      return data as TodayTpPlan
+    },
+    staleTime: 60_000,
+  })
+}
+
+export function useUnpauseUser() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('unpause_user', { p_user_id: userId })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['manager-mrs'] })
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] })
     },
   })
 }

@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { todayInputDate } from '@/lib/dateUtils';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
@@ -9,11 +10,12 @@ import ReportStep4 from '@/components/mr/ReportStep4';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useReportBlockStatus, useRequestReportUnlock } from '@/hooks/useReport';
+import { useTpStatus } from '@/hooks/useTourProgram';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 
 /** One saved doctor visit (local form state). */
@@ -94,7 +96,10 @@ function loadDraft(): ReportFormData | null {
 
 export default function NewReport() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const mrId = user?.id ?? ''
+
+  const { data: tpStatus, isLoading: tpLoading } = useTpStatus(mrId)
 
   const [step, setStep] = useState(1);
   const [unlockReason, setUnlockReason] = useState('')
@@ -127,8 +132,14 @@ export default function NewReport() {
       setFormData(prev => {
         const next = { ...prev }
         let changed = false
-        if (row.working_with && !next.workingWithId) {
+        const wIds = (row.working_with_ids as string[] | undefined) ?? []
+        if (wIds.length > 0 && next.workingWithIds.length === 0) {
+          next.workingWithIds = wIds
+          next.workingWithId = wIds[0] ?? ''
+          changed = true
+        } else if (row.working_with && !next.workingWithId) {
           next.workingWithId = row.working_with as string
+          next.workingWithIds = [row.working_with as string]
           changed = true
         }
         if (row.sub_area_id) {
@@ -160,14 +171,49 @@ export default function NewReport() {
   } = useReportBlockStatus(mrId)
   const requestUnlock = useRequestReportUnlock()
 
-  if (blockLoading) {
+  const navRole = user?.role === 'manager' ? 'manager' : 'mr';
+  const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
+
+  if (blockLoading || tpLoading) {
     return (
       <div className="min-h-screen bg-background pb-20">
         <PageHeader title="New Daily Report" showBack />
         <div className="px-4 py-6">
           <LoadingSpinner />
         </div>
-        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+        <BottomNav role={navRole} />
+      </div>
+    )
+  }
+
+  if (currentMonthTpMissing) {
+    const monthLabel = tpStatus ? new Date(tpStatus.current_month + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'this month';
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <PageHeader title="New Daily Report" showBack />
+        <div className="px-4 py-8 max-w-lg mx-auto space-y-5">
+          <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Tour Program Required</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  You must create your Tour Program for <span className="font-semibold text-foreground">{monthLabel}</span> before filling DCR reports.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => navigate(navRole === 'manager' ? '/manager/tour-program' : '/mr/tour-program')}
+              className="w-full rounded-2xl h-12 text-sm font-bold"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Create Tour Program
+            </Button>
+          </div>
+        </div>
+        <BottomNav role={navRole} />
       </div>
     )
   }
@@ -179,7 +225,7 @@ export default function NewReport() {
         <div className="px-4 py-6">
           <p className="text-sm text-destructive">Could not load report block status.</p>
         </div>
-        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+        <BottomNav role={navRole} />
       </div>
     )
   }
@@ -200,7 +246,7 @@ export default function NewReport() {
               </div>
             </div>
           </div>
-          <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+          <BottomNav role={navRole} />
         </div>
       )
     }
@@ -253,7 +299,7 @@ export default function NewReport() {
             {requestUnlock.isPending ? 'Sending…' : 'Send Unlock Request'}
           </Button>
         </div>
-        <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+        <BottomNav role={navRole} />
       </div>
     )
   }
@@ -315,7 +361,7 @@ export default function NewReport() {
         )}
       </div>
 
-      <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+      <BottomNav role={navRole} />
     </div>
   );
 }

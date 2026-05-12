@@ -27,6 +27,10 @@ export interface User {
   block_reason?: string | null
   blocked_at?: string | null
   blocked_by?: string | null
+  is_paused?: boolean
+  paused_at?: string | null
+  paused_by?: string | null
+  pause_reason?: string | null
   created_at: string
   updated_at: string
 }
@@ -93,6 +97,7 @@ export interface Product {
   description: string | null
   category: string | null
   is_active: boolean
+  ptr: number
   created_at: string
 }
 
@@ -368,6 +373,7 @@ export interface StrikeReport {
   id: string
   mr_id: string
   strike_date: string
+  reason?: string | null
   created_at: string
 }
 
@@ -410,8 +416,33 @@ export interface TourProgramEntry {
   work_date: string
   sub_area_id: string | null
   working_with: string | null
+  working_with_ids: string[]
   day_type: 'working' | 'sunday' | 'holiday' | 'leave' | 'strike'
   notes: string | null
+}
+
+export interface TpStatus {
+  current_month: string
+  current_month_tp_status: 'not_created' | 'draft' | 'submitted' | 'approved' | 'rejected'
+  current_month_tp_exists: boolean
+  next_month: string
+  next_month_tp_status: 'not_created' | 'draft' | 'submitted' | 'approved' | 'rejected'
+  next_month_tp_exists: boolean
+  deadline_date: string
+  days_to_deadline: number
+  is_overdue: boolean
+}
+
+export interface TodayTpPlan {
+  work_date: string
+  sub_area_id: string
+  sub_area_name: string
+  area_id: string
+  area_name: string
+  working_with_ids: string[]
+  day_type: string
+  notes: string | null
+  tp_status: string
 }
 
 export interface BlockComplaint {

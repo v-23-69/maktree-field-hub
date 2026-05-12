@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { Product } from '@/types/database.types'
 
@@ -21,5 +21,20 @@ export function useProducts() {
       }
     },
     enabled: !!supabase,
+  })
+}
+
+export function useUpdateProductPtr() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ productId, ptr }: { productId: string; ptr: number }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase
+        .from('products')
+        .update({ ptr })
+        .eq('id', productId)
+      if (error) throw error
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['products'] }),
   })
 }

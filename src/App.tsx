@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -5,35 +6,43 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
-
-import Login from "@/pages/auth/Login";
-import BlockedComplaint from "@/pages/auth/BlockedComplaint";
-import MRDashboard from "@/pages/mr/Dashboard";
-import NewReport from "@/pages/mr/NewReport";
-import ReportHistory from "@/pages/mr/ReportHistory";
-import ReportDetail from "@/pages/mr/ReportDetail";
-import MasterList from "@/pages/mr/MasterList";
-import MRLeave from "@/pages/mr/Leave";
-import MRExpense from "@/pages/mr/Expense";
-import MRTourProgram from "@/pages/mr/TourProgram";
-import ManagerDashboard from "@/pages/manager/Dashboard";
-import ManagerReports from "@/pages/manager/Reports";
-import ManagerAnalytics from "@/pages/manager/Analytics";
-import UnlockRequests from "@/pages/manager/UnlockRequests";
-import ManagerTargets from "@/pages/manager/Targets";
-import ManagerLeaves from "@/pages/manager/Leaves";
-import ManagerHolidays from "@/pages/manager/Holidays";
-import AdminDashboard from "@/pages/admin/Dashboard";
-import AdminUsers from "@/pages/admin/Users";
-import AdminDoctors from "@/pages/admin/Doctors";
-import AdminAreas from "@/pages/admin/Areas";
-import AdminMRAccess from "@/pages/admin/MRAccess";
-import AdminTargets from "@/pages/admin/Targets";
-import AdminHolidays from "@/pages/admin/Holidays";
-import NotFound from "@/pages/NotFound";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
-import ProfilePage from "@/pages/profile/Profile";
 import InstallPrompt from "@/components/shared/InstallPrompt";
+
+const Login = lazy(() => import("@/pages/auth/Login"));
+const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
+const MRDashboard = lazy(() => import("@/pages/mr/Dashboard"));
+const NewReport = lazy(() => import("@/pages/mr/NewReport"));
+const ReportHistory = lazy(() => import("@/pages/mr/ReportHistory"));
+const ReportDetail = lazy(() => import("@/pages/mr/ReportDetail"));
+const MasterList = lazy(() => import("@/pages/mr/MasterList"));
+const MRLeave = lazy(() => import("@/pages/mr/Leave"));
+const MRExpense = lazy(() => import("@/pages/mr/Expense"));
+const MRTourProgram = lazy(() => import("@/pages/mr/TourProgram"));
+const ManagerDashboard = lazy(() => import("@/pages/manager/Dashboard"));
+const ManagerReports = lazy(() => import("@/pages/manager/Reports"));
+const ManagerAnalytics = lazy(() => import("@/pages/manager/Analytics"));
+const UnlockRequests = lazy(() => import("@/pages/manager/UnlockRequests"));
+const ManagerTargets = lazy(() => import("@/pages/manager/Targets"));
+const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
+const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
+const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
+const AdminUsers = lazy(() => import("@/pages/admin/Users"));
+const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
+const AdminAreas = lazy(() => import("@/pages/admin/Areas"));
+const AdminMRAccess = lazy(() => import("@/pages/admin/MRAccess"));
+const AdminTargets = lazy(() => import("@/pages/admin/Targets"));
+const AdminHolidays = lazy(() => import("@/pages/admin/Holidays"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
+const ProfilePage = lazy(() => import("@/pages/profile/Profile"));
+
+function PageLoader() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <LoadingSpinner />
+    </div>
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +77,7 @@ const App = () => (
         <AuthProvider>
           <HashRouter>
           <InstallPrompt />
+          <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
@@ -108,6 +118,7 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </HashRouter>
         </AuthProvider>
       </TooltipProvider>

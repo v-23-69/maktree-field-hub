@@ -1,15 +1,16 @@
 import { useAuth } from '@/hooks/useAuth';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, type LucideIcon } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useAddDoctor } from '@/hooks/useAdminDoctors';
 import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
@@ -17,14 +18,20 @@ import { useAssignSubAreasToMrBatch, useMrSubAreaAccess } from '@/hooks/useAdmin
 import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
+import { useProducts, useUpdateProductPtr } from '@/hooks/useProducts';
 import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { todayInputDate } from '@/lib/dateUtils';
+import { todayInputDate, formatDisplayDate } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import { useTpStatus, useTodayTpPlan, useUnpauseUser } from '@/hooks/useTourProgram';
+import { useWorkingWithReportOptions } from '@/hooks/useManagers';
+import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
+import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
+import { useAllowedReportDates } from '@/hooks/useReport';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
-type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'assign-self' | 'create-mr' | 'delete-mr' | null
+type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'assign-self' | 'create-mr' | 'delete-mr' | 'set-ptr' | 'strike' | 'holiday' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
@@ -32,9 +39,19 @@ export default function ManagerDashboard() {
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
   const [action, setAction] = useState<QuickAction>(null);
 
+  const [deferReady, setDeferReady] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setDeferReady(true), 100); return () => clearTimeout(t); }, []);
+
+  // Critical queries
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
+  const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(user?.id ?? '');
+  const { data: todayPlan } = useTodayTpPlan(user?.id ?? '');
+  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id);
+  const unpauseUser = useUnpauseUser();
+
+  // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
-  const { data: stats } = useManagerDashboardStats(user?.id ?? '', mrIds);
+  const { data: stats } = useManagerDashboardStats(deferReady ? (user?.id ?? '') : '', deferReady ? mrIds : []);
   const { data: areas = [] } = useAllAreas();
   const addDoctor = useAddDoctor();
   const addArea = useAddArea();
@@ -42,6 +59,42 @@ export default function ManagerDashboard() {
   const assignSubAreasBatch = useAssignSubAreasToMrBatch();
   const createUser = useCreateUser();
   const deleteMr = useDeleteMrUser();
+  const { data: allProducts = [] } = useProducts();
+  const updatePtr = useUpdateProductPtr();
+
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const o of workingWithOptions) map.set(o.id, o.full_name);
+    for (const mr of mrs) map.set(mr.id, mr.full_name);
+    return map;
+  }, [workingWithOptions, mrs]);
+
+  const workingWithNames = useMemo(() => {
+    if (!todayPlan?.working_with_ids?.length) return [];
+    return todayPlan.working_with_ids.map(id => nameById.get(id) ?? id.slice(0, 8));
+  }, [todayPlan, nameById]);
+
+  const isPaused = user?.is_paused === true;
+  const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
+  const nextMonthDeadlineApproaching = tpStatus && !tpStatus.next_month_tp_exists && tpStatus.days_to_deadline <= 5 && tpStatus.days_to_deadline >= 0;
+  const nextMonthOverdue = tpStatus?.is_overdue === true;
+  const todayStr = formatDisplayDate(todayInputDate());
+
+  const { data: todayStrike } = useTodayStrike(deferReady ? (user?.id ?? '') : '');
+  const markStrike = useMarkStrike();
+  const { data: strikeCount = 0 } = useStrikeCount(deferReady ? (user?.id ?? '') : '');
+  const { data: holidayCount = 0 } = useMrHolidayCount(deferReady ? (user?.id ?? '') : '');
+  const markHoliday = useMarkMrHoliday();
+  const { data: mgrHolidays = [] } = useMrHolidays(deferReady ? (user?.id ?? '') : '');
+
+  const { data: mgrAllowedDates = [] } = useAllowedReportDates(user?.id ?? '');
+  const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === todayInputDate())?.already_submitted === true;
+
+  const [strikeDate, setStrikeDate] = useState(todayInputDate());
+  const [strikeReason, setStrikeReason] = useState('');
+  const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
+  const [holidayDate, setHolidayDate] = useState(todayInputDate());
+  const [holidayReason, setHolidayReason] = useState('');
 
   const [doctorName, setDoctorName] = useState('');
   const [doctorSpec, setDoctorSpec] = useState('');
@@ -155,6 +208,10 @@ export default function ManagerDashboard() {
     setNewMrSubAreas(new Set());
     setDeleteMrId('');
     setTransferToMrId('');
+    setStrikeDate(todayInputDate());
+    setStrikeReason('');
+    setHolidayDate(todayInputDate());
+    setHolidayReason('');
   };
 
   const primaryActions: { key: QuickAction | 'nav'; label: string; icon: LucideIcon; nav?: string }[] = [
@@ -165,10 +222,92 @@ export default function ManagerDashboard() {
   ]
 
   const moreActions: { key: QuickAction; label: string; icon: LucideIcon }[] = [
+    { key: 'set-ptr', label: 'Set PTR', icon: IndianRupee },
     { key: 'doctor', label: 'Add Doctor', icon: Stethoscope },
     { key: 'area', label: 'New Territory', icon: MapPin },
     { key: 'subarea', label: 'New Area', icon: MapPinned },
   ]
+
+  if (isPaused) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <PageHeader title="Manager Dashboard" />
+        <div className="px-4 py-12 max-w-lg mx-auto text-center space-y-6">
+          <div className="mx-auto h-20 w-20 rounded-full bg-destructive/10 flex items-center justify-center">
+            <Lock className="h-10 w-10 text-destructive" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-foreground">Account Paused</h2>
+            <p className="text-sm text-muted-foreground">
+              {user?.pause_reason ?? 'Your account has been paused due to non-compliance with Tour Program requirements.'}
+            </p>
+          </div>
+          <div className="glass-card p-4 text-left space-y-2">
+            <p className="text-sm font-semibold text-foreground">What to do:</p>
+            <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
+              <li>Contact your Admin to unpause your account</li>
+              <li>Create your Tour Program immediately after unpausing</li>
+            </ul>
+          </div>
+        </div>
+        <BottomNav role="manager" />
+      </div>
+    );
+  }
+
+  if (!tpStatusLoading && currentMonthTpMissing) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <PageHeader title="Manager Dashboard" />
+        <div className="px-4 py-8 max-w-lg mx-auto space-y-6">
+          <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5">
+            <div className="flex items-center gap-3.5">
+              {user?.profile_photo_url ? (
+                <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow" />
+              ) : (
+                <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15">
+                  <span className="text-base font-extrabold text-primary">
+                    {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-extrabold text-foreground tracking-tight truncate">
+                  Hi, {user?.full_name?.split(' ')[0]}!
+                </h2>
+                <p className="text-xs text-muted-foreground font-medium">{todayStr}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-foreground">Tour Program Required</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Create your Tour Program for{' '}
+                  <span className="font-semibold text-foreground">
+                    {new Date(tpStatus!.current_month + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+                  </span>{' '}
+                  before accessing dashboard features.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => navigate('/manager/tour-program')}
+              className="w-full rounded-2xl h-12 text-sm font-bold"
+            >
+              <Calendar className="mr-2 h-5 w-5" />
+              Create Tour Program Now
+            </Button>
+          </div>
+        </div>
+        <BottomNav role="manager" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -198,6 +337,65 @@ export default function ManagerDashboard() {
           </div>
         </div>
 
+        {/* TP Deadline Alert */}
+        {(nextMonthDeadlineApproaching || nextMonthOverdue) && (
+          <div className={cn(
+            'rounded-2xl p-4 flex items-start gap-3 border',
+            nextMonthOverdue ? 'border-destructive/30 bg-destructive/5' : 'border-amber-500/30 bg-amber-500/5'
+          )}>
+            <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', nextMonthOverdue ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')} />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">
+                {nextMonthOverdue ? 'Tour Program Overdue!' : `TP Deadline in ${tpStatus!.days_to_deadline} day(s)`}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Create next month's Tour Program to avoid account pause.
+              </p>
+            </div>
+            <Button size="sm" variant={nextMonthOverdue ? 'destructive' : 'outline'} className="shrink-0 text-xs rounded-xl" onClick={() => navigate('/manager/tour-program')}>
+              Create TP
+            </Button>
+          </div>
+        )}
+
+        {/* Today's Plan from TP */}
+        {todayPlan && todayPlan.sub_area_id && (
+          <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-background border border-emerald-500/15 p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-foreground">Today's Plan</p>
+              <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold">From TP</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Area</span>
+                <p className="text-sm font-semibold text-foreground">{todayPlan.sub_area_name}</p>
+                <p className="text-[11px] text-muted-foreground">{todayPlan.area_name}</p>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Working With</span>
+                {workingWithNames.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">{workingWithNames.map((name, i) => (
+                    <span key={i} className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">{name}</span>
+                  ))}</div>
+                ) : <p className="text-sm font-semibold text-foreground">Solo</p>}
+              </div>
+            </div>
+            {mgrTodayDcrDone ? (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-600/10 border border-emerald-600/20 px-4 py-3">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Today's DCR Submitted</p>
+              </div>
+            ) : (
+              <Button
+                onClick={() => navigate('/manager/report/new')}
+                className="w-full rounded-2xl h-11 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                <FilePlus className="mr-2 h-4 w-4" /> Start Today's DCR
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
@@ -207,13 +405,15 @@ export default function ManagerDashboard() {
         </div>
 
         {/* Self Report CTA */}
-        <Button
-          onClick={() => navigate('/manager/report/new')}
-          className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
-        >
-          <FilePlus className="mr-2 h-5 w-5" />
-          Create Daily Report
-        </Button>
+        {!mgrTodayDcrDone && (
+          <Button
+            onClick={() => navigate('/manager/report/new')}
+            className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
+          >
+            <FilePlus className="mr-2 h-5 w-5" />
+            Create Daily Report
+          </Button>
+        )}
 
         {/* Quick Actions — frequently used */}
         <div className="space-y-3">
@@ -227,9 +427,17 @@ export default function ManagerDashboard() {
               <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Expense</span>
             </button>
+            <button type="button" onClick={() => setAction('strike')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all border border-destructive/15">
+              <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-4 w-4 text-destructive" /></div>
+              <span className="text-[10px] font-semibold text-destructive text-center leading-tight">Strike</span>
+            </button>
+            <button type="button" onClick={() => setAction('holiday')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Holiday</span>
+            </button>
             <button type="button" onClick={() => navigate('/manager/holidays')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Holidays</span>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Manage Holidays</span>
             </button>
             {primaryActions.map(ab => (
               <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
@@ -262,42 +470,68 @@ export default function ManagerDashboard() {
             {mrs.map(mr => {
               const s = todaysMrReports.find(r => r.mrId === mr.id)
               const submitted = !!s?.submitted
+              const mrPaused = (mr as { is_paused?: boolean }).is_paused === true
               const initials = mr.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
               return (
-                <button
+                <div
                   key={mr.id}
-                  type="button"
-                  disabled={!submitted}
-                  onClick={() => {
-                    if (!submitted || !s?.reportId) return
-                    window.location.href = `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`
-                  }}
                   className={cn(
-                    'w-full text-left glass-card p-3.5 active:scale-[0.98] transition-all',
+                    'w-full text-left glass-card p-3.5 transition-all',
                     submitted && 'ring-1 ring-emerald-500/20',
+                    mrPaused && 'ring-1 ring-destructive/20 opacity-80',
                   )}
                 >
-                  <div className="flex items-center gap-3">
-                    {mr.profile_photo_url ? (
-                      <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
-                    ) : (
-                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
-                        <span className="text-[10px] font-bold text-primary">{initials}</span>
+                  <button
+                    type="button"
+                    disabled={!submitted}
+                    onClick={() => {
+                      if (!submitted || !s?.reportId) return
+                      window.location.href = `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`
+                    }}
+                    className="w-full active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-3">
+                      {mr.profile_photo_url ? (
+                        <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
+                      ) : (
+                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
+                          <span className="text-[10px] font-bold text-primary">{initials}</span>
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
+                        <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
                       </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
+                      {mrPaused ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-destructive shrink-0">
+                          <Lock className="h-3.5 w-3.5" /> Paused
+                        </span>
+                      ) : submitted ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
+                          <CheckCircle2 className="h-4 w-4" /> Done
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-semibold text-muted-foreground/60 shrink-0">Pending</span>
+                      )}
                     </div>
-                    {submitted ? (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                        <CheckCircle2 className="h-4 w-4" /> Done
-                      </span>
-                    ) : (
-                      <span className="text-[11px] font-semibold text-muted-foreground/60 shrink-0">Pending</span>
-                    )}
-                  </div>
-                </button>
+                  </button>
+                  {mrPaused && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 w-full rounded-xl text-xs h-8"
+                      disabled={unpauseUser.isPending}
+                      onClick={() => {
+                        void unpauseUser.mutateAsync(mr.id)
+                          .then(() => toast.success(`${mr.full_name} unpaused`))
+                          .catch(e => toast.error(e instanceof Error ? e.message : 'Failed to unpause'))
+                      }}
+                    >
+                      <Play className="mr-1.5 h-3 w-3" />
+                      {unpauseUser.isPending ? 'Unpausing...' : 'Unpause Account'}
+                    </Button>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -315,6 +549,9 @@ export default function ManagerDashboard() {
               {action === 'assign-self' && 'Assign Area to Self'}
               {action === 'create-mr' && 'Create New MR'}
               {action === 'delete-mr' && 'Delete MR'}
+              {action === 'set-ptr' && 'Set Product PTR'}
+              {action === 'strike' && 'Mark Strike Day'}
+              {action === 'holiday' && 'Mark Holiday'}
             </DrawerTitle>
           </DrawerHeader>
 
@@ -653,9 +890,140 @@ export default function ManagerDashboard() {
                 </Button>
               </>
             )}
+            {action === 'set-ptr' && (
+              <>
+                <div className="space-y-3">
+                  {allProducts.map(p => (
+                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
+                      <span className="flex-1 text-sm font-medium truncate">{p.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">Rs</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          defaultValue={p.ptr || ''}
+                          onBlur={e => {
+                            const val = parseFloat(e.target.value) || 0;
+                            if (val !== (p.ptr ?? 0)) {
+                              updatePtr.mutate({ productId: p.id, ptr: val }, {
+                                onSuccess: () => toast.success(`PTR updated for ${p.name}`),
+                                onError: () => toast.error('Failed to update PTR'),
+                              });
+                            }
+                          }}
+                          placeholder="0"
+                          className="w-24 rounded-lg text-sm h-9"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {allProducts.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">No products found</p>
+                  )}
+                </div>
+              </>
+            )}
+            {action === 'strike' && (
+              <>
+                {todayStrike && (
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <p className="text-sm text-amber-700 dark:text-amber-400 font-medium">Strike already marked for today</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <Label className="text-xs">Date</Label>
+                  <Input type="date" value={strikeDate} onChange={e => setStrikeDate(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Reason</Label>
+                  <Textarea value={strikeReason} onChange={e => setStrikeReason(e.target.value)} placeholder="Reason for strike day..." className="min-h-[80px] touch-target rounded-lg" />
+                </div>
+                <Button
+                  variant="destructive"
+                  className="w-full touch-target rounded-xl font-bold h-12"
+                  disabled={markStrike.isPending || !strikeDate}
+                  onClick={() => setShowStrikeConfirm(true)}
+                >
+                  {markStrike.isPending ? 'Marking...' : 'Confirm Strike Day'}
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center">Strikes this year: <span className="font-bold text-destructive">{strikeCount}</span></p>
+              </>
+            )}
+            {action === 'holiday' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">Date</Label>
+                  <Input type="date" value={holidayDate} onChange={e => setHolidayDate(e.target.value)} className="touch-target rounded-lg" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Reason / Holiday Name</Label>
+                  <Textarea value={holidayReason} onChange={e => setHolidayReason(e.target.value)} placeholder="Holiday name or reason..." className="min-h-[80px] touch-target rounded-lg" />
+                </div>
+                <Button
+                  className="w-full touch-target rounded-xl font-bold h-12"
+                  disabled={markHoliday.isPending || !holidayDate || !holidayReason.trim()}
+                  onClick={() => {
+                    void markHoliday.mutateAsync({
+                      mrId: user?.id ?? '',
+                      holidayDate,
+                      reason: holidayReason.trim(),
+                      createdBy: user?.id ?? '',
+                    }).then(() => {
+                      toast.success('Holiday marked');
+                      closeDrawer();
+                    }).catch(e => toast.error(e instanceof Error ? e.message : 'Failed'));
+                  }}
+                >
+                  {markHoliday.isPending ? 'Saving...' : 'Mark Holiday'}
+                </Button>
+                <div className="flex gap-2 pt-2">
+                  <div className="flex-1 rounded-xl bg-muted/50 px-3 py-2 flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground font-medium">Strikes</span>
+                    <span className="text-sm font-bold text-destructive tabular-nums">{strikeCount}</span>
+                  </div>
+                  <div className="flex-1 rounded-xl bg-muted/50 px-3 py-2 flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground font-medium">Holidays</span>
+                    <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{holidayCount}</span>
+                  </div>
+                </div>
+                {mgrHolidays.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-border/50">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Your Holidays</p>
+                    {mgrHolidays.map(h => (
+                      <div key={h.id} className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2">
+                        <span className="text-sm font-medium text-foreground">{h.holiday?.name ?? 'Holiday'}</span>
+                        <span className="text-xs text-muted-foreground">{h.holiday?.holiday_date ? formatDisplayDate(h.holiday.holiday_date) : ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </DrawerContent>
       </Drawer>
+
+      <ConfirmDialog
+        open={showStrikeConfirm}
+        onOpenChange={setShowStrikeConfirm}
+        title="Confirm Strike Day"
+        description={`Mark ${formatDisplayDate(strikeDate)} as a strike day? This action cannot be undone.`}
+        onConfirm={() => {
+          void markStrike.mutateAsync({
+            mr_id: user?.id ?? '',
+            strike_date: strikeDate,
+            reason: strikeReason.trim() || undefined,
+          }).then(() => {
+            toast.success('Strike day marked');
+            setShowStrikeConfirm(false);
+            closeDrawer();
+          }).catch(e => toast.error(e instanceof Error ? e.message : 'Failed'));
+        }}
+        confirmLabel={markStrike.isPending ? 'Marking...' : 'Yes, Mark Strike'}
+        destructive
+        confirmDisabled={markStrike.isPending}
+      />
 
       <ConfirmDialog
         open={showDeleteConfirm}

@@ -42,6 +42,61 @@ export function useMrHolidays(mrId: string) {
   })
 }
 
+export function useMrHolidayCount(mrId: string) {
+  return useQuery({
+    queryKey: ['mr-holiday-count', mrId],
+    enabled: !!mrId && !!supabase,
+    queryFn: async (): Promise<number> => {
+      if (!supabase) return 0
+      const year = new Date().getFullYear()
+      const { count, error } = await supabase
+        .from('mr_holidays')
+        .select('id', { count: 'exact', head: true })
+        .eq('mr_id', mrId)
+        .eq('year', year)
+      if (error) return 0
+      return count ?? 0
+    },
+    retry: false,
+  })
+}
+
+export function useMarkMrHoliday() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: { mrId: string; holidayDate: string; reason: string; createdBy: string }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const year = new Date(payload.holidayDate).getFullYear()
+      const { data: holiday, error: hErr } = await supabase
+        .from('holidays')
+        .insert({
+          name: payload.reason || 'Personal Holiday',
+          holiday_date: payload.holidayDate,
+          holiday_type: 'company' as const,
+          created_by: payload.createdBy,
+        })
+        .select('id')
+        .single()
+      if (hErr) throw hErr
+      const { error } = await supabase
+        .from('mr_holidays')
+        .insert({
+          mr_id: payload.mrId,
+          holiday_id: holiday.id,
+          assigned_by: payload.createdBy,
+          year,
+          counts_as_leave: true,
+        })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mr-holidays'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-holiday-count'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+    },
+  })
+}
+
 export function useCreateHoliday() {
   const queryClient = useQueryClient()
   return useMutation({

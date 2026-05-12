@@ -302,9 +302,29 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                       {visit.monthlySupport.some(m => m.productId) && (
                         <div>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Monthly Support</p>
-                          {visit.monthlySupport.filter(m => m.productId).map((ms, i) => (
-                            <p key={i} className="text-xs text-foreground">{productName(ms.productId)} — {ms.quantity} units</p>
-                          ))}
+                          {visit.monthlySupport.filter(m => m.productId).map((ms, i) => {
+                            const prod = products.find(p => p.id === ms.productId);
+                            const ptr = prod?.ptr ?? 0;
+                            const rupeeWise = ptr * (ms.quantity || 0);
+                            return (
+                              <div key={i} className="flex items-center justify-between text-xs text-foreground">
+                                <span>{productName(ms.productId)} — {ms.quantity} units</span>
+                                {rupeeWise > 0 && <span className="font-semibold text-primary">Rs {rupeeWise.toLocaleString('en-IN')}</span>}
+                              </div>
+                            );
+                          })}
+                          {(() => {
+                            const total = visit.monthlySupport.filter(m => m.productId).reduce((sum, ms) => {
+                              const p = products.find(pr => pr.id === ms.productId);
+                              return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
+                            }, 0);
+                            return total > 0 ? (
+                              <div className="flex items-center justify-between mt-1 pt-1 border-t border-border/50">
+                                <span className="text-[10px] font-semibold text-muted-foreground">Total Rupee-wise</span>
+                                <span className="text-xs font-bold text-primary">Rs {total.toLocaleString('en-IN')}</span>
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       )}
                     </div>

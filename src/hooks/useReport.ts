@@ -97,17 +97,17 @@ async function loadReportVisits(
     ]),
   ]
 
-  let products: Array<{ id: string; name: string }> = []
+  let products: Array<{ id: string; name: string; ptr: number }> = []
   if (productIds.length > 0) {
     const { data: prodData, error: productsErr } = await client
       .from('products')
-      .select('id, name')
+      .select('id, name, ptr')
       .in('id', productIds)
     if (productsErr) throw productsErr
-    products = (prodData ?? []) as Array<{ id: string; name: string }>
+    products = (prodData ?? []) as Array<{ id: string; name: string; ptr: number }>
   }
 
-  const productById = new Map<string, { id: string; name: string }>()
+  const productById = new Map<string, { id: string; name: string; ptr: number }>()
   for (const p of products ?? []) productById.set((p as any).id, p as any)
 
   // Assemble final shape expected by the UI.

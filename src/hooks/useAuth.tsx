@@ -19,7 +19,7 @@ const AuthContext = createContext<AuthContextType | null>(null)
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const PROFILE_SELECT =
-  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,profile_photo_url,designation,mobile,created_at,updated_at'
+  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)

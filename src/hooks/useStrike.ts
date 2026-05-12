@@ -30,11 +30,12 @@ export function useTodayStrike(mrId: string) {
 export function useMarkStrike() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: { mr_id: string; strike_date?: string }) => {
+    mutationFn: async (payload: { mr_id: string; strike_date?: string; reason?: string }) => {
       if (!supabase) throw new Error('Supabase not configured')
       const { error } = await supabase.from('strike_reports').insert({
         mr_id: payload.mr_id,
         strike_date: payload.strike_date ?? todayInputDate(),
+        reason: payload.reason ?? null,
       })
       if (error) throw error
     },
@@ -42,5 +43,25 @@ export function useMarkStrike() {
       queryClient.invalidateQueries({ queryKey: ['today-strike'] })
       queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
     },
+  })
+}
+
+export function useStrikeCount(mrId: string) {
+  return useQuery({
+    queryKey: ['strike-count', mrId],
+    enabled: !!mrId && !!supabase,
+    queryFn: async (): Promise<number> => {
+      if (!supabase) return 0
+      const year = new Date().getFullYear()
+      const { count, error } = await supabase
+        .from('strike_reports')
+        .select('id', { count: 'exact', head: true })
+        .eq('mr_id', mrId)
+        .gte('strike_date', `${year}-01-01`)
+        .lte('strike_date', `${year}-12-31`)
+      if (error) return 0
+      return count ?? 0
+    },
+    retry: false,
   })
 }

@@ -98,7 +98,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
   const canProceed = !!selected?.report_date && !selectedAlreadySubmitted && !allSubmitted
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-5 animate-fade-in pb-20">
       {data.tpAutoFilled && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
           <p className="text-xs text-primary font-medium">
@@ -244,28 +244,53 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                   const mgrs = linkedManagers.length > 0
                     ? linkedManagers
                     : managersFallback.map(m => ({ ...m, option_kind: 'linked_manager' as const, employee_code: m.employee_code ?? '' }))
-                  if (mgrs.length === 0) return null
+                  const peerMrs = workingOptions.filter(o => o.option_kind === 'team_mr')
                   return (
-                    <div>
-                      <p className="section-title mb-2">Managers</p>
-                      <div className="space-y-1.5">
-                        {mgrs.map(m => {
-                          const photo = 'profile_photo_url' in m ? (m as { profile_photo_url?: string | null }).profile_photo_url : null
-                          const checked = data.workingWithIds.includes(m.id)
-                          return (
-                            <label key={m.id} className={cn(
-                              'flex items-center gap-3 cursor-pointer rounded-xl border px-3 py-2.5 transition-all active:scale-[0.98]',
-                              checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card',
-                            )}>
-                              <Checkbox checked={checked} onCheckedChange={() => toggleWorkingWith(m.id)} />
-                              <Avatar src={photo} name={m.full_name} />
-                              <span className="text-sm text-foreground flex-1 truncate">{m.full_name}</span>
-                              <Badge variant="outline" className="text-[10px] shrink-0">Manager</Badge>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    </div>
+                    <>
+                      {mgrs.length > 0 && (
+                        <div>
+                          <p className="section-title mb-2">Managers</p>
+                          <div className="space-y-1.5">
+                            {mgrs.map(m => {
+                              const photo = 'profile_photo_url' in m ? (m as { profile_photo_url?: string | null }).profile_photo_url : null
+                              const checked = data.workingWithIds.includes(m.id)
+                              return (
+                                <label key={m.id} className={cn(
+                                  'flex items-center gap-3 cursor-pointer rounded-xl border px-3 py-2.5 transition-all active:scale-[0.98]',
+                                  checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card',
+                                )}>
+                                  <Checkbox checked={checked} onCheckedChange={() => toggleWorkingWith(m.id)} />
+                                  <Avatar src={photo} name={m.full_name} />
+                                  <span className="text-sm text-foreground flex-1 truncate">{m.full_name}</span>
+                                  <Badge variant="outline" className="text-[10px] shrink-0">Manager</Badge>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {peerMrs.length > 0 && (
+                        <div>
+                          <p className="section-title mb-2">Team MRs</p>
+                          <div className="space-y-1.5">
+                            {peerMrs.map(m => {
+                              const checked = data.workingWithIds.includes(m.id)
+                              return (
+                                <label key={m.id} className={cn(
+                                  'flex items-center gap-3 cursor-pointer rounded-xl border px-3 py-2.5 transition-all active:scale-[0.98]',
+                                  checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card',
+                                )}>
+                                  <Checkbox checked={checked} onCheckedChange={() => toggleWorkingWith(m.id)} />
+                                  <Avatar src={m.profile_photo_url} name={m.full_name} />
+                                  <span className="text-sm text-foreground flex-1 truncate">{m.full_name}</span>
+                                  <Badge variant="outline" className="text-[10px] shrink-0">MR</Badge>
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )
                 })()}
               </>
