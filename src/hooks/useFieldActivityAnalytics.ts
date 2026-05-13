@@ -163,7 +163,7 @@ export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enable
       let totalTarget = 0
       let totalDone = 0
       const out = docRows.map(d => {
-        const target = typeof d.monthly_visit_target === 'number' ? d.monthly_visit_target : 4
+        const target = typeof d.monthly_visit_target === 'number' ? d.monthly_visit_target : 2
         const rawDone = visitCounts.get(d.id) ?? 0
         totalTarget += target
         totalDone += Math.min(rawDone, target)

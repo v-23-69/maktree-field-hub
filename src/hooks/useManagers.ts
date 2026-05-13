@@ -108,24 +108,28 @@ export function useWorkingWithReportOptions(userId: string | undefined, viewerRo
   })
 }
 
+/** Mapped managers for the signed-in MR (uses `list_managers_for_mr` RPC — avoids RLS 403 on `mr_manager_map`). */
 export function useManagersForMr(mrId: string) {
   return useQuery({
     queryKey: ['managers-for-mr', mrId],
     enabled: !!mrId && !!supabase,
     queryFn: async (): Promise<ManagerRow[]> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('mr_manager_map')
-        .select('manager:users!mr_manager_map_manager_id_fkey(id, full_name, employee_code, role, profile_photo_url)')
-        .eq('mr_id', mrId)
-        .order('assigned_at', { ascending: true })
+      const { data, error } = await supabase.rpc('list_managers_for_mr')
       if (error) {
-        if (isForbidden(error)) return []
-        throw error
+        throw new Error(error.message ?? 'Could not load managers')
       }
-      return (data ?? [])
-        .map((r: { manager: ManagerRow | null }) => r.manager)
-        .filter(Boolean) as ManagerRow[]
+      const managers = (data ?? []) as ManagerRow[]
+      const managerIds = managers.map(m => m.id).filter(Boolean)
+      if (managerIds.length === 0) return managers
+      const { data: photoRows } = await supabase
+        .from('users')
+        .select('id, profile_photo_url')
+        .in('id', managerIds)
+      const photoById = new Map<string, string | null>(
+        (photoRows ?? []).map((r: { id: string; profile_photo_url: string | null }) => [r.id, r.profile_photo_url]),
+      )
+      return managers.map(m => ({ ...m, profile_photo_url: photoById.get(m.id) ?? null }))
     },
   })
 }

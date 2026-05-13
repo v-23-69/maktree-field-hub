@@ -5,11 +5,12 @@ import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useAuth } from '@/hooks/useAuth';
-import { useMrReportsWithVisitCounts } from '@/hooks/useReport';
+import { useMrReportsWithVisitCounts, useReportVisitDaySummary } from '@/hooks/useReport';
 import { CheckCircle2, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -38,6 +39,10 @@ export default function ReportHistory() {
     return { year: now.getFullYear(), month: now.getMonth() };
   });
   const [view, setView] = useState<'calendar' | 'list'>('calendar');
+  const [summaryReportId, setSummaryReportId] = useState<string | null>(null);
+  const [summaryDateLabel, setSummaryDateLabel] = useState<string>('');
+
+  const { data: daySummary, isFetching: summaryLoading } = useReportVisitDaySummary(summaryReportId);
 
   const { days, startPad } = useMemo(
     () => getMonthDays(viewMonth.year, viewMonth.month),
@@ -75,9 +80,55 @@ export default function ReportHistory() {
   const submittedCount = monthReports.filter(r => r.status === 'submitted').length;
   const workingDays = days.filter(d => !d.isWeekend && d.date <= todayStr).length;
 
+  const closeSummary = () => {
+    setSummaryReportId(null);
+    setSummaryDateLabel('');
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title={isManager ? 'My report history' : 'Report History'} showBack />
+
+      <Drawer open={!!summaryReportId} onOpenChange={open => { if (!open) closeSummary(); }}>
+        <DrawerContent className="max-h-[85dvh]">
+          <DrawerHeader className="border-b border-border">
+            <DrawerTitle className="text-base">DCR summary</DrawerTitle>
+            <p className="text-xs text-muted-foreground">{summaryDateLabel}</p>
+          </DrawerHeader>
+          <div className="overflow-y-auto px-4 pb-6 pt-3 space-y-3">
+            {summaryLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
+            {!summaryLoading && daySummary && (
+              <>
+                <p className="text-sm text-foreground">
+                  <span className="font-semibold">{daySummary.visit_count}</span> doctor visit
+                  {daySummary.visit_count === 1 ? '' : 's'}
+                </p>
+                {daySummary.doctors.length > 0 ? (
+                  <ul className="space-y-1.5">
+                    {daySummary.doctors.map(d => (
+                      <li key={d.id} className="text-sm rounded-lg border border-border px-3 py-2 bg-muted/30">
+                        {d.name}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No visit rows on this report.</p>
+                )}
+                <Button
+                  type="button"
+                  className="w-full touch-target rounded-xl"
+                  onClick={() => {
+                    if (summaryReportId) navigate(`${reportBase}/${summaryReportId}`);
+                    closeSummary();
+                  }}
+                >
+                  Open full report
+                </Button>
+              </>
+            )}
+          </div>
+        </DrawerContent>
+      </Drawer>
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="flex gap-2">
@@ -151,7 +202,13 @@ export default function ReportHistory() {
                       disabled={isFuture}
                       onClick={() => {
                         const rep = reports.find(r => r.report_date === d.date);
-                        if (rep) navigate(`${reportBase}/${rep.id}`);
+                        if (!rep) return;
+                        if (rep.status === 'submitted') {
+                          setSummaryReportId(rep.id);
+                          setSummaryDateLabel(formatDisplayDate(d.date));
+                        } else {
+                          navigate(`${reportBase}/${rep.id}`);
+                        }
                       }}
                       className={cn(
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
@@ -173,7 +230,7 @@ export default function ReportHistory() {
 
             <div className="flex gap-4 text-[10px] text-muted-foreground justify-center">
               <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-emerald-600/15" /> Submitted
+                <span className="w-3 h-3 rounded bg-emerald-600/15" /> Submitted (tap for summary)
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-red-500/10" /> Not Submitted

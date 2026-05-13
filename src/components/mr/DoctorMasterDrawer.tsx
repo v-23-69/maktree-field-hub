@@ -8,12 +8,25 @@ import { toast } from 'sonner'
 import { CheckCircle2, AlertTriangle } from 'lucide-react'
 import type { Doctor } from '@/types/database.types'
 import { useDoctorDetail, useAddDoctorToSubArea, useUpdateDoctorDetail } from '@/hooks/useMasterList'
+import { useManagersForMr } from '@/hooks/useManagers'
+import { useMyDoctorDeletionRequests, useRequestDoctorDeletion } from '@/hooks/useDoctorDeletion'
+
+type VisitCadence = 'weekly' | 'fortnightly' | 'monthly'
+
+function visitFrequencyForSave(
+  v: VisitCadence | '',
+): VisitCadence | null {
+  if (v === 'weekly' || v === 'fortnightly' || v === 'monthly') return v
+  return null
+}
 
 interface Props {
   open: boolean
   onClose: () => void
   mrId: string
   subAreaId: string
+  /** Sub-area display name (add mode). */
+  subAreaName?: string
   doctorId: string | null
   doctor: Doctor | null
   onSaved: () => void
@@ -24,6 +37,7 @@ export default function DoctorMasterDrawer({
   onClose,
   mrId,
   subAreaId,
+  subAreaName,
   doctorId,
   doctor,
   onSaved,
@@ -31,10 +45,16 @@ export default function DoctorMasterDrawer({
   const { data: doctorDetail } = useDoctorDetail(open ? doctorId : null)
   const activeDoctor = doctorDetail ?? doctor
 
-  const isEdit = !!doctorId && !!activeDoctor
-
   const updateDoctor = useUpdateDoctorDetail()
   const addDoctor = useAddDoctorToSubArea()
+  const { data: managers = [] } = useManagersForMr(mrId)
+  const { data: myDeletionReqs = [] } = useMyDoctorDeletionRequests(mrId)
+  const requestDeletion = useRequestDoctorDeletion()
+
+  const isEdit = !!doctorId && !!activeDoctor
+  const pendingRemoval = isEdit
+    ? myDeletionReqs.find(r => r.doctor_id === doctorId && r.status === 'pending')
+    : undefined
 
   const [fullName, setFullName] = useState('')
   const [speciality, setSpeciality] = useState('')
@@ -44,10 +64,9 @@ export default function DoctorMasterDrawer({
   const [mobile, setMobile] = useState('')
   const [birthday, setBirthday] = useState('')
   const [marriageAnniversary, setMarriageAnniversary] = useState('')
-  const [visitFrequency, setVisitFrequency] = useState<
-    'weekly' | 'fortnightly' | 'monthly' | ''
-  >('')
-  const [monthlyVisitTarget, setMonthlyVisitTarget] = useState(4)
+  const [visitFrequency, setVisitFrequency] = useState<VisitCadence | ''>('')
+  const [monthlyVisitTarget, setMonthlyVisitTarget] = useState(2)
+  const [removalReason, setRemovalReason] = useState('')
 
   const canSave = useMemo(() => {
     if (!open) return false
@@ -70,14 +89,10 @@ export default function DoctorMasterDrawer({
     setMonthlyVisitTarget(
       typeof activeDoctor?.monthly_visit_target === 'number' && activeDoctor.monthly_visit_target > 0
         ? activeDoctor.monthly_visit_target
-        : 4,
+        : 2,
     )
+    setRemovalReason('')
   }, [open, activeDoctor])
-
-  useEffect(() => {
-    if (!open) return
-    if (!isEdit) return
-  }, [open, isEdit])
 
   const handleSave = async () => {
     try {
@@ -91,7 +106,7 @@ export default function DoctorMasterDrawer({
           mobile,
           birthday,
           marriage_anniversary: marriageAnniversary,
-          visit_frequency: visitFrequency ? (visitFrequency as any) : null,
+          visit_frequency: visitFrequencyForSave(visitFrequency),
           monthly_visit_target: monthlyVisitTarget,
           speciality,
         })
@@ -117,7 +132,7 @@ export default function DoctorMasterDrawer({
         mobile,
         birthday,
         marriage_anniversary: marriageAnniversary,
-        visit_frequency: visitFrequency ? (visitFrequency as any) : null,
+        visit_frequency: visitFrequencyForSave(visitFrequency),
         monthly_visit_target: monthlyVisitTarget,
       })
       toast.success('New doctor added')
@@ -128,8 +143,7 @@ export default function DoctorMasterDrawer({
     }
   }
 
-  const savePending =
-    updateDoctor.isPending || addDoctor.isPending
+  const savePending = updateDoctor.isPending || addDoctor.isPending
 
   return (
     <Drawer open={open} onOpenChange={v => { if (!v) onClose() }}>
@@ -155,7 +169,7 @@ export default function DoctorMasterDrawer({
                 )}
               </>
             ) : (
-              <span>Area: {subAreaId}</span>
+              <span>Area: {subAreaName?.trim() || '—'}</span>
             )}
           </div>
         </DrawerHeader>
@@ -279,7 +293,12 @@ export default function DoctorMasterDrawer({
             </Label>
             <select
               value={visitFrequency}
-              onChange={e => setVisitFrequency(e.target.value as any)}
+              onChange={e => {
+                const v = e.target.value
+                setVisitFrequency(
+                  v === 'weekly' || v === 'fortnightly' || v === 'monthly' ? v : '',
+                )
+              }}
               className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
             >
               <option value="">Not set</option>
@@ -288,6 +307,58 @@ export default function DoctorMasterDrawer({
               <option value="monthly">Monthly</option>
             </select>
           </div>
+
+          {isEdit && doctorId && (
+            <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Remove doctor from your list
+              </Label>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Sends a request to your manager. If they approve, this doctor is removed from active lists.
+              </p>
+              {pendingRemoval ? (
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Awaiting manager approval.</p>
+              ) : (
+                <>
+                  <Textarea
+                    value={removalReason}
+                    onChange={e => setRemovalReason(e.target.value)}
+                    placeholder="Optional note for your manager"
+                    className="touch-target rounded-lg min-h-[72px] text-sm"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full touch-target border-destructive/40 text-destructive hover:bg-destructive/10"
+                    disabled={requestDeletion.isPending}
+                    onClick={() =>
+                      void (async () => {
+                        try {
+                          await requestDeletion.mutateAsync({
+                            mr_id: mrId,
+                            doctor_id: doctorId,
+                            manager_id: managers[0]?.id ?? null,
+                            reason: removalReason,
+                          })
+                          toast.success('Removal request sent')
+                          setRemovalReason('')
+                        } catch (e) {
+                          const msg = e instanceof Error ? e.message : 'Request failed'
+                          if (/duplicate|unique|already|pending/i.test(msg)) {
+                            toast.error('A pending removal request already exists for this doctor.')
+                          } else {
+                            toast.error(msg)
+                          }
+                        }
+                      })()
+                    }
+                  >
+                    {requestDeletion.isPending ? 'Sending…' : 'Request removal'}
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="pt-2">
             <Button

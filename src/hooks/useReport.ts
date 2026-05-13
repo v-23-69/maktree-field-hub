@@ -1,9 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { monthDateRangeForSql } from '@/lib/dateUtils'
 import type {
   AllowedReportDate,
+  Chemist,
   DailyReport,
+  Doctor,
   ReportBlockStatus,
   ReportUnlockRequest,
   ReportVisit,
@@ -38,21 +41,21 @@ export async function loadReportVisits(
     .in('id', doctorIds)
   if (docErr) throw docErr
 
-  let chemists: any[] = []
+  let chemists: Chemist[] = []
   if (chemistIds.length > 0) {
     const { data: chemData, error: chemErr } = await client
       .from('chemists')
       .select('id, name, sub_area_id, is_active, created_at')
       .in('id', chemistIds)
     if (chemErr) throw chemErr
-    chemists = (chemData ?? []) as any[]
+    chemists = (chemData ?? []) as Chemist[]
   }
 
-  const doctorById = new Map<string, (typeof doctors)[number]>()
-  for (const d of doctors ?? []) doctorById.set((d as any).id, d as any)
+  const doctorById = new Map<string, Doctor>()
+  for (const d of (doctors ?? []) as Doctor[]) doctorById.set(d.id, d)
 
-  const chemistById = new Map<string, (typeof chemists)[number]>()
-  for (const c of chemists ?? []) chemistById.set((c as any).id, c as any)
+  const chemistById = new Map<string, Chemist>()
+  for (const c of chemists) chemistById.set(c.id, c)
 
   const { data: promotedRows, error: promotedErr } = await client
     .from('promoted_products')
@@ -68,7 +71,7 @@ export async function loadReportVisits(
 
   const { data: monthlyRows, error: monthlyErr } = await client
     .from('monthly_support_entries')
-    .select('id, visit_id, product_id, quantity')
+    .select('id, visit_id, product_id, quantity, amount_inr')
     .in('visit_id', visitIds)
   if (monthlyErr) throw monthlyErr
 
@@ -88,6 +91,7 @@ export async function loadReportVisits(
     visit_id: string
     product_id: string
     quantity: number
+    amount_inr: number | null
   }>
 
   const productIds = [
@@ -108,7 +112,7 @@ export async function loadReportVisits(
   }
 
   const productById = new Map<string, { id: string; name: string; ptr: number }>()
-  for (const p of products ?? []) productById.set((p as any).id, p as any)
+  for (const p of products) productById.set(p.id, p)
 
   // Assemble final shape expected by the UI.
   return v.map(visit => {
@@ -117,8 +121,8 @@ export async function loadReportVisits(
 
     return {
       ...visit,
-      doctor: doctor as any,
-      chemist: chemist as any,
+      doctor,
+      chemist,
       promoted_products: promoted
         .filter(pp => pp.visit_id === visit.id)
         .map(pp => ({
@@ -137,6 +141,7 @@ export async function loadReportVisits(
           visit_id: m.visit_id,
           product_id: m.product_id,
           quantity: m.quantity,
+          amount_inr: m.amount_inr ?? null,
           product: productById.get(m.product_id)
             ? { ...productById.get(m.product_id)!, is_active: true }
             : undefined,
@@ -304,12 +309,27 @@ export async function saveReportVisit(
 
   const monthly = visit.monthlySupport.filter(m => m.productId)
   if (monthly.length > 0) {
+    const productIds = [...new Set(monthly.map(m => m.productId))]
+    const { data: ptrRows, error: ptrErr } = await client.from('products').select('id, ptr').in('id', productIds)
+    if (ptrErr) throw ptrErr
+    const ptrById = new Map<string, number>(
+      (ptrRows ?? []).map((r: { id: string; ptr: number | null }) => [
+        r.id,
+        Math.round(Number(r.ptr ?? 0) * 100) / 100,
+      ]),
+    )
     const { error: me } = await client.from('monthly_support_entries').insert(
-      monthly.map(m => ({
-        visit_id: visitId,
-        product_id: m.productId,
-        quantity: Number(m.quantity) || 0,
-      })),
+      monthly.map(m => {
+        const qty = Number(m.quantity) || 0
+        const ptr = ptrById.get(m.productId) ?? 0
+        const amount = Math.round(ptr * qty * 100) / 100
+        return {
+          visit_id: visitId,
+          product_id: m.productId,
+          quantity: qty,
+          amount_inr: amount,
+        }
+      }),
     )
     if (me) throw me
   }
@@ -422,6 +442,8 @@ export function useSaveVisit() {
     onSuccess: (_data, input) => {
       queryClient.invalidateQueries({ queryKey: ['daily-report', input.reportId] })
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-support-aggregate'] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-support-manager-team'] })
     },
   })
 }
@@ -456,6 +478,8 @@ export function useSubmitReport() {
       queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
       queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
       queryClient.invalidateQueries({ queryKey: ['calls-speciality-analytics'] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-support-aggregate'] })
+      queryClient.invalidateQueries({ queryKey: ['monthly-support-manager-team'] })
     },
   })
 }
@@ -624,6 +648,152 @@ export function useRequestReportUnlock() {
     },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['report-block-status', vars.mrId] })
+    },
+  })
+}
+
+/** Saved monthly support totals for an MR in a calendar month (submitted DCRs only). */
+export type MonthlySupportMonthAggregate = {
+  month: string
+  total_inr: number
+  byDoctor: Array<{ doctor_id: string; full_name: string; total_inr: number }>
+}
+
+export async function aggregateMonthlySupportForMrInMonth(
+  client: SupabaseClient,
+  mrId: string,
+  monthYyyyMm: string,
+): Promise<MonthlySupportMonthAggregate> {
+  const { startInclusive, endExclusive } = monthDateRangeForSql(monthYyyyMm)
+  const { data: reports, error } = await client
+    .from('daily_reports')
+    .select('id')
+    .eq('mr_id', mrId)
+    .eq('status', 'submitted')
+    .gte('report_date', startInclusive)
+    .lt('report_date', endExclusive)
+  if (error) throw error
+  const reportIds = (reports ?? []).map(r => r.id as string)
+  if (reportIds.length === 0) {
+    return { month: monthYyyyMm, total_inr: 0, byDoctor: [] }
+  }
+  const { data: visits, error: vErr } = await client
+    .from('report_visits')
+    .select('id, doctor_id')
+    .in('report_id', reportIds)
+  if (vErr) throw vErr
+  const visitRows = (visits ?? []) as Array<{ id: string; doctor_id: string }>
+  const visitIds = visitRows.map(v => v.id)
+  const doctorByVisit = new Map(visitRows.map(v => [v.id, v.doctor_id]))
+  if (visitIds.length === 0) {
+    return { month: monthYyyyMm, total_inr: 0, byDoctor: [] }
+  }
+  const { data: mse, error: mErr } = await client
+    .from('monthly_support_entries')
+    .select('visit_id, amount_inr')
+    .in('visit_id', visitIds)
+  if (mErr) throw mErr
+  const doctorTotals = new Map<string, number>()
+  for (const row of (mse ?? []) as Array<{ visit_id: string; amount_inr: number | null }>) {
+    const docId = doctorByVisit.get(row.visit_id)
+    if (!docId) continue
+    const amt = Number(row.amount_inr ?? 0)
+    doctorTotals.set(docId, (doctorTotals.get(docId) ?? 0) + amt)
+  }
+  const doctorIds = [...doctorTotals.keys()]
+  const names = new Map<string, string>()
+  if (doctorIds.length > 0) {
+    const { data: docs, error: dErr } = await client.from('doctors').select('id, full_name').in('id', doctorIds)
+    if (dErr) throw dErr
+    for (const d of (docs ?? []) as Array<{ id: string; full_name: string | null }>) {
+      names.set(d.id, d.full_name?.trim() || 'Doctor')
+    }
+  }
+  let totalSum = 0
+  const byDoctor = [...doctorTotals.entries()]
+    .map(([doctor_id, raw]) => {
+      const line = Math.round(raw * 100) / 100
+      return { doctor_id, full_name: names.get(doctor_id) ?? 'Doctor', total_inr: line }
+    })
+    .sort((a, b) => a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' }))
+  for (const r of byDoctor) totalSum += r.total_inr
+  return { month: monthYyyyMm, total_inr: Math.round(totalSum * 100) / 100, byDoctor }
+}
+
+export type ManagerTeamMonthlySupportAggregate = {
+  month: string
+  total_inr: number
+  byMr: Array<{ mr_id: string; full_name: string; total_inr: number }>
+}
+
+/** Team MRs from `list_mrs_for_manager` (session); sums each MR's submitted monthly support for the month. */
+export async function aggregateMonthlySupportForManagerTeamInMonth(
+  client: SupabaseClient,
+  monthYyyyMm: string,
+): Promise<ManagerTeamMonthlySupportAggregate> {
+  const { data: team, error } = await client.rpc('list_mrs_for_manager')
+  if (error) throw error
+  const rows = (team ?? []) as Array<{ id: string; full_name: string | null }>
+  if (rows.length === 0) {
+    return { month: monthYyyyMm, total_inr: 0, byMr: [] }
+  }
+  const aggs = await Promise.all(rows.map(mr => aggregateMonthlySupportForMrInMonth(client, mr.id, monthYyyyMm)))
+  let total_inr = 0
+  const byMr: ManagerTeamMonthlySupportAggregate['byMr'] = []
+  for (let i = 0; i < rows.length; i++) {
+    const agg = aggs[i]
+    total_inr += agg.total_inr
+    if (agg.total_inr > 0) {
+      byMr.push({
+        mr_id: rows[i].id,
+        full_name: rows[i].full_name?.trim() || 'MR',
+        total_inr: agg.total_inr,
+      })
+    }
+  }
+  byMr.sort((a, b) => a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' }))
+  return { month: monthYyyyMm, total_inr: Math.round(total_inr * 100) / 100, byMr }
+}
+
+export function useMonthlySupportAggregateForMr(mrId: string, monthYyyyMm: string) {
+  return useQuery({
+    queryKey: ['monthly-support-aggregate', mrId, monthYyyyMm],
+    queryFn: () => {
+      if (!supabase) throw new Error('Supabase not configured')
+      return aggregateMonthlySupportForMrInMonth(supabase, mrId, monthYyyyMm)
+    },
+    enabled: !!mrId && !!supabase && !!monthYyyyMm,
+  })
+}
+
+export function useMonthlySupportAggregateForManagerTeam(managerId: string, monthYyyyMm: string) {
+  return useQuery({
+    queryKey: ['monthly-support-manager-team', managerId, monthYyyyMm],
+    queryFn: () => {
+      if (!supabase) throw new Error('Supabase not configured')
+      return aggregateMonthlySupportForManagerTeamInMonth(supabase, monthYyyyMm)
+    },
+    enabled: !!managerId && !!supabase && !!monthYyyyMm,
+  })
+}
+
+export type ReportVisitDaySummary = {
+  visit_count: number
+  doctors: Array<{ id: string; name: string }>
+}
+
+export function useReportVisitDaySummary(reportId: string | null) {
+  return useQuery({
+    queryKey: ['report-visit-day-summary', reportId],
+    enabled: !!reportId && !!supabase,
+    queryFn: async (): Promise<ReportVisitDaySummary> => {
+      if (!supabase || !reportId) throw new Error('Supabase not configured')
+      const visits = await loadReportVisits(supabase, reportId)
+      const doctors = visits.map(v => ({
+        id: v.doctor_id,
+        name: (v.doctor as { full_name?: string } | undefined)?.full_name?.trim() || 'Doctor',
+      }))
+      return { visit_count: visits.length, doctors }
     },
   })
 }

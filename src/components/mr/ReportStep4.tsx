@@ -20,7 +20,12 @@ import {
   useCreateReport,
   useSubmitReport,
 } from '@/hooks/useReport';
-import { useManagers, useWorkingWithReportOptions } from '@/hooks/useManagers';
+import {
+  useManagers,
+  useWorkingWithReportOptions,
+  type ManagerRow,
+  type WorkingWithOption,
+} from '@/hooks/useManagers';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 
@@ -75,7 +80,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
     id => subAreaNameById.get(id) ?? id,
   );
 
-  const colleagues = useMemo(() => {
+  const colleagues = useMemo((): Array<WorkingWithOption | ManagerRow> => {
     const ids = data.workingWithIds?.length
       ? data.workingWithIds
       : data.workingWithId
@@ -86,10 +91,8 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
       .map(id =>
         workingOpts.find(o => o.id === id) ?? managers.find(m => m.id === id),
       )
-      .filter(Boolean)
+      .filter((c): c is WorkingWithOption | ManagerRow => Boolean(c))
   }, [workingOpts, managers, data.workingWithIds, data.workingWithId])
-
-  const colleague = colleagues[0] ?? null
 
   const visitedDoctorIds = Object.keys(data.visits);
   const visitedDoctors = visitedDoctorIds
@@ -217,21 +220,28 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
             </div>
             <div className="flex flex-wrap gap-2">
               {colleagues.map(c => {
-                const photo = 'profile_photo_url' in c! ? (c as any).profile_photo_url : null
-                const initials = (c!.full_name ?? '').split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase()
-                const kind = 'option_kind' in c! ? (c as any).option_kind : ''
+                const photo = c.profile_photo_url ?? null
+                const initials = (c.full_name ?? '')
+                  .split(' ')
+                  .map((n: string) => n[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+                const kind = 'option_kind' in c ? c.option_kind : ''
                 return (
-                  <div key={c!.id} className="flex items-center gap-2 bg-muted/50 rounded-full pl-1 pr-3 py-1">
+                  <div key={c.id} className="flex items-center gap-2 bg-muted/50 rounded-full pl-1 pr-3 py-1">
                     {photo ? (
-                      <img src={photo} alt={c!.full_name} className="h-6 w-6 rounded-full object-cover" />
+                      <img src={photo} alt={c.full_name} className="h-6 w-6 rounded-full object-cover" />
                     ) : (
                       <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
                         <span className="text-[9px] font-bold text-primary">{initials}</span>
                       </div>
                     )}
-                    <span className="text-xs font-medium text-foreground">{c!.full_name}</span>
+                    <span className="text-xs font-medium text-foreground">{c.full_name}</span>
                     {kind === 'team_mr' && <span className="text-[10px] text-muted-foreground">(MR)</span>}
-                    {(kind === 'peer_manager' || kind === 'linked_manager') && <span className="text-[10px] text-muted-foreground">(Mgr)</span>}
+                    {(kind === 'peer_manager' || kind === 'linked_manager') && (
+                      <span className="text-[10px] text-muted-foreground">(Mgr)</span>
+                    )}
                   </div>
                 )
               })}
@@ -313,13 +323,10 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
                             Monthly support
                           </p>
-                          <p className="text-[10px] text-muted-foreground mb-1.5 leading-snug">
-                            Rupee-wise = PTR × qty (PTR from product master, set by manager).
-                          </p>
                           {visit.monthlySupport.filter(m => m.productId).map((ms, i) => {
                             const prod = products.find(p => p.id === ms.productId);
                             const ptr = prod?.ptr ?? 0;
-                            const rupeeWise = ptr * (ms.quantity || 0);
+                            const lineTotal = Math.round(ptr * (ms.quantity || 0) * 100) / 100;
                             return (
                               <div
                                 key={i}
@@ -331,19 +338,14 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                                   </span>
                                   {ptr > 0 ? (
                                     <span className="shrink-0 font-semibold text-primary tabular-nums">
-                                      Rs {rupeeWise.toLocaleString('en-IN')}
+                                      Rs {lineTotal.toLocaleString('en-IN')}
                                     </span>
                                   ) : (
                                     <span className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300">
-                                      PTR not set
+                                      Rate pending
                                     </span>
                                   )}
                                 </div>
-                                {ptr > 0 && (
-                                  <p className="text-[10px] text-muted-foreground tabular-nums">
-                                    Monthly support (rupee-wise): PTR Rs {ptr.toLocaleString('en-IN')} × {ms.quantity}
-                                  </p>
-                                )}
                               </div>
                             );
                           })}
@@ -355,11 +357,9 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                             const hasLines = visit.monthlySupport.some(m => m.productId);
                             return hasLines ? (
                               <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/50">
-                                <span className="text-[10px] font-semibold text-muted-foreground">
-                                  Total monthly support (rupee-wise)
-                                </span>
+                                <span className="text-[10px] font-semibold text-muted-foreground">Estimated total</span>
                                 <span className="text-xs font-bold text-primary tabular-nums">
-                                  Rs {total.toLocaleString('en-IN')}
+                                  Rs {(Math.round(total * 100) / 100).toLocaleString('en-IN')}
                                 </span>
                               </div>
                             ) : null;

@@ -212,33 +212,41 @@ export default function ReportDetail() {
                               <div>
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Monthly Support</p>
                                 <div className="rounded-lg border border-border overflow-x-auto max-w-full">
-                                  <table className="w-full text-xs min-w-[240px]">
+                                  <table className="w-full text-xs min-w-[200px]">
                                     <thead>
                                       <tr className="bg-muted/50">
                                         <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Product</th>
                                         <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
-                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">PTR</th>
-                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Rupee-wise</th>
+                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Amount (Rs)</th>
                                       </tr>
                                     </thead>
                                     <tbody>
                                       {monthly.map((row, i) => {
-                                        const ptr = row.product?.ptr ?? 0;
-                                        const rupeeWise = ptr * (row.quantity || 0);
+                                        const saved = Number(row.amount_inr ?? 0);
+                                        const fallback =
+                                          (row.product?.ptr ?? 0) * (row.quantity || 0);
+                                        const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
                                         return (
                                           <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
                                             <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
                                             <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
-                                            <td className="px-3 py-1.5 text-right text-muted-foreground">{ptr > 0 ? `Rs ${ptr}` : '—'}</td>
-                                            <td className="px-3 py-1.5 text-right font-semibold text-primary">{rupeeWise > 0 ? `Rs ${rupeeWise.toLocaleString('en-IN')}` : '—'}</td>
+                                            <td className="px-3 py-1.5 text-right font-semibold text-primary">
+                                              {amount > 0 ? `Rs ${amount.toLocaleString('en-IN')}` : '—'}
+                                            </td>
                                           </tr>
                                         );
                                       })}
                                       {(() => {
-                                        const total = monthly.reduce((sum, row) => sum + ((row.product?.ptr ?? 0) * (row.quantity || 0)), 0);
+                                        const total = monthly.reduce((sum, row) => {
+                                          const saved = Number(row.amount_inr ?? 0);
+                                          const fallback =
+                                            (row.product?.ptr ?? 0) * (row.quantity || 0);
+                                          const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
+                                          return sum + amount;
+                                        }, 0);
                                         return total > 0 ? (
                                           <tr className="border-t border-border bg-primary/5">
-                                            <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]">Total Rupee-wise</td>
+                                            <td colSpan={2} className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]">Total</td>
                                             <td className="px-3 py-1.5 text-right font-bold text-primary">Rs {total.toLocaleString('en-IN')}</td>
                                           </tr>
                                         ) : null;

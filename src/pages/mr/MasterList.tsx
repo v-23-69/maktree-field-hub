@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Plus } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -127,6 +127,17 @@ export default function MasterList() {
     setDrawerOpen(true)
   }
 
+  const openAddForSubArea = (subAreaId: string) => {
+    setDrawerDoctorId(null)
+    setDrawerSubAreaId(subAreaId)
+    setDrawerOpen(true)
+  }
+
+  const drawerSubAreaName = useMemo(
+    () => filteredSubAreas.find(sa => sa.id === drawerSubAreaId)?.name,
+    [filteredSubAreas, drawerSubAreaId],
+  )
+
   const activeDoctor = useMemo(() => {
     if (!drawerDoctorId) return null
     return doctors.find(d => d.id === drawerDoctorId) ?? null
@@ -172,6 +183,7 @@ export default function MasterList() {
     await queryClient.invalidateQueries({ queryKey: ['doctor-detail'] })
     await queryClient.invalidateQueries({ queryKey: ['master-list-completion'] })
     await queryClient.invalidateQueries({ queryKey: ['mr-doctors'] })
+    await queryClient.invalidateQueries({ queryKey: ['doctor-deletion-requests-mr', mrId] })
   }
 
   return (
@@ -289,9 +301,17 @@ export default function MasterList() {
                           )
                         })
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full touch-target rounded-xl border-dashed"
+                        onClick={() => openAddForSubArea(sa.id)}
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add doctor
+                      </Button>
                     </div>
 
-                    
                   </section>
                 )
               })}
@@ -305,6 +325,7 @@ export default function MasterList() {
         onClose={() => setDrawerOpen(false)}
         mrId={mrId}
         subAreaId={drawerSubAreaId}
+        subAreaName={drawerSubAreaName}
         doctorId={drawerDoctorId}
         doctor={activeDoctor}
         onSaved={async () => void onSaved()}

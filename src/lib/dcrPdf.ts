@@ -17,8 +17,10 @@ function visitBlockText(v: ReportVisit): string {
     .filter(Boolean) as string[]
   if (products.length) lines.push(`Products promoted: ${products.join(', ')}`)
   const ms = (v.monthly_support_entries ?? []).map(m => {
+    const saved = Number((m as { amount_inr?: number | null }).amount_inr ?? 0)
     const ptr = (m.product as { ptr?: number } | undefined)?.ptr ?? 0
-    const rupee = ptr * (m.quantity || 0)
+    const fallback = Math.round(ptr * (m.quantity || 0) * 100) / 100
+    const rupee = saved > 0 ? saved : fallback
     return `${m.product?.name ?? ''} (qty ${m.quantity ?? 0}${rupee > 0 ? `, Rs ${rupee}` : ''})`
   })
   if (ms.length) lines.push(`Monthly support: ${ms.join('; ')}`)

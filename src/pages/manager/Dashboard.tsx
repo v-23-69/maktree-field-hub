@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, type LucideIcon } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, PiggyBank, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -28,7 +28,7 @@ import { useTpStatus, useTodayTpPlan, useUnpauseUser } from '@/hooks/useTourProg
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
-import { useAllowedReportDates } from '@/hooks/useReport';
+import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport';
 import { useExpenseReport } from '@/hooks/useExpense';
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -99,6 +99,11 @@ export default function ManagerDashboard() {
 
   const { data: mgrAllowedDates = [] } = useAllowedReportDates(user?.id ?? '');
   const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === todayInputDate())?.already_submitted === true;
+  const teamMonthYyyyMm = todayInputDate().slice(0, 7);
+  const { data: teamMonthlySupport } = useMonthlySupportAggregateForManagerTeam(
+    deferReady ? (user?.id ?? '') : '',
+    teamMonthYyyyMm,
+  );
 
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
@@ -259,7 +264,7 @@ export default function ManagerDashboard() {
   ]
 
   const moreActions: { key: QuickAction; label: string; icon: LucideIcon }[] = [
-    { key: 'set-ptr', label: 'Product PTR', icon: IndianRupee },
+    { key: 'set-ptr', label: 'Brand rates', icon: IndianRupee },
     { key: 'doctor', label: 'Add Doctor', icon: Stethoscope },
     { key: 'area', label: 'New Territory', icon: MapPin },
     { key: 'subarea', label: 'New Area', icon: MapPinned },
@@ -453,6 +458,30 @@ export default function ManagerDashboard() {
           <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="This Month" color="blue" />
           <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" color="amber" />
         </div>
+
+        {deferReady && user?.id && (
+          <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">Team monthly support (this month)</p>
+              <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+            <p className="text-xl font-bold text-primary tabular-nums">
+              Rs {(teamMonthlySupport?.total_inr ?? 0).toLocaleString('en-IN')}
+            </p>
+            {(teamMonthlySupport?.byMr ?? []).length > 0 && (
+              <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
+                {(teamMonthlySupport?.byMr ?? []).map(row => (
+                  <div key={row.mr_id} className="flex justify-between gap-2">
+                    <span className="text-foreground truncate min-w-0">{row.full_name}</span>
+                    <span className="font-semibold text-primary tabular-nums shrink-0">
+                      Rs {row.total_inr.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Self Report CTA */}
         {!mgrTodayDcrDone && (
@@ -718,7 +747,7 @@ export default function ManagerDashboard() {
               {action === 'assign-self' && 'Assign Area to Self'}
               {action === 'create-mr' && 'Create New MR'}
               {action === 'delete-mr' && 'Delete MR'}
-              {action === 'set-ptr' && 'Set product PTR (price per unit)'}
+              {action === 'set-ptr' && 'Set brand rates (per unit)'}
               {action === 'strike' && 'Mark Strike Day'}
               {action === 'holiday' && 'Mark Holiday'}
             </DrawerTitle>
@@ -1062,13 +1091,10 @@ export default function ManagerDashboard() {
             {action === 'set-ptr' && (
               <>
                 <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-foreground leading-relaxed">
-                  <p className="font-semibold text-foreground mb-1">What is PTR?</p>
+                  <p className="font-semibold text-foreground mb-1">Brand rates</p>
                   <p className="text-muted-foreground">
-                    PTR is the <span className="font-medium text-foreground">price per unit</span> (rupees) for each
-                    company brand. MRs choose brand and quantity in the DCR under monthly support;{' '}
-                    <span className="font-medium text-foreground">monthly support (rupee-wise)</span> is calculated as{' '}
-                    <span className="font-medium text-foreground">PTR × quantity</span> and shown on reports. Only you
-                    (and admins) should maintain PTR so figures stay accurate.
+                    Enter the rupee rate per unit for each company brand. These values are used internally when MRs
+                    record monthly support on submitted DCRs so totals stay consistent. Keep them up to date.
                   </p>
                 </div>
                 <div className="space-y-3">
@@ -1085,8 +1111,8 @@ export default function ManagerDashboard() {
                             const val = parseFloat(e.target.value) || 0;
                             if (val !== (p.ptr ?? 0)) {
                               updatePtr.mutate({ productId: p.id, ptr: val }, {
-                                onSuccess: () => toast.success(`PTR updated for ${p.name}`),
-                                onError: () => toast.error('Failed to update PTR'),
+                                onSuccess: () => toast.success(`Rate updated for ${p.name}`),
+                                onError: () => toast.error('Failed to update rate'),
                               });
                             }
                           }}

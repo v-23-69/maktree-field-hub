@@ -838,7 +838,7 @@ export default function ManagerReports() {
                                         Monthly Support
                                       </p>
                                       <div className="rounded-lg border border-border overflow-x-auto max-w-full">
-                                        <table className="w-full text-xs min-w-[240px]">
+                                        <table className="w-full text-xs min-w-[200px]">
                                           <thead>
                                             <tr className="bg-muted/50">
                                               <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">
@@ -848,17 +848,16 @@ export default function ManagerReports() {
                                                 Qty
                                               </th>
                                               <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
-                                                PTR
-                                              </th>
-                                              <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
-                                                Rupee-wise
+                                                Amount (Rs)
                                               </th>
                                             </tr>
                                           </thead>
                                           <tbody>
                                             {monthly.map((row, i) => {
+                                              const saved = Number((row as { amount_inr?: number | null }).amount_inr ?? 0);
                                               const ptr = (row.product as { ptr?: number })?.ptr ?? 0;
-                                              const rupeeWise = ptr * (row.quantity || 0);
+                                              const fallback = ptr * (row.quantity || 0);
+                                              const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
                                               return (
                                                 <tr
                                                   key={row.id ?? i}
@@ -870,32 +869,27 @@ export default function ManagerReports() {
                                                   <td className="px-3 py-1.5 text-right text-foreground">
                                                     {row.quantity}
                                                   </td>
-                                                  <td className="px-3 py-1.5 text-right text-muted-foreground">
-                                                    {ptr > 0 ? `Rs ${ptr}` : '—'}
-                                                  </td>
                                                   <td className="px-3 py-1.5 text-right font-semibold text-primary">
-                                                    {rupeeWise > 0
-                                                      ? `Rs ${rupeeWise.toLocaleString('en-IN')}`
-                                                      : '—'}
+                                                    {amount > 0 ? `Rs ${amount.toLocaleString('en-IN')}` : '—'}
                                                   </td>
                                                 </tr>
                                               );
                                             })}
                                             {(() => {
-                                              const total = monthly.reduce(
-                                                (sum, row) =>
-                                                  sum +
-                                                  (((row.product as { ptr?: number })?.ptr ?? 0) *
-                                                    (row.quantity || 0)),
-                                                0,
-                                              );
+                                              const total = monthly.reduce((sum, row) => {
+                                                const saved = Number((row as { amount_inr?: number | null }).amount_inr ?? 0);
+                                                const ptr = (row.product as { ptr?: number })?.ptr ?? 0;
+                                                const fallback = ptr * (row.quantity || 0);
+                                                const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
+                                                return sum + amount;
+                                              }, 0);
                                               return total > 0 ? (
                                                 <tr className="border-t border-border bg-primary/5">
                                                   <td
-                                                    colSpan={3}
+                                                    colSpan={2}
                                                     className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]"
                                                   >
-                                                    Total Rupee-wise
+                                                    Total
                                                   </td>
                                                   <td className="px-3 py-1.5 text-right font-bold text-primary">
                                                     Rs {total.toLocaleString('en-IN')}

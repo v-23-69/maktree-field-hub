@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDisplayDate, todayInputDate, formatInputDate, lastDayOfMonthYyyyMmDd } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Download, Umbrella, BarChart3 } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Download, Umbrella, BarChart3, PiggyBank } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
@@ -23,7 +23,7 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
-import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange } from '@/hooks/useReport';
+import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr } from '@/hooks/useReport';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
@@ -123,6 +123,11 @@ export default function MRDashboard() {
 
   const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
   const { data: vfProgress } = useVisitFrequencyProgress(userId, todayInputDate(), deferReady);
+  const currentMonthYyyyMm = todayInputDate().slice(0, 7);
+  const { data: monthlySupportAgg } = useMonthlySupportAggregateForMr(
+    deferReady ? userId : '',
+    currentMonthYyyyMm,
+  );
   const [callPreset, setCallPreset] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('monthly');
   const { data: callAnalytics } = useCallsAndSpecialityAnalytics([userId], callPreset, todayInputDate(), deferReady);
 
@@ -600,6 +605,30 @@ export default function MRDashboard() {
             )}
           </div>
         </div>
+
+        {deferReady && userId && (
+          <div className="glass-card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="section-title">Monthly support (this month)</p>
+              <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+            <p className="text-2xl font-bold text-primary tabular-nums">
+              Rs {(monthlySupportAgg?.total_inr ?? 0).toLocaleString('en-IN')}
+            </p>
+            {(monthlySupportAgg?.byDoctor ?? []).length > 0 && (
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {(monthlySupportAgg?.byDoctor ?? []).map(d => (
+                  <div key={d.doctor_id} className="flex items-center justify-between text-xs gap-2">
+                    <span className="text-foreground truncate min-w-0">{d.full_name}</span>
+                    <span className="font-semibold text-primary tabular-nums shrink-0">
+                      Rs {d.total_inr.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Daily Checklist */}
         <div className="glass-card p-4 space-y-3">

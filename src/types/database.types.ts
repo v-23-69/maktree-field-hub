@@ -152,7 +152,25 @@ export interface MonthlySupportEntry {
   visit_id: string
   product_id: string
   quantity: number
+  /** Saved line total (INR) at submit time; PTR is not exposed in UI. */
+  amount_inr?: number | null
   product?: Product
+}
+
+/** MR requests removal of a doctor; manager approves → doctor deactivated. */
+export interface DoctorDeletionRequest {
+  id: string
+  mr_id: string
+  doctor_id: string
+  manager_id: string | null
+  status: 'pending' | 'approved' | 'rejected'
+  reason: string | null
+  manager_note: string | null
+  approved_by: string | null
+  created_at: string
+  resolved_at: string | null
+  mr?: Pick<User, 'id' | 'full_name' | 'employee_code'>
+  doctor?: Pick<Doctor, 'id' | 'full_name' | 'speciality' | 'sub_area_id'>
 }
 
 export interface MrManagerMap {
@@ -212,6 +230,7 @@ export interface MonthlySupport {
   visit_id: string
   product_id: string
   quantity: number
+  amount_inr?: number | null
   product?: Product
 }
 

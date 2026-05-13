@@ -174,18 +174,14 @@ export default function DoctorVisitDrawer({
               Monthly support
             </Label>
             <p className="text-[11px] text-muted-foreground mt-1 mb-2 leading-relaxed">
-              Choose brand and quantity.{' '}
-              <span className="font-medium text-foreground">Monthly support (rupee-wise)</span> is{' '}
-              <span className="font-medium text-foreground">PTR × quantity</span> for each line. PTR (price per unit)
-              is entered by your manager under <span className="font-medium">Set Product PTR</span> on the manager
-              dashboard.
+              Choose brand and quantity for each line. Line amounts are saved when you submit the DCR.
             </p>
             <div className="space-y-2 mt-2">
               {monthlySupport.map((ms, i) => {
                 const selectedProduct = products.find(p => p.id === ms.productId);
                 const ptr = selectedProduct?.ptr ?? 0;
-                const rupeeWise = ptr * (ms.quantity || 0);
-                const showRupeeBlock = ms.productId && (ms.quantity || 0) > 0;
+                const lineTotal = Math.round(ptr * (ms.quantity || 0) * 100) / 100;
+                const showAmount = ms.productId && (ms.quantity || 0) > 0;
                 return (
                   <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2 border border-border/60">
                     <div className="flex items-center gap-2">
@@ -202,7 +198,6 @@ export default function DoctorVisitDrawer({
                         {products.map(p => (
                           <option key={p.id} value={p.id}>
                             {p.name}
-                            {typeof p.ptr === 'number' && p.ptr > 0 ? ` — PTR Rs ${p.ptr}` : ''}
                           </option>
                         ))}
                       </select>
@@ -235,26 +230,22 @@ export default function DoctorVisitDrawer({
                         </button>
                       )}
                     </div>
-                    {showRupeeBlock && ptr > 0 && (
+                    {showAmount && ptr > 0 && (
                       <div className="rounded-lg bg-background/80 border border-primary/15 px-3 py-2 space-y-0.5">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Monthly support (rupee-wise)
+                          Line total
                         </p>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] text-muted-foreground tabular-nums">
-                            PTR Rs {ptr.toLocaleString('en-IN')} × {ms.quantity} qty
-                          </span>
+                        <div className="flex items-center justify-end gap-2">
                           <span className="text-sm font-bold text-primary tabular-nums">
-                            Rs {rupeeWise.toLocaleString('en-IN')}
+                            Rs {lineTotal.toLocaleString('en-IN')}
                           </span>
                         </div>
                       </div>
                     )}
-                    {showRupeeBlock && ptr <= 0 && (
+                    {showAmount && ptr <= 0 && (
                       <p className="text-[11px] text-amber-800 dark:text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2 leading-snug">
-                        PTR is not set for this product, so rupee-wise support cannot be calculated. Ask your manager
-                        to open <span className="font-semibold">Quick actions → Set Product PTR</span> and enter the
-                        brand&apos;s PTR (price per unit).
+                        Pricing is not set for this product yet. Ask your manager to update brand rates in quick
+                        actions so amounts can be recorded.
                       </p>
                     )}
                   </div>
@@ -266,11 +257,12 @@ export default function DoctorVisitDrawer({
                   return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
                 }, 0);
                 const hasAnyQty = monthlySupport.some(ms => ms.productId && (ms.quantity || 0) > 0);
+                const rounded = Math.round(totalRupeeWise * 100) / 100;
                 return hasAnyQty ? (
                   <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
-                    <span className="text-xs font-semibold text-foreground">Total monthly support (rupee-wise)</span>
+                    <span className="text-xs font-semibold text-foreground">Estimated total</span>
                     <span className="text-sm font-bold text-primary tabular-nums">
-                      Rs {totalRupeeWise.toLocaleString('en-IN')}
+                      Rs {rounded.toLocaleString('en-IN')}
                     </span>
                   </div>
                 ) : null;
