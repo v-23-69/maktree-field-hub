@@ -40,7 +40,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsBySubAreas(data.selectedSubAreaIds);
   const { data: subAreasFlat = [], isLoading: subAreasLoading } = useMrSubAreas(user?.id ?? '');
-  const { data: workingOpts = [] } = useWorkingWithReportOptions(user?.id);
+  const { data: workingOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role);
   const { data: managers = [] } = useManagers();
 
   const createReport = useCreateReport();
@@ -112,6 +112,20 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
       return;
     }
 
+    const rawWorkingIds =
+      data.workingWithIds?.length
+        ? data.workingWithIds
+        : data.workingWithId
+          ? [data.workingWithId]
+          : [];
+    const managerIdsForSave =
+      user.role === 'mr'
+        ? rawWorkingIds.filter(id => {
+            const o = workingOpts.find(x => x.id === id) ?? managers.find(m => m.id === id);
+            return o?.role === 'manager';
+          })
+        : rawWorkingIds;
+
     setIsSubmitting(true);
     try {
       const existing = await findExistingDailyReport(
@@ -131,8 +145,8 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
       } else {
         const row = await createReport.mutateAsync({
           mrId: user.id,
-          managerId: data.workingWithIds?.[0] || data.workingWithId || null,
-          workingWithIds: data.workingWithIds ?? (data.workingWithId ? [data.workingWithId] : []),
+          managerId: managerIdsForSave[0] ?? null,
+          workingWithIds: managerIdsForSave,
           reportDate: data.date,
         });
         reportId = row.id;
@@ -266,6 +280,9 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                           {visit.productsPromoted.length > 0 && (
                             <span>• {visit.productsPromoted.length} products</span>
                           )}
+                          {visit.monthlySupport.some(m => m.productId) && (
+                            <span>• monthly support</span>
+                          )}
                           {visit.competitors.some(c => c.brandName.trim()) && (
                             <span>• {visit.competitors.filter(c => c.brandName.trim()).length} competitors</span>
                           )}
@@ -291,25 +308,42 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                           </div>
                         </div>
                       )}
-                      {visit.competitors.some(c => c.brandName.trim()) && (
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Competitors</p>
-                          {visit.competitors.filter(c => c.brandName.trim()).map((c, i) => (
-                            <p key={i} className="text-xs text-foreground">{c.brandName} — {c.quantity} units</p>
-                          ))}
-                        </div>
-                      )}
                       {visit.monthlySupport.some(m => m.productId) && (
                         <div>
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Monthly Support</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
+                            Monthly support
+                          </p>
+                          <p className="text-[10px] text-muted-foreground mb-1.5 leading-snug">
+                            Rupee-wise = PTR × qty (PTR from product master, set by manager).
+                          </p>
                           {visit.monthlySupport.filter(m => m.productId).map((ms, i) => {
                             const prod = products.find(p => p.id === ms.productId);
                             const ptr = prod?.ptr ?? 0;
                             const rupeeWise = ptr * (ms.quantity || 0);
                             return (
-                              <div key={i} className="flex items-center justify-between text-xs text-foreground">
-                                <span>{productName(ms.productId)} — {ms.quantity} units</span>
-                                {rupeeWise > 0 && <span className="font-semibold text-primary">Rs {rupeeWise.toLocaleString('en-IN')}</span>}
+                              <div
+                                key={i}
+                                className="flex flex-col gap-0.5 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5 mb-1.5 last:mb-0"
+                              >
+                                <div className="flex items-center justify-between gap-2 text-xs text-foreground">
+                                  <span className="min-w-0 truncate font-medium">
+                                    {productName(ms.productId)} — {ms.quantity} qty
+                                  </span>
+                                  {ptr > 0 ? (
+                                    <span className="shrink-0 font-semibold text-primary tabular-nums">
+                                      Rs {rupeeWise.toLocaleString('en-IN')}
+                                    </span>
+                                  ) : (
+                                    <span className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300">
+                                      PTR not set
+                                    </span>
+                                  )}
+                                </div>
+                                {ptr > 0 && (
+                                  <p className="text-[10px] text-muted-foreground tabular-nums">
+                                    Monthly support (rupee-wise): PTR Rs {ptr.toLocaleString('en-IN')} × {ms.quantity}
+                                  </p>
+                                )}
                               </div>
                             );
                           })}
@@ -318,13 +352,26 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
                               const p = products.find(pr => pr.id === ms.productId);
                               return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
                             }, 0);
-                            return total > 0 ? (
-                              <div className="flex items-center justify-between mt-1 pt-1 border-t border-border/50">
-                                <span className="text-[10px] font-semibold text-muted-foreground">Total Rupee-wise</span>
-                                <span className="text-xs font-bold text-primary">Rs {total.toLocaleString('en-IN')}</span>
+                            const hasLines = visit.monthlySupport.some(m => m.productId);
+                            return hasLines ? (
+                              <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/50">
+                                <span className="text-[10px] font-semibold text-muted-foreground">
+                                  Total monthly support (rupee-wise)
+                                </span>
+                                <span className="text-xs font-bold text-primary tabular-nums">
+                                  Rs {total.toLocaleString('en-IN')}
+                                </span>
                               </div>
                             ) : null;
                           })()}
+                        </div>
+                      )}
+                      {visit.competitors.some(c => c.brandName.trim()) && (
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">Competitors</p>
+                          {visit.competitors.filter(c => c.brandName.trim()).map((c, i) => (
+                            <p key={i} className="text-xs text-foreground">{c.brandName} — {c.quantity} units</p>
+                          ))}
                         </div>
                       )}
                     </div>

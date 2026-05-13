@@ -58,6 +58,7 @@ export function useUpdateDoctorDetail() {
       birthday: string
       marriage_anniversary: string
       visit_frequency: 'weekly' | 'fortnightly' | 'monthly' | null
+      monthly_visit_target: number
       speciality: string
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
@@ -70,6 +71,7 @@ export function useUpdateDoctorDetail() {
         birthday: p.birthday ? p.birthday : null,
         marriage_anniversary: p.marriage_anniversary ? p.marriage_anniversary : null,
         visit_frequency: p.visit_frequency,
+        monthly_visit_target: Math.min(99, Math.max(1, Math.round(p.monthly_visit_target))),
         speciality: normalizeNullableString(p.speciality),
       }).eq('id', p.doctorId)
 
@@ -79,6 +81,7 @@ export function useUpdateDoctorDetail() {
       queryClient.invalidateQueries({ queryKey: ['doctor-detail', vars.doctorId] })
       queryClient.invalidateQueries({ queryKey: ['master-list-completion'] })
       queryClient.invalidateQueries({ queryKey: ['mr-doctors'] })
+      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
     },
   })
 }
@@ -98,6 +101,7 @@ export function useAddDoctorToSubArea() {
       birthday: string
       marriage_anniversary: string
       visit_frequency: 'weekly' | 'fortnightly' | 'monthly' | null
+      monthly_visit_target: number
     }): Promise<{ id: string }> => {
       if (!supabase) throw new Error('Supabase not configured')
 
@@ -114,6 +118,7 @@ export function useAddDoctorToSubArea() {
           birthday: p.birthday ? p.birthday : null,
           marriage_anniversary: p.marriage_anniversary ? p.marriage_anniversary : null,
           visit_frequency: p.visit_frequency,
+          monthly_visit_target: Math.min(99, Math.max(1, Math.round(p.monthly_visit_target))),
           doctor_code: '',
           is_active: true,
         })
@@ -144,6 +149,7 @@ export function useAddDoctorToSubArea() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['master-list-completion'] })
       queryClient.invalidateQueries({ queryKey: ['mr-doctors'] })
+      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
     },
   })
 }

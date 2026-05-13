@@ -171,6 +171,129 @@ export default function DoctorVisitDrawer({
 
           <div>
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Monthly support
+            </Label>
+            <p className="text-[11px] text-muted-foreground mt-1 mb-2 leading-relaxed">
+              Choose brand and quantity.{' '}
+              <span className="font-medium text-foreground">Monthly support (rupee-wise)</span> is{' '}
+              <span className="font-medium text-foreground">PTR × quantity</span> for each line. PTR (price per unit)
+              is entered by your manager under <span className="font-medium">Set Product PTR</span> on the manager
+              dashboard.
+            </p>
+            <div className="space-y-2 mt-2">
+              {monthlySupport.map((ms, i) => {
+                const selectedProduct = products.find(p => p.id === ms.productId);
+                const ptr = selectedProduct?.ptr ?? 0;
+                const rupeeWise = ptr * (ms.quantity || 0);
+                const showRupeeBlock = ms.productId && (ms.quantity || 0) > 0;
+                return (
+                  <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2 border border-border/60">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={ms.productId}
+                        onChange={e => {
+                          const next = [...monthlySupport];
+                          next[i] = { ...next[i], productId: e.target.value };
+                          setMonthlySupport(next);
+                        }}
+                        className="flex-1 h-9 rounded-lg border border-input bg-card px-2 text-sm"
+                      >
+                        <option value="">Select brand / product</option>
+                        {products.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                            {typeof p.ptr === 'number' && p.ptr > 0 ? ` — PTR Rs ${p.ptr}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={ms.quantity || ''}
+                        onChange={e => {
+                          const next = [...monthlySupport];
+                          next[i] = {
+                            ...next[i],
+                            quantity: parseInt(e.target.value, 10) || 0,
+                          };
+                          setMonthlySupport(next);
+                        }}
+                        placeholder="Qty"
+                        className="w-16 rounded-lg text-sm h-9"
+                        aria-label="Monthly support quantity"
+                      />
+                      {monthlySupport.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMonthlySupport(monthlySupport.filter((_, j) => j !== i))
+                          }
+                          className="text-destructive p-1.5 shrink-0"
+                          aria-label="Remove row"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                    {showRupeeBlock && ptr > 0 && (
+                      <div className="rounded-lg bg-background/80 border border-primary/15 px-3 py-2 space-y-0.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Monthly support (rupee-wise)
+                        </p>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-muted-foreground tabular-nums">
+                            PTR Rs {ptr.toLocaleString('en-IN')} × {ms.quantity} qty
+                          </span>
+                          <span className="text-sm font-bold text-primary tabular-nums">
+                            Rs {rupeeWise.toLocaleString('en-IN')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {showRupeeBlock && ptr <= 0 && (
+                      <p className="text-[11px] text-amber-800 dark:text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2 leading-snug">
+                        PTR is not set for this product, so rupee-wise support cannot be calculated. Ask your manager
+                        to open <span className="font-semibold">Quick actions → Set Product PTR</span> and enter the
+                        brand&apos;s PTR (price per unit).
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              {(() => {
+                const totalRupeeWise = monthlySupport.reduce((sum, ms) => {
+                  const p = products.find(pr => pr.id === ms.productId);
+                  return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
+                }, 0);
+                const hasAnyQty = monthlySupport.some(ms => ms.productId && (ms.quantity || 0) > 0);
+                return hasAnyQty ? (
+                  <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
+                    <span className="text-xs font-semibold text-foreground">Total monthly support (rupee-wise)</span>
+                    <span className="text-sm font-bold text-primary tabular-nums">
+                      Rs {totalRupeeWise.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={() =>
+                  setMonthlySupport([
+                    ...monthlySupport,
+                    { productId: '', quantity: 0 },
+                  ])
+                }
+                className="w-full rounded-lg text-xs"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
+              </Button>
+            </div>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Competitor Survey
             </Label>
             <div className="space-y-2 mt-2">
@@ -225,104 +348,6 @@ export default function DoctorVisitDrawer({
                 className="w-full rounded-lg text-xs"
               >
                 <Plus className="h-3.5 w-3.5 mr-1" /> Add Competitor
-              </Button>
-            </div>
-          </div>
-
-          <div>
-            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Monthly Support
-            </Label>
-            <div className="space-y-2 mt-2">
-              {monthlySupport.map((ms, i) => {
-                const selectedProduct = products.find(p => p.id === ms.productId);
-                const ptr = selectedProduct?.ptr ?? 0;
-                const rupeeWise = ptr * (ms.quantity || 0);
-                return (
-                  <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={ms.productId}
-                        onChange={e => {
-                          const next = [...monthlySupport];
-                          next[i] = { ...next[i], productId: e.target.value };
-                          setMonthlySupport(next);
-                        }}
-                        className="flex-1 h-9 rounded-lg border border-input bg-card px-2 text-sm"
-                      >
-                        <option value="">Select product</option>
-                        {products.map(p => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}{p.ptr ? ` (PTR: Rs ${p.ptr})` : ''}
-                          </option>
-                        ))}
-                      </select>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={ms.quantity || ''}
-                        onChange={e => {
-                          const next = [...monthlySupport];
-                          next[i] = {
-                            ...next[i],
-                            quantity: parseInt(e.target.value, 10) || 0,
-                          };
-                          setMonthlySupport(next);
-                        }}
-                        placeholder="Qty"
-                        className="w-16 rounded-lg text-sm h-9"
-                      />
-                      {monthlySupport.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setMonthlySupport(monthlySupport.filter((_, j) => j !== i))
-                          }
-                          className="text-destructive p-1.5 shrink-0"
-                          aria-label="Remove row"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                    {ms.productId && ms.quantity > 0 && ptr > 0 && (
-                      <div className="flex items-center justify-between px-1">
-                        <span className="text-[10px] text-muted-foreground">
-                          PTR Rs {ptr} x {ms.quantity} qty
-                        </span>
-                        <span className="text-xs font-bold text-primary">
-                          Rs {rupeeWise.toLocaleString('en-IN')}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {(() => {
-                const totalRupeeWise = monthlySupport.reduce((sum, ms) => {
-                  const p = products.find(pr => pr.id === ms.productId);
-                  return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
-                }, 0);
-                return totalRupeeWise > 0 ? (
-                  <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
-                    <span className="text-xs font-semibold text-foreground">Total Rupee-wise</span>
-                    <span className="text-sm font-bold text-primary">Rs {totalRupeeWise.toLocaleString('en-IN')}</span>
-                  </div>
-                ) : null;
-              })()}
-              <Button
-                variant="outline"
-                size="sm"
-                type="button"
-                onClick={() =>
-                  setMonthlySupport([
-                    ...monthlySupport,
-                    { productId: '', quantity: 0 },
-                  ])
-                }
-                className="w-full rounded-lg text-xs"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Product
               </Button>
             </div>
           </div>

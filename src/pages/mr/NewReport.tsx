@@ -7,10 +7,12 @@ import ReportStep1 from '@/components/mr/ReportStep1';
 import ReportStep2 from '@/components/mr/ReportStep2';
 import ReportStep3 from '@/components/mr/ReportStep3';
 import ReportStep4 from '@/components/mr/ReportStep4';
+import ReportLeaveDcrStep from '@/components/mr/ReportLeaveDcrStep';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useReportBlockStatus, useRequestReportUnlock } from '@/hooks/useReport';
 import { useTpStatus } from '@/hooks/useTourProgram';
+import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
@@ -35,9 +37,14 @@ export interface ReportFormData {
   selectedSubAreaIds: string[]
   visits: Record<string, VisitFormEntry>
   tpAutoFilled?: boolean
+  /** MR: 'leave' when selected date is an approved full-day leave (Leave DCR flow). */
+  reportKind?: 'field' | 'leave'
+  leaveDcrCategory?: 'casual' | 'sick' | ''
+  leaveDcrRemark?: string
 }
 
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
+const LEAVE_STEPS = ['Date', 'Leave DCR'];
 const DRAFT_KEY = 'maktree_report_draft';
 
 function migrateDraft(raw: unknown): ReportFormData | null {
@@ -58,6 +65,10 @@ function migrateDraft(raw: unknown): ReportFormData | null {
     visits: typeof o.visits === 'object' && o.visits !== null
       ? migrateVisits(o.visits as Record<string, unknown>)
       : {},
+    tpAutoFilled: typeof o.tpAutoFilled === 'boolean' ? o.tpAutoFilled : false,
+    reportKind: o.reportKind === 'leave' ? 'leave' : 'field',
+    leaveDcrCategory: o.leaveDcrCategory === 'sick' || o.leaveDcrCategory === 'casual' ? o.leaveDcrCategory : '',
+    leaveDcrRemark: typeof o.leaveDcrRemark === 'string' ? o.leaveDcrRemark : '',
   }
 }
 
@@ -100,6 +111,7 @@ export default function NewReport() {
   const mrId = user?.id ?? ''
 
   const { data: tpStatus, isLoading: tpLoading } = useTpStatus(mrId)
+  const { data: wwSanitizeOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role)
 
   const [step, setStep] = useState(1);
   const [unlockReason, setUnlockReason] = useState('')
@@ -112,12 +124,26 @@ export default function NewReport() {
       selectedSubAreaIds: [],
       visits: {},
       tpAutoFilled: false,
+      reportKind: 'field',
+      leaveDcrCategory: '',
+      leaveDcrRemark: '',
     };
   });
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
   }, [formData]);
+
+  useEffect(() => {
+    if (user?.role !== 'mr' || wwSanitizeOpts.length === 0) return
+    const allowed = new Set(wwSanitizeOpts.map(o => o.id))
+    setFormData(prev => {
+      const cur = prev.workingWithIds
+      const next = cur.filter(id => allowed.has(id))
+      if (next.length === cur.length) return prev
+      return { ...prev, workingWithIds: next, workingWithId: next[0] ?? '' }
+    })
+  }, [user?.role, wwSanitizeOpts])
 
   useEffect(() => {
     const applyTourPlanAutofill = async () => {
@@ -304,6 +330,9 @@ export default function NewReport() {
     )
   }
 
+  const leaveFlow = user?.role === 'mr' && formData.reportKind === 'leave'
+  const stepLabels = leaveFlow ? LEAVE_STEPS : STEPS
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="New Daily Report" showBack />
@@ -311,9 +340,10 @@ export default function NewReport() {
       {/* Step indicator */}
       <div className="px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
         <div className="flex items-center gap-1">
-          {STEPS.map((s, i) => {
-            const isActive = i + 1 === step;
-            const isCompleted = i + 1 < step;
+          {stepLabels.map((s, i) => {
+            const visualStep = leaveFlow ? (step >= 2 ? 2 : step) : step
+            const isActive = i + 1 === visualStep
+            const isCompleted = i + 1 < visualStep
             return (
               <div key={s} className="flex-1 flex flex-col items-center gap-1.5">
                 <div className="w-full flex items-center">
@@ -336,7 +366,15 @@ export default function NewReport() {
 
       <div className="px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
         {step === 1 && <ReportStep1 data={formData} onChange={updateData} onNext={() => setStep(2)} />}
-        {step === 2 && (
+        {step === 2 && leaveFlow && (
+          <ReportLeaveDcrStep
+            data={formData}
+            onChange={updateData}
+            onBack={() => setStep(1)}
+            onClearDraft={clearDraft}
+          />
+        )}
+        {step === 2 && !leaveFlow && (
           <ReportStep2
             data={formData}
             onChange={updateData}

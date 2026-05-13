@@ -7,12 +7,14 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics';
-import { formatDisplayDate } from '@/lib/dateUtils';
+import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
+import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils';
 import { supabase } from '@/lib/supabase';
+import { cn } from '@/lib/utils';
 
 export default function ManagerAnalytics() {
   const { user } = useAuth();
@@ -21,12 +23,19 @@ export default function ManagerAnalytics() {
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [run, setRun] = useState(false);
-  const [activeTab, setActiveTab] = useState<'overview' | 'area' | 'loyalty' | 'intel'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'area' | 'loyalty' | 'intel' | 'calls'>('overview');
+  const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly');
   const [loyaltyProduct, setLoyaltyProduct] = useState('');
   const [loyaltyArea, setLoyaltyArea] = useState('');
 
   const { data: mrs = [], isLoading: mrsLoading } = useManagerMrs(user?.id ?? '');
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
+  const { data: teamCallsOnly, isLoading: teamCallsLoading } = useCallsAndSpecialityAnalytics(
+    mrIds,
+    teamCallPreset,
+    todayInputDate(),
+    mrIds.length > 0,
+  );
   const effectiveMrIds = useMemo(() => {
     const ids = new Set(mrIds)
     if (includeSelf && user?.id) ids.add(user.id)
@@ -179,16 +188,88 @@ export default function ManagerAnalytics() {
           {run && chartsLoading ? 'Loading…' : 'Generate Report'}
         </Button>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
           <Button type="button" variant={activeTab === 'overview' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('overview')}>Overview</Button>
           <Button type="button" variant={activeTab === 'area' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('area')}>Territory Performance</Button>
           <Button type="button" variant={activeTab === 'loyalty' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('loyalty')}>Doctor Loyalty</Button>
           <Button type="button" variant={activeTab === 'intel' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('intel')}>Competitor Intel</Button>
+          <Button type="button" variant={activeTab === 'calls' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('calls')}>Team calls</Button>
         </div>
 
         {mrsLoading && <LoadingSpinner />}
-        {!mrsLoading && effectiveMrIds.length === 0 && (
+        {!mrsLoading && effectiveMrIds.length === 0 && activeTab !== 'calls' && (
           <EmptyState message="No medical representatives are assigned to you yet." />
+        )}
+
+        {activeTab === 'calls' && (
+          <div className="rounded-xl border bg-card p-4 shadow-sm space-y-4 animate-fade-in">
+            <p className="text-xs text-muted-foreground">
+              MR team only: one doctor selected on a submitted field DCR counts as one call. Manager field reports are not included.
+            </p>
+            <div className="flex flex-wrap gap-1 justify-end">
+              {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setTeamCallPreset(p)}
+                  className={cn(
+                    'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
+                    teamCallPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background text-muted-foreground',
+                  )}
+                >
+                  {p === 'all' ? 'Till date' : p}
+                </button>
+              ))}
+            </div>
+            {mrIds.length === 0 ? (
+              <EmptyState message="No medical representatives are assigned to you yet." />
+            ) : teamCallsLoading ? (
+              <LoadingSpinner />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
+                    <p className="text-xl font-bold tabular-nums">{teamCallsOnly?.totalCalls ?? 0}</p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground font-medium">Average / active day</p>
+                    <p className="text-xl font-bold text-primary tabular-nums">
+                      {teamCallsOnly && teamCallsOnly.daysWithReports > 0 ? teamCallsOnly.avgPerDay.toFixed(1) : '—'}
+                    </p>
+                  </div>
+                </div>
+                {teamCallsOnly && teamCallsOnly.bySpeciality.length > 0 ? (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Visits by speciality</p>
+                    <div className="h-[240px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={teamCallsOnly.bySpeciality}
+                            dataKey="visits"
+                            nameKey="speciality"
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            label={({ speciality, visits }) => `${speciality}: ${visits}`}
+                          >
+                            {teamCallsOnly.bySpeciality.map((_, i) => (
+                              <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ) : (
+                  <EmptyState message="No submitted field DCR visits in this period yet." />
+                )}
+              </>
+            )}
+          </div>
         )}
 
         {run && chartsLoading && <LoadingSpinner />}

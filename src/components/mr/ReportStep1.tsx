@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useAllowedReportDates } from '@/hooks/useReport';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 
 function Avatar({ src, name, size = 'sm' }: { src?: string | null; name: string; size?: 'sm' | 'md' }) {
   const px = size === 'md' ? 'h-9 w-9' : 'h-7 w-7';
@@ -37,11 +37,11 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
     data: workingOptions = [],
     isLoading: workingLoading,
     isError: workingError,
-  } = useWorkingWithReportOptions(user?.id)
+  } = useWorkingWithReportOptions(user?.id, user?.role)
   const { data: managersFallback = [], isLoading: mgrFbLoading, isError: mgrFbError } = useManagers();
   const isManagerReporter = user?.role === 'manager'
 
-  const teamMrs = workingOptions.filter(o => o.option_kind === 'team_mr')
+  const teamMrs = isManagerReporter ? workingOptions.filter(o => o.option_kind === 'team_mr') : []
   const peerManagers = workingOptions.filter(o => o.option_kind === 'peer_manager')
   const linkedManagers = workingOptions.filter(o => o.option_kind === 'linked_manager')
 
@@ -91,6 +91,25 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
     if (nextDate && nextDate !== data.date) onChange({ date: nextDate })
   }, [allowedLoading, allowedDates, data.date, onChange])
 
+  const mrWorkingWithAllowedIds = useMemo(() => {
+    if (isManagerReporter) return null
+    const s = new Set<string>()
+    for (const o of workingOptions) {
+      if (o.role === 'manager' || o.option_kind === 'linked_manager') s.add(o.id)
+    }
+    for (const m of managersFallback) s.add(m.id)
+    return s
+  }, [isManagerReporter, workingOptions, managersFallback])
+
+  useEffect(() => {
+    if (isManagerReporter || workingLoading || !mrWorkingWithAllowedIds) return
+    const cur = data.workingWithIds ?? []
+    const next = cur.filter(id => mrWorkingWithAllowedIds.has(id))
+    if (next.length !== cur.length) {
+      onChange({ workingWithIds: next, workingWithId: next[0] ?? '' })
+    }
+  }, [isManagerReporter, workingLoading, mrWorkingWithAllowedIds, data.workingWithIds, onChange])
+
   const selected = allowedDates.find(d => d.report_date === data.date)
   const selectedAlreadySubmitted = !!selected?.already_submitted
   const allSubmitted = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted)
@@ -134,7 +153,25 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                   disabled={isSubmitted}
                   onClick={() => {
                     if (isSubmitted) return
-                    onChange({ date: d.report_date })
+                    const leaveDay = !isManagerReporter && d.day_type === 'leave'
+                    onChange({
+                      date: d.report_date,
+                      reportKind: leaveDay ? 'leave' : 'field',
+                      ...(leaveDay
+                        ? {
+                            selectedSubAreaIds: [],
+                            visits: {},
+                            workingWithIds: [],
+                            workingWithId: '',
+                            leaveDcrCategory: 'casual',
+                            leaveDcrRemark: '',
+                            tpAutoFilled: false,
+                          }
+                        : {
+                            leaveDcrCategory: '',
+                            leaveDcrRemark: '',
+                          }),
+                    })
                   }}
                   className={cn(
                     'rounded-xl border p-3 text-left touch-target active:scale-[0.99] transition',
@@ -152,15 +189,22 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                       </p>
                     </div>
 
-                    {isSubmitted ? (
-                      <Badge className="bg-emerald-600/10 text-emerald-800 border-emerald-600/30">
-                        Submitted
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="opacity-70 text-muted-foreground">
-                        Select
-                      </Badge>
-                    )}
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      {d.day_type === 'leave' && !isSubmitted && !isManagerReporter && (
+                        <Badge variant="outline" className="text-[10px] border-violet-500/40 text-violet-700 dark:text-violet-300">
+                          Leave DCR
+                        </Badge>
+                      )}
+                      {isSubmitted ? (
+                        <Badge className="bg-emerald-600/10 text-emerald-800 border-emerald-600/30">
+                          Submitted
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="opacity-70 text-muted-foreground">
+                          Select
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </button>
               )
@@ -177,8 +221,20 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
         )}
       </div>
 
+      {user?.role === 'mr' && data.reportKind === 'leave' ? (
+        <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+          <p className="text-xs font-medium text-violet-900 dark:text-violet-100 leading-relaxed">
+            Leave DCR: the next step only asks for leave type and a remark. Working with colleagues is not required.
+          </p>
+        </div>
+      ) : (
       <div className="space-y-2">
-        <Label>Working With (Optional)</Label>
+        <Label>Working with (optional)</Label>
+        {!isManagerReporter && (
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Select one or more managers only. MRs cannot be listed as working with another MR.
+          </p>
+        )}
         {isLoading ? (
           <LoadingSpinner />
         ) : (
@@ -244,7 +300,6 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                   const mgrs = linkedManagers.length > 0
                     ? linkedManagers
                     : managersFallback.map(m => ({ ...m, option_kind: 'linked_manager' as const, employee_code: m.employee_code ?? '' }))
-                  const peerMrs = workingOptions.filter(o => o.option_kind === 'team_mr')
                   return (
                     <>
                       {mgrs.length > 0 && (
@@ -263,27 +318,6 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                                   <Avatar src={photo} name={m.full_name} />
                                   <span className="text-sm text-foreground flex-1 truncate">{m.full_name}</span>
                                   <Badge variant="outline" className="text-[10px] shrink-0">Manager</Badge>
-                                </label>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-                      {peerMrs.length > 0 && (
-                        <div>
-                          <p className="section-title mb-2">Team MRs</p>
-                          <div className="space-y-1.5">
-                            {peerMrs.map(m => {
-                              const checked = data.workingWithIds.includes(m.id)
-                              return (
-                                <label key={m.id} className={cn(
-                                  'flex items-center gap-3 cursor-pointer rounded-xl border px-3 py-2.5 transition-all active:scale-[0.98]',
-                                  checked ? 'border-primary/50 bg-primary/5' : 'border-border bg-card',
-                                )}>
-                                  <Checkbox checked={checked} onCheckedChange={() => toggleWorkingWith(m.id)} />
-                                  <Avatar src={m.profile_photo_url} name={m.full_name} />
-                                  <span className="text-sm text-foreground flex-1 truncate">{m.full_name}</span>
-                                  <Badge variant="outline" className="text-[10px] shrink-0">MR</Badge>
                                 </label>
                               )
                             })}
@@ -316,6 +350,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
           <p className="text-xs text-destructive">Could not load colleagues for Working With</p>
         )}
       </div>
+      )}
 
       <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-md border-t border-border/40">
         <div className="max-w-lg mx-auto">

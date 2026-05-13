@@ -172,8 +172,18 @@ export default function TourProgramPage() {
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
   const { data: history = [] } = useTourProgramHistory(activeMrId)
   const { data: assignedAreaGroups = [] } = useMrSubAreasGrouped(activeMrId)
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id)
+  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role)
   const { data: teamMrs = [] } = useManagerMrs(isManager ? selfId : '')
+
+  const tpPickListWorkingWith = useMemo(() => {
+    if (isManager) return workingWithOptions
+    return workingWithOptions.filter(o => o.role === 'manager')
+  }, [isManager, workingWithOptions])
+
+  const mrManagerIdSet = useMemo(() => {
+    if (isManager) return null
+    return new Set(tpPickListWorkingWith.map(o => o.id))
+  }, [isManager, tpPickListWorkingWith])
 
   const [workingDays, setWorkingDays] = useState<Array<{ work_date: string; day_type: string; holiday_name: string | null }>>([])
 
@@ -194,17 +204,20 @@ export default function TourProgramPage() {
   const lastSyncKey = useRef('')
   useEffect(() => {
     const key = dbEntries.map(e => `${e.work_date}:${e.sub_area_id}:${(e.working_with_ids ?? []).join(',')}`).join('|')
-    if (key === lastSyncKey.current) return
-    lastSyncKey.current = key
+    const setKey = mrManagerIdSet ? [...mrManagerIdSet].sort().join(',') : ''
+    const fullKey = `${key}|${setKey}`
+    if (fullKey === lastSyncKey.current) return
+    lastSyncKey.current = fullKey
     const map: Record<string, LocalEntry> = {}
     for (const e of dbEntries) {
-      const ids = (e.working_with_ids && e.working_with_ids.length > 0)
+      let ids = (e.working_with_ids && e.working_with_ids.length > 0)
         ? e.working_with_ids
         : (e.working_with ? [e.working_with] : [])
+      if (mrManagerIdSet && mrManagerIdSet.size > 0) ids = ids.filter(id => mrManagerIdSet.has(id))
       map[e.work_date] = { sub_area_id: e.sub_area_id ?? '', working_with_ids: ids }
     }
     setLocalEntries(map)
-  }, [dbEntries])
+  }, [dbEntries, mrManagerIdSet])
 
   const updateSubArea = useCallback((date: string, value: string) => {
     setLocalEntries(prev => ({
@@ -258,7 +271,11 @@ export default function TourProgramPage() {
           work_date: day.work_date,
           sub_area_id: local?.sub_area_id || null,
           working_with: null as string | null,
-          working_with_ids: local?.working_with_ids ?? [],
+          working_with_ids: (() => {
+            const raw = local?.working_with_ids ?? []
+            if (mrManagerIdSet && mrManagerIdSet.size > 0) return raw.filter(id => mrManagerIdSet.has(id))
+            return raw
+          })(),
           day_type: 'working' as const,
           notes: null as string | null,
         }
@@ -458,7 +475,7 @@ export default function TourProgramPage() {
                       local={localEntries[day.work_date]}
                       canEdit={canEdit}
                       allSubAreas={allSubAreas}
-                      workingWithOptions={workingWithOptions}
+                      workingWithOptions={tpPickListWorkingWith}
                       nameById={nameById}
                       onSubAreaChange={updateSubArea}
                       onToggleWw={toggleWorkingWith}

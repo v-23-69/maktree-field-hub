@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, Target, CalendarDays, Receipt } from 'lucide-react';
+import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, CalendarDays, Receipt } from 'lucide-react';
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -9,6 +9,8 @@ interface NavItem {
   to: string;
   icon: React.ElementType;
   label: string;
+  /** If true, only highlight when pathname equals `to` (avoids matching `/manager/report/:id`). */
+  exact?: boolean;
 }
 
 const NAV_ITEMS: Record<UserRole, NavItem[]> = {
@@ -24,8 +26,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { to: '/manager/dashboard', icon: Home, label: 'Home' },
     { to: '/manager/reports', icon: FileText, label: 'Reports' },
     { to: '/manager/requests', icon: Bell, label: 'Requests' },
-    { to: '/manager/leaves', icon: CalendarDays, label: 'Leaves' },
-    { to: '/manager/targets', icon: Target, label: 'Targets' },
+    { to: '/manager/report/history', icon: History, label: 'History', exact: true },
     { to: '/manager/analytics', icon: BarChart3, label: 'Analytics' },
   ],
   admin: [
@@ -51,7 +52,9 @@ export default function BottomNav({ role }: { role: UserRole }) {
     >
       <div className="mx-auto flex max-w-2xl lg:max-w-3xl items-stretch">
         {items.map(item => {
-          const isActive = location.pathname.startsWith(item.to);
+          const isActive = item.exact
+            ? location.pathname === item.to
+            : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
           return (
             <NavLink
               key={item.to}

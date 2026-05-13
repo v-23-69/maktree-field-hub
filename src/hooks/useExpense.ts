@@ -2,6 +2,21 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import type { ExpenseItem, ExpenseReport } from '@/types/database.types'
 
+async function syncExpenseReportTotalUsed(reportId: string): Promise<void> {
+  if (!supabase) return
+  const { data: rows, error: sumErr } = await supabase
+    .from('expense_items')
+    .select('amount')
+    .eq('expense_report_id', reportId)
+  if (sumErr) throw sumErr
+  const total = (rows ?? []).reduce((s, r: { amount: number }) => s + Number(r.amount ?? 0), 0)
+  const { error: upErr } = await supabase
+    .from('expense_reports')
+    .update({ total_used: total })
+    .eq('id', reportId)
+  if (upErr) throw upErr
+}
+
 function isForbidden(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
   return error.code === '42501' || /forbidden/i.test(error.message ?? '')
@@ -59,6 +74,7 @@ export function useGetOrCreateExpenseReport() {
     },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['expense-report', vars.mrId, vars.date] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
     },
   })
 }
@@ -92,19 +108,35 @@ export function useAddExpenseItem() {
       const { error } = await supabase.from('expense_items').insert(payload)
       if (error) throw error
     },
-    onSuccess: (_data, vars) => queryClient.invalidateQueries({ queryKey: ['expense-items', vars.expense_report_id] }),
+    onSuccess: async (_data, vars) => {
+      await syncExpenseReportTotalUsed(vars.expense_report_id)
+      queryClient.invalidateQueries({ queryKey: ['expense-items', vars.expense_report_id] })
+      queryClient.invalidateQueries({ queryKey: ['expense-report'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-expenses'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
+    },
   })
 }
 
 export function useDeleteExpenseItem() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: { id: string }) => {
+    mutationFn: async (payload: { id: string; expense_report_id: string }) => {
       if (!supabase) throw new Error('Supabase not configured')
       const { error } = await supabase.from('expense_items').delete().eq('id', payload.id)
       if (error) throw error
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expense-items'] }),
+    onSuccess: async (_data, vars) => {
+      await syncExpenseReportTotalUsed(vars.expense_report_id)
+      queryClient.invalidateQueries({ queryKey: ['expense-items', vars.expense_report_id] })
+      queryClient.invalidateQueries({ queryKey: ['expense-report'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-expenses'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
+    },
   })
 }
 
@@ -119,7 +151,13 @@ export function useSubmitExpenseReport() {
         .eq('id', reportId)
       if (error) throw error
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['expense-report'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['expense-report'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-expenses'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
+    },
   })
 }
 

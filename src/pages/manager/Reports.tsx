@@ -12,18 +12,22 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { useAuth } from '@/hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
-import { useManagerMrReportDates, useManagerReportByMrAndDate } from '@/hooks/useReport';
+import {
+  fetchSubmittedReportsWithVisitsForMrInDateRange,
+  useManagerMrReportDates,
+  useManagerReportByMrAndDate,
+} from '@/hooks/useReport';
 import { useManagerReportIssues, useUpdateReportIssue } from '@/hooks/useReportIssues';
 import { useAllAreas } from '@/hooks/useAreas';
 import type { ReportVisit } from '@/types/database.types';
-import { Download, FileSpreadsheet, ChevronDown, Pill, MapPin } from 'lucide-react';
+import { Download, ChevronDown, Pill, MapPin, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDisplayDate } from '@/lib/dateUtils';
+import { formatDisplayDate, lastDayOfMonthYyyyMmDd, monthDateRangeForSql } from '@/lib/dateUtils';
+import { saveDcrReportsPdf } from '@/lib/dcrPdf';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import * as XLSX from 'xlsx';
 import { supabase } from '@/lib/supabase';
-import { useManagerExpenses, useDownloadExpenseExcel } from '@/hooks/useManagerExpense';
+import { useManagerExpenses } from '@/hooks/useManagerExpense';
 
 function toDateInput(d: Date): string {
   const y = d.getFullYear();
@@ -52,9 +56,11 @@ export default function ManagerReports() {
   const [filterProduct, setFilterProduct] = useState('');
   const [filterAreaId, setFilterAreaId] = useState('');
   const [filterSubAreaId, setFilterSubAreaId] = useState('');
-  const [filterMrId, setFilterMrId] = useState('');
-  const [filterFromDate, setFilterFromDate] = useState('');
-  const [filterToDate, setFilterToDate] = useState('');
+  const [reportPeriodMode, setReportPeriodMode] = useState<'daily' | 'month'>('daily');
+  const [reportMonth, setReportMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [visitSort, setVisitSort] = useState<'doctor' | 'area' | 'speciality'>('doctor');
+  const [pdfRangeFrom, setPdfRangeFrom] = useState('');
+  const [pdfRangeTo, setPdfRangeTo] = useState('');
   const today = useMemo(() => toDateInput(new Date()), []);
   const weekStart = useMemo(() => {
     const now = new Date();
@@ -88,8 +94,11 @@ export default function ManagerReports() {
   const { data: reportIssues = [], isLoading: issuesLoading, isError: issuesError } =
     useManagerReportIssues(user?.id ?? '');
   const currentMonth = selectedDate ? selectedDate.slice(0, 7) : new Date().toISOString().slice(0, 7)
-  const { data: expenseRows = [] } = useManagerExpenses(user?.id ?? '', currentMonth)
-  const downloadExpenseExcel = useDownloadExpenseExcel()
+  const { data: expenseRows = [] } = useManagerExpenses(
+    user?.id ?? '',
+    currentMonth,
+    activeTab === 'expenses',
+  )
   const updateIssue = useUpdateReportIssue();
   const selectedMrIds = useMemo(() => {
     const ids = reportUsers.map(u => u.id);
@@ -109,6 +118,29 @@ export default function ManagerReports() {
         .eq('status', 'submitted');
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+  const { data: monthReportSummaries = [], isLoading: monthListLoading } = useQuery({
+    queryKey: ['manager-mr-submitted-in-month', selectedMr, reportMonth],
+    enabled:
+      !!supabase &&
+      !!selectedMr &&
+      activeTab === 'reports' &&
+      reportPeriodMode === 'month',
+    queryFn: async () => {
+      if (!supabase) return [];
+      const { startInclusive, endExclusive } = monthDateRangeForSql(reportMonth);
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select('id, report_date')
+        .eq('mr_id', selectedMr)
+        .eq('status', 'submitted')
+        .gte('report_date', startInclusive)
+        .lt('report_date', endExclusive)
+        .order('report_date', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as { id: string; report_date: string }[];
     },
   });
 
@@ -151,14 +183,29 @@ export default function ManagerReports() {
   const mrUser = useMemo(() => reportUsers.find(u => u.id === selectedMr), [reportUsers, selectedMr]);
 
   const visits: ReportVisit[] = report?.visits ?? [];
-  const sortedVisits = useMemo(
-    () => [...visits].sort((a, b) => {
-      const na = a.doctor?.full_name ?? '';
-      const nb = b.doctor?.full_name ?? '';
-      return na.localeCompare(nb);
-    }),
-    [visits],
-  );
+  const sortedVisits = useMemo(() => {
+    const copy = [...visits];
+    if (visitSort === 'doctor') {
+      copy.sort((a, b) =>
+        (a.doctor?.full_name ?? '').localeCompare(b.doctor?.full_name ?? '', undefined, {
+          sensitivity: 'base',
+        }),
+      );
+    } else if (visitSort === 'area') {
+      copy.sort((a, b) =>
+        (a.doctor?.sub_area?.name ?? '').localeCompare(b.doctor?.sub_area?.name ?? '', undefined, {
+          sensitivity: 'base',
+        }),
+      );
+    } else {
+      copy.sort((a, b) =>
+        (a.doctor?.speciality ?? '').localeCompare(b.doctor?.speciality ?? '', undefined, {
+          sensitivity: 'base',
+        }),
+      );
+    }
+    return copy;
+  }, [visits, visitSort]);
 
   const areaNameBySubAreaId = useMemo(() => {
     const map = new Map<string, string>()
@@ -192,46 +239,29 @@ export default function ManagerReports() {
 
   const filteredVisits = useMemo(() => {
     return sortedVisits.filter(v => {
-      if (filterMrId && selectedMr !== filterMrId) return false
-
-      if (filterFromDate && selectedDate < filterFromDate) return false
-      if (filterToDate && selectedDate > filterToDate) return false
-
       if (filterSpeciality) {
-        const s = v.doctor?.speciality ?? ''
-        if (s !== filterSpeciality) return false
+        const s = v.doctor?.speciality ?? '';
+        if (s !== filterSpeciality) return false;
       }
 
       if (filterProduct) {
         const has = (v.promoted_products ?? []).some(
           p => (p.product?.name ?? '') === filterProduct,
-        )
-        if (!has) return false
+        );
+        if (!has) return false;
       }
 
-      const subAreaId = v.doctor?.sub_area_id ?? ''
-      if (filterSubAreaId && subAreaId !== filterSubAreaId) return false
+      const subAreaId = v.doctor?.sub_area_id ?? '';
+      if (filterSubAreaId && subAreaId !== filterSubAreaId) return false;
 
       if (filterAreaId) {
-        const areaId = areaNameBySubAreaId.get(subAreaId) ?? ''
-        if (areaId !== filterAreaId) return false
+        const areaId = areaNameBySubAreaId.get(subAreaId) ?? '';
+        if (areaId !== filterAreaId) return false;
       }
 
-      return true
-    })
-  }, [
-    sortedVisits,
-    filterMrId,
-    selectedMr,
-    filterFromDate,
-    filterToDate,
-    selectedDate,
-    filterSpeciality,
-    filterProduct,
-    filterSubAreaId,
-    filterAreaId,
-    areaNameBySubAreaId,
-  ])
+      return true;
+    });
+  }, [sortedVisits, filterSpeciality, filterProduct, filterSubAreaId, filterAreaId, areaNameBySubAreaId]);
 
   const summaryStats = useMemo(() => {
     const isInRange = (date: string, from: string, to: string) => date >= from && date <= to;
@@ -269,96 +299,79 @@ export default function ManagerReports() {
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
   const handleViewReport = () => {
+    setReportPeriodMode('daily');
     setShowReport(true);
     setOpenCards({});
   };
 
-  const downloadCurrentReportExcel = () => {
+  const downloadCurrentReportPdf = () => {
     if (!report) {
-      toast.error('Load a report first.')
-      return
+      toast.error('Load a report first.');
+      return;
     }
-    const rows = (report.visits ?? []).map(visit => ({
-      'Doctor Name': visit.doctor?.full_name ?? '',
-      Speciality: visit.doctor?.speciality ?? '',
-      Area: visit.doctor?.sub_area?.name ?? '',
-      Territory: (visit.doctor?.sub_area as any)?.area?.name ?? '',
-      Chemist: visit.chemist?.name ?? '',
-      'Products Promoted': (visit.promoted_products ?? [])
-        .map(p => p.product?.name)
-        .filter(Boolean)
-        .join(', '),
-      Competitors: (visit.competitor_entries ?? [])
-        .map(c => `${c.brand_name} (${c.quantity})`)
-        .join(', '),
-      'Monthly Support': (visit.monthly_support_entries ?? [])
-        .map(m => `${m.product?.name ?? ''} (${m.quantity})`)
-        .join(', '),
-      'Monthly Support Rupee-wise': (visit.monthly_support_entries ?? [])
-        .reduce((sum, m) => sum + (((m.product as any)?.ptr ?? 0) * (m.quantity || 0)), 0) || '',
-    }))
+    const mrName = mrUser?.full_name ?? 'MR';
+    const isLeave = (report.report_kind ?? 'field') === 'leave';
+    saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
+      fileName: `${isLeave ? 'Leave_DCR' : 'DCR'}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
+      documentTitle: isLeave ? 'Leave DCR' : 'Daily Call Report (DCR)',
+    });
+    toast.success('PDF downloaded');
+  };
 
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, 'Report')
-    const mrName = mrUser?.full_name?.replace(/\s+/g, '_') || 'MR'
-    XLSX.writeFile(wb, `MR_Report_${mrName}_${selectedDate}.xlsx`)
-  }
-
-  const downloadRangeExcel = async () => {
+  const downloadMonthPdf = async () => {
+    if (!supabase || !selectedMr) {
+      toast.error('Select an MR first.');
+      return;
+    }
     try {
-      if (!supabase) throw new Error('Supabase not configured')
-      if (!filterFromDate || !filterToDate) {
-        toast.error('Select date range first (From and To).')
-        return
-      }
-
-      let q = supabase
-        .from('v_visit_detail')
-        .select('*')
-        .gte('report_date', filterFromDate)
-        .lte('report_date', filterToDate)
-
-      if (selectedMr) q = q.eq('mr_id', selectedMr)
-      if (filterAreaId) {
-        const areaName = allAreas.find(a => a.id === filterAreaId)?.name ?? ''
-        if (areaName) q = q.eq('area', areaName)
-      }
-      if (filterSubAreaId) {
-        const sa = allAreas.flatMap(a => a.sub_areas ?? []).find(s => s.id === filterSubAreaId)
-        if (sa?.name) q = q.eq('sub_area', sa.name)
-      }
-
-      const { data, error } = await q.order('report_date', { ascending: false })
-      if (error) throw error
-
-      const rows = (data ?? []).map((r: any) => ({
-        Date: r.report_date ?? '',
-        MR: r.mr_name ?? '',
-        'Doctor Name': r.doctor_name ?? '',
-        Territory: r.area ?? '',
-        Area: r.sub_area ?? '',
-        'Doctor Id': r.doctor_id ?? '',
-        'Visit Id': r.visit_id ?? '',
-      }))
-
+      const from = `${reportMonth}-01`;
+      const to = lastDayOfMonthYyyyMmDd(reportMonth);
+      const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(supabase, selectedMr, from, to);
       if (rows.length === 0) {
-        toast.error('No visit records found for selected range.')
-        return
+        toast.error('No submitted DCRs for that month.');
+        return;
       }
-
-      const ws = XLSX.utils.json_to_sheet(rows)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Visits')
-      XLSX.writeFile(
-        wb,
-        `MR_Visits_${filterFromDate}_to_${filterToDate}.xlsx`,
-      )
-      toast.success('Excel downloaded')
+      const mrName = mrUser?.full_name ?? 'MR';
+      saveDcrReportsPdf(rows, {
+        fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${reportMonth}.pdf`,
+        documentTitle: `Daily Call Reports — ${reportMonth}`,
+      });
+      toast.success('PDF downloaded');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Excel download failed')
+      toast.error(e instanceof Error ? e.message : 'Download failed');
     }
-  }
+  };
+
+  const downloadRangePdf = async () => {
+    if (!supabase || !selectedMr) {
+      toast.error('Select an MR first.');
+      return;
+    }
+    if (!pdfRangeFrom || !pdfRangeTo || pdfRangeFrom > pdfRangeTo) {
+      toast.error('Choose a valid From and To date range.');
+      return;
+    }
+    try {
+      const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(
+        supabase,
+        selectedMr,
+        pdfRangeFrom,
+        pdfRangeTo,
+      );
+      if (rows.length === 0) {
+        toast.error('No submitted DCRs in that range.');
+        return;
+      }
+      const mrName = mrUser?.full_name ?? 'MR';
+      saveDcrReportsPdf(rows, {
+        fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${pdfRangeFrom}_to_${pdfRangeTo}.pdf`,
+        documentTitle: `Daily Call Reports — ${pdfRangeFrom} to ${pdfRangeTo}`,
+      });
+      toast.success('PDF downloaded');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Download failed');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -401,371 +414,552 @@ export default function ManagerReports() {
         </div>
 
         {activeTab === 'reports' && (
-        <div className="space-y-3">
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-xl border bg-card p-3 text-center">
-            <p className="text-[11px] text-muted-foreground uppercase">Self</p>
-            <p className="mt-1 text-xs text-foreground">
-              D {summaryStats.selfDaily} | W {summaryStats.selfWeekly} | M {summaryStats.selfMonthly}
-            </p>
-          </div>
-          <div className="rounded-xl border bg-card p-3 text-center">
-            <p className="text-[11px] text-muted-foreground uppercase">
-              {selectedMr ? 'Selected MR' : 'Selection'}
-            </p>
-            <p className="mt-1 text-xs text-foreground">
-              D {summaryStats.selectedDaily} | W {summaryStats.selectedWeekly} | M {summaryStats.selectedMonthly}
-            </p>
-          </div>
-          <div className="rounded-xl border bg-card p-3 text-center">
-            <p className="text-[11px] text-muted-foreground uppercase">Team</p>
-            <p className="mt-1 text-xs text-foreground">
-              D {summaryStats.teamDaily} | W {summaryStats.teamWeekly} | M {summaryStats.teamMonthly}
-            </p>
-          </div>
-        </div>
-        <div className="space-y-3 rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-          <div className="space-y-2">
-            <Label className="text-xs">Select MR</Label>
-            {mrsLoading ? (
-              <LoadingSpinner />
-            ) : (
-              <select
-                value={selectedMr}
-                onChange={e => { setSelectedMr(e.target.value); setShowReport(false); }}
-                className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
-              >
-                <option value="">Choose MR</option>
-                {reportUsers.map(m => <option key={m.id} value={m.id}>{m.full_name} ({m.employee_code})</option>)}
-              </select>
-            )}
-            {mrsError && (
-              <p className="text-xs text-destructive">Could not load MR list</p>
-            )}
-            {!mrsLoading && !mrsError && mrs.length === 0 && (
-              <p className="text-xs text-muted-foreground">No MRs assigned to you yet.</p>
-            )}
-          </div>
-
-          <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs">
-            <input type="checkbox" checked={includeSelf} onChange={e => setIncludeSelf(e.target.checked)} />
-            Include self in report selection
-          </label>
-
-          <div className="space-y-2">
-            <Label className="text-xs">Select Date</Label>
-            <Input type="date" value={selectedDate} onChange={e => { setSelectedDate(e.target.value); setShowReport(false); }} className="touch-target rounded-lg" />
-            {availableDates.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Latest submitted date: {availableDates[0]}
-              </p>
-            )}
-          </div>
-
-          <Button
-            onClick={handleViewReport}
-            disabled={!selectedMr || !selectedDate}
-            className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-          >
-            View Report
-          </Button>
-        </div>
-
-        <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Doctor Visit Filters
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-medium text-foreground">This month (submitted DCRs):</span>{' '}
+            You {summaryStats.selfMonthly} ·{' '}
+            {selectedMr ? `Selected MR ${summaryStats.selectedMonthly}` : 'Pick an MR'} · Team{' '}
+            {summaryStats.teamMonthly}
           </p>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Speciality</Label>
-              <select
-                value={filterSpeciality}
-                onChange={e => setFilterSpeciality(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
-              >
-                <option value="">All</option>
-                {uniqueSpecialities.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+          <div className="rounded-xl border bg-card p-4 shadow-sm space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs">Medical representative</Label>
+              {mrsLoading ? (
+                <LoadingSpinner />
+              ) : (
+                <select
+                  value={selectedMr}
+                  onChange={e => {
+                    setSelectedMr(e.target.value);
+                    setShowReport(false);
+                  }}
+                  className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
+                >
+                  <option value="">Choose MR</option>
+                  {reportUsers.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name} ({m.employee_code})
+                    </option>
+                  ))}
+                </select>
+              )}
+              {mrsError && <p className="text-xs text-destructive">Could not load MR list</p>}
+              {!mrsLoading && !mrsError && mrs.length === 0 && (
+                <p className="text-xs text-muted-foreground">No MRs assigned to you yet.</p>
+              )}
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Product</Label>
-              <select
-                value={filterProduct}
-                onChange={e => setFilterProduct(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
-              >
-                <option value="">All</option>
-                {uniqueProducts.map(p => (
-                  <option key={p} value={p}>{p}</option>
-                ))}
-              </select>
-            </div>
+            <label className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-xs">
+              <input
+                type="checkbox"
+                checked={includeSelf}
+                onChange={e => setIncludeSelf(e.target.checked)}
+              />
+              Include yourself in the MR list
+            </label>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">Territory</Label>
-              <select
-                value={filterAreaId}
-                onChange={e => {
-                  setFilterAreaId(e.target.value)
-                  setFilterSubAreaId('')
+            <div className="flex rounded-xl border border-border p-1 bg-muted/40">
+              <Button
+                type="button"
+                variant={reportPeriodMode === 'daily' ? 'default' : 'ghost'}
+                className="flex-1 rounded-lg touch-target"
+                onClick={() => {
+                  setReportPeriodMode('daily');
                 }}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
               >
-                <option value="">All</option>
-                {allAreas.map(a => (
-                  <option key={a.id} value={a.id}>{a.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">Area</Label>
-              <select
-                value={filterSubAreaId}
-                onChange={e => setFilterSubAreaId(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+                Daily DCR
+              </Button>
+              <Button
+                type="button"
+                variant={reportPeriodMode === 'month' ? 'default' : 'ghost'}
+                className="flex-1 rounded-lg touch-target"
+                onClick={() => {
+                  setReportPeriodMode('month');
+                  setShowReport(false);
+                  if (selectedDate) setReportMonth(selectedDate.slice(0, 7));
+                }}
               >
-                <option value="">All</option>
-                {(allAreas
-                  .filter(a => !filterAreaId || a.id === filterAreaId)
-                  .flatMap(a => a.sub_areas ?? [])
-                ).map(sa => (
-                  <option key={sa.id} value={sa.id}>{sa.name}</option>
-                ))}
-              </select>
+                Month view
+              </Button>
             </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs">MR</Label>
-              <select
-                value={filterMrId}
-                onChange={e => setFilterMrId(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
-              >
-                <option value="">All</option>
-                {reportUsers.map(m => (
-                  <option key={m.id} value={m.id}>{m.full_name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">From Date</Label>
-              <Input type="date" value={filterFromDate} onChange={e => setFilterFromDate(e.target.value)} className="h-10 rounded-lg text-xs" />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs">To Date</Label>
-              <Input type="date" value={filterToDate} onChange={e => setFilterToDate(e.target.value)} className="h-10 rounded-lg text-xs" />
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full touch-target rounded-lg"
-            onClick={() => {
-              setFilterSpeciality('')
-              setFilterProduct('')
-              setFilterAreaId('')
-              setFilterSubAreaId('')
-              setFilterMrId('')
-              setFilterFromDate('')
-              setFilterToDate('')
-            }}
-          >
-            Clear Filters
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full touch-target rounded-lg border-accent/50 text-accent-foreground"
-            onClick={() => void downloadRangeExcel()}
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-1.5" />
-            Download Date Range Excel
-          </Button>
-        </div>
-
-        {showReport && selectedMr && selectedDate && (
-          <>
-            {reportLoading && <LoadingSpinner />}
-            {reportError && (
-              <p className="text-sm text-destructive text-center py-4">Could not load this report</p>
+            {reportPeriodMode === 'daily' && (
+              <div className="space-y-2">
+                <Label className="text-xs">Report date</Label>
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => {
+                    setSelectedDate(e.target.value);
+                    setShowReport(false);
+                  }}
+                  className="touch-target rounded-lg"
+                />
+                {availableDates.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Most recent submission: {formatDisplayDate(availableDates[0])}
+                  </p>
+                )}
+                <Button
+                  onClick={handleViewReport}
+                  disabled={!selectedMr || !selectedDate}
+                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+                >
+                  Open DCR
+                </Button>
+              </div>
             )}
-            {!reportLoading && !reportError && !report && (
-              <EmptyState message="No report found for this MR on the selected date." />
-            )}
-            {!reportLoading && !reportError && report && (
-              <div className="space-y-4 animate-fade-in">
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 touch-target rounded-lg text-sm font-semibold border-primary/30 text-primary" type="button">
-                    <Download className="h-4 w-4 mr-1.5" /> Download PDF
-                  </Button>
-                  <Button variant="outline" className="flex-1 touch-target rounded-lg text-sm font-semibold border-accent/50 text-accent-foreground" type="button" onClick={downloadCurrentReportExcel}>
-                    <FileSpreadsheet className="h-4 w-4 mr-1.5" /> Download Excel
-                  </Button>
-                </div>
 
-                <div className="rounded-xl bg-card p-4 shadow-sm space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-foreground">{mrUser?.full_name}</p>
-                      <p className="text-xs text-muted-foreground">{mrUser?.employee_code}</p>
-                    </div>
-                    <Badge className="bg-primary/10 text-primary border-0 hover:bg-primary/10 text-xs capitalize">
-                      {report.status === 'submitted' ? 'Submitted' : 'Draft'}
-                    </Badge>
-                  </div>
-                  <div className="flex flex-col gap-1 text-xs text-muted-foreground pt-1 border-t border-border">
-                    <span className="flex items-center gap-1 min-w-0">
-                      <MapPin className="h-3 w-3 shrink-0" />
-                      <span className="truncate">{formatDisplayDate(selectedDate)}</span>
-                    </span>
-                    {report.manager && (
-                      <span>Working with: {(report.manager as { full_name?: string }).full_name ?? '—'}</span>
-                    )}
-                  </div>
+            {reportPeriodMode === 'month' && (
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label className="text-xs">Calendar month</Label>
+                  <Input
+                    type="month"
+                    value={reportMonth}
+                    onChange={e => setReportMonth(e.target.value)}
+                    className="touch-target rounded-lg"
+                  />
                 </div>
-
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="w-full touch-target rounded-lg font-semibold"
+                  disabled={!selectedMr}
+                  onClick={() => void downloadMonthPdf()}
+                >
+                  <Download className="h-4 w-4 mr-2 shrink-0" />
+                  Download full month (PDF)
+                </Button>
                 <div>
-                  <p className="text-sm font-medium text-foreground mb-3">Doctor Visits ({filteredVisits.length})</p>
-                  {filteredVisits.length === 0 ? (
-                    <EmptyState message="No visits recorded for this report." />
-                  ) : (
-                    <div className="space-y-2">
-                      {filteredVisits.map(visit => {
-                        const doc = visit.doctor;
-                        const subName = doc?.sub_area?.name ?? '—';
-                        const chemistName = visit.chemist?.name ?? '—';
-                        const products =
-                          (visit.promoted_products ?? [])
-                            .map(pp => pp.product?.name)
-                            .filter(Boolean) as string[];
-                        const competitors = visit.competitor_entries ?? [];
-                        const monthly = visit.monthly_support_entries ?? [];
-                        const cardKey = visit.id;
-
-                        return (
-                          <Collapsible key={cardKey} open={openCards[cardKey] || false} onOpenChange={() => toggleCard(cardKey)}>
-                            <CollapsibleTrigger className="w-full">
-                              <div className="flex items-center gap-3 rounded-xl bg-card p-3.5 shadow-sm text-left w-full active:scale-[0.98] transition-transform">
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-sm font-semibold text-foreground truncate">{doc?.full_name ?? 'Doctor'}</p>
-                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{subName}</Badge>
-                                  </div>
-                                  <p className="text-xs text-muted-foreground">{doc?.speciality ?? ''}</p>
-                                </div>
-                                <ChevronDown className={cn(
-                                  'h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200',
-                                  openCards[cardKey] && 'rotate-180'
-                                )} />
-                              </div>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent>
-                              <div className="mx-1 rounded-b-xl bg-card px-3.5 pb-3.5 space-y-3 border-t border-border">
-                                <div className="flex items-center gap-2 pt-2.5">
-                                  <Pill className="h-3.5 w-3.5 text-muted-foreground" />
-                                  <span className="text-xs text-muted-foreground">Chemist:</span>
-                                  <span className="text-xs font-medium text-foreground">{chemistName}</span>
-                                </div>
-
-                                {products.length > 0 && (
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Products Promoted</p>
-                                    <div className="flex flex-wrap gap-1">
-                                      {products.map(p => (
-                                        <Badge key={p} className="text-[10px] bg-primary/10 text-primary border-0 hover:bg-primary/10">{p}</Badge>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-
-                                {competitors.length > 0 && (
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Competitor Survey</p>
-                                    <div className="rounded-lg border border-border overflow-x-auto max-w-full">
-                                      <table className="w-full text-xs min-w-[240px]">
-                                        <thead>
-                                          <tr className="bg-muted/50">
-                                            <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Brand</th>
-                                            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {competitors.map((c, i) => (
-                                            <tr key={c.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                                              <td className="px-3 py-1.5 text-foreground">{c.brand_name}</td>
-                                              <td className="px-3 py-1.5 text-right text-foreground">{c.quantity}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
-
-                                {monthly.length > 0 && (
-                                  <div>
-                                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Monthly Support</p>
-                                    <div className="rounded-lg border border-border overflow-x-auto max-w-full">
-                                      <table className="w-full text-xs min-w-[240px]">
-                                        <thead>
-                                          <tr className="bg-muted/50">
-                                            <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Product</th>
-                                            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
-                                            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">PTR</th>
-                                            <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Rupee-wise</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {monthly.map((row, i) => {
-                                            const ptr = (row.product as any)?.ptr ?? 0;
-                                            const rupeeWise = ptr * (row.quantity || 0);
-                                            return (
-                                              <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                                                <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
-                                                <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
-                                                <td className="px-3 py-1.5 text-right text-muted-foreground">{ptr > 0 ? `Rs ${ptr}` : '—'}</td>
-                                                <td className="px-3 py-1.5 text-right font-semibold text-primary">{rupeeWise > 0 ? `Rs ${rupeeWise.toLocaleString('en-IN')}` : '—'}</td>
-                                              </tr>
-                                            );
-                                          })}
-                                          {(() => {
-                                            const total = monthly.reduce((sum, row) => sum + (((row.product as any)?.ptr ?? 0) * (row.quantity || 0)), 0);
-                                            return total > 0 ? (
-                                              <tr className="border-t border-border bg-primary/5">
-                                                <td colSpan={3} className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]">Total Rupee-wise</td>
-                                                <td className="px-3 py-1.5 text-right font-bold text-primary">Rs {total.toLocaleString('en-IN')}</td>
-                                              </tr>
-                                            ) : null;
-                                          })()}
-                                        </tbody>
-                                      </table>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        );
-                      })}
-                    </div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                    Submitted days — tap to open
+                  </p>
+                  {monthListLoading && <LoadingSpinner />}
+                  {!monthListLoading && monthReportSummaries.length === 0 && selectedMr && (
+                    <p className="text-xs text-muted-foreground py-2">No submitted DCRs in this month.</p>
                   )}
+                  <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                    {monthReportSummaries.map(row => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className="w-full flex items-center justify-between rounded-xl border border-border bg-background px-3 py-2.5 text-left text-sm hover:bg-muted/50 active:scale-[0.99] transition-transform"
+                        onClick={() => {
+                          setSelectedDate(row.report_date);
+                          setReportPeriodMode('daily');
+                          setShowReport(true);
+                          setOpenCards({});
+                        }}
+                      >
+                        <span className="font-medium">{formatDisplayDate(row.report_date)}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          View
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
-          </>
-        )}
 
-          {!showReport && (
-            <EmptyState message="Select an MR and date to view their report" />
+            <div className="border-t border-border pt-4 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Custom range (PDF)
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px]">From</Label>
+                  <Input
+                    type="date"
+                    value={pdfRangeFrom}
+                    onChange={e => setPdfRangeFrom(e.target.value)}
+                    className="h-10 rounded-lg text-xs"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px]">To</Label>
+                  <Input
+                    type="date"
+                    value={pdfRangeTo}
+                    onChange={e => setPdfRangeTo(e.target.value)}
+                    className="h-10 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full touch-target rounded-lg"
+                disabled={!selectedMr}
+                onClick={() => void downloadRangePdf()}
+              >
+                <CalendarRange className="h-4 w-4 mr-2 shrink-0" />
+                Download range (PDF)
+              </Button>
+            </div>
+          </div>
+
+          {showReport && reportPeriodMode === 'daily' && selectedMr && selectedDate && (
+            <>
+              {reportLoading && <LoadingSpinner />}
+              {reportError && (
+                <p className="text-sm text-destructive text-center py-4">Could not load this report</p>
+              )}
+              {!reportLoading && !reportError && !report && (
+                <EmptyState message="No report found for this MR on the selected date." />
+              )}
+              {!reportLoading && !reportError && report && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="rounded-xl border border-border bg-card p-4 shadow-sm space-y-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-lg font-semibold text-foreground">{mrUser?.full_name}</p>
+                        <p className="text-xs text-muted-foreground">{mrUser?.employee_code}</p>
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="inline-flex items-center gap-1">
+                            <MapPin className="h-3.5 w-3.5 shrink-0" />
+                            {formatDisplayDate(selectedDate)}
+                          </span>
+                          {report.manager && (
+                            <span>
+                              Working with:{' '}
+                              {(report.manager as { full_name?: string }).full_name ?? '—'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-2 sm:items-end">
+                        <Badge className="w-fit bg-primary/10 text-primary border-0 text-xs capitalize">
+                          {report.status === 'submitted' ? 'Submitted' : 'Draft'}
+                        </Badge>
+                        <Button
+                          type="button"
+                          className="touch-target rounded-lg"
+                          onClick={() => downloadCurrentReportPdf()}
+                        >
+                          <Download className="h-4 w-4 mr-2 shrink-0" />
+                          Download this DCR (PDF)
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                        Filter & sort visits
+                      </p>
+                      <div className="space-y-1 sm:min-w-[160px]">
+                        <Label className="text-[10px]">Sort by</Label>
+                        <select
+                          value={visitSort}
+                          onChange={e =>
+                            setVisitSort(e.target.value as 'doctor' | 'area' | 'speciality')
+                          }
+                          className="flex h-9 w-full rounded-lg border border-input bg-background px-2 text-xs"
+                        >
+                          <option value="doctor">Doctor name</option>
+                          <option value="area">Area</option>
+                          <option value="speciality">Speciality</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Speciality</Label>
+                        <select
+                          value={filterSpeciality}
+                          onChange={e => setFilterSpeciality(e.target.value)}
+                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+                        >
+                          <option value="">All</option>
+                          {uniqueSpecialities.map(s => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Product</Label>
+                        <select
+                          value={filterProduct}
+                          onChange={e => setFilterProduct(e.target.value)}
+                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+                        >
+                          <option value="">All</option>
+                          {uniqueProducts.map(p => (
+                            <option key={p} value={p}>
+                              {p}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Territory</Label>
+                        <select
+                          value={filterAreaId}
+                          onChange={e => {
+                            setFilterAreaId(e.target.value);
+                            setFilterSubAreaId('');
+                          }}
+                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+                        >
+                          <option value="">All</option>
+                          {allAreas.map(a => (
+                            <option key={a.id} value={a.id}>
+                              {a.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Area</Label>
+                        <select
+                          value={filterSubAreaId}
+                          onChange={e => setFilterSubAreaId(e.target.value)}
+                          className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-xs"
+                        >
+                          <option value="">All</option>
+                          {(allAreas
+                            .filter(a => !filterAreaId || a.id === filterAreaId)
+                            .flatMap(a => a.sub_areas ?? [])
+                          ).map(sa => (
+                            <option key={sa.id} value={sa.id}>
+                              {sa.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full sm:w-auto rounded-lg text-xs"
+                      onClick={() => {
+                        setFilterSpeciality('');
+                        setFilterProduct('');
+                        setFilterAreaId('');
+                        setFilterSubAreaId('');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-3">
+                      Doctor visits ({filteredVisits.length})
+                    </p>
+                    {filteredVisits.length === 0 ? (
+                      <EmptyState message="No visits match these filters." />
+                    ) : (
+                      <div className="space-y-2">
+                        {filteredVisits.map(visit => {
+                          const doc = visit.doctor;
+                          const subName = doc?.sub_area?.name ?? '—';
+                          const chemistName = visit.chemist?.name ?? '—';
+                          const products =
+                            (visit.promoted_products ?? [])
+                              .map(pp => pp.product?.name)
+                              .filter(Boolean) as string[];
+                          const competitors = visit.competitor_entries ?? [];
+                          const monthly = visit.monthly_support_entries ?? [];
+                          const cardKey = visit.id;
+
+                          return (
+                            <Collapsible
+                              key={cardKey}
+                              open={openCards[cardKey] || false}
+                              onOpenChange={() => toggleCard(cardKey)}
+                            >
+                              <CollapsibleTrigger className="w-full">
+                                <div className="flex items-center gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm text-left w-full active:scale-[0.98] transition-transform">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-semibold text-foreground truncate">
+                                        {doc?.full_name ?? 'Doctor'}
+                                      </p>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1.5 py-0 shrink-0"
+                                      >
+                                        {subName}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">
+                                      {doc?.speciality ?? ''}
+                                    </p>
+                                  </div>
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200',
+                                      openCards[cardKey] && 'rotate-180',
+                                    )}
+                                  />
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent>
+                                <div className="mx-1 rounded-b-xl bg-card px-3.5 pb-3.5 space-y-3 border-t border-border">
+                                  <div className="flex items-center gap-2 pt-2.5">
+                                    <Pill className="h-3.5 w-3.5 text-muted-foreground" />
+                                    <span className="text-xs text-muted-foreground">Chemist:</span>
+                                    <span className="text-xs font-medium text-foreground">
+                                      {chemistName}
+                                    </span>
+                                  </div>
+
+                                  {products.length > 0 && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+                                        Products Promoted
+                                      </p>
+                                      <div className="flex flex-wrap gap-1">
+                                        {products.map(p => (
+                                          <Badge
+                                            key={p}
+                                            className="text-[10px] bg-primary/10 text-primary border-0 hover:bg-primary/10"
+                                          >
+                                            {p}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {monthly.length > 0 && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+                                        Monthly Support
+                                      </p>
+                                      <div className="rounded-lg border border-border overflow-x-auto max-w-full">
+                                        <table className="w-full text-xs min-w-[240px]">
+                                          <thead>
+                                            <tr className="bg-muted/50">
+                                              <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">
+                                                Product
+                                              </th>
+                                              <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
+                                                Qty
+                                              </th>
+                                              <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
+                                                PTR
+                                              </th>
+                                              <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
+                                                Rupee-wise
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {monthly.map((row, i) => {
+                                              const ptr = (row.product as { ptr?: number })?.ptr ?? 0;
+                                              const rupeeWise = ptr * (row.quantity || 0);
+                                              return (
+                                                <tr
+                                                  key={row.id ?? i}
+                                                  className={i % 2 === 1 ? 'bg-muted/30' : ''}
+                                                >
+                                                  <td className="px-3 py-1.5 text-foreground">
+                                                    {row.product?.name ?? '—'}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right text-foreground">
+                                                    {row.quantity}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right text-muted-foreground">
+                                                    {ptr > 0 ? `Rs ${ptr}` : '—'}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right font-semibold text-primary">
+                                                    {rupeeWise > 0
+                                                      ? `Rs ${rupeeWise.toLocaleString('en-IN')}`
+                                                      : '—'}
+                                                  </td>
+                                                </tr>
+                                              );
+                                            })}
+                                            {(() => {
+                                              const total = monthly.reduce(
+                                                (sum, row) =>
+                                                  sum +
+                                                  (((row.product as { ptr?: number })?.ptr ?? 0) *
+                                                    (row.quantity || 0)),
+                                                0,
+                                              );
+                                              return total > 0 ? (
+                                                <tr className="border-t border-border bg-primary/5">
+                                                  <td
+                                                    colSpan={3}
+                                                    className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]"
+                                                  >
+                                                    Total Rupee-wise
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right font-bold text-primary">
+                                                    Rs {total.toLocaleString('en-IN')}
+                                                  </td>
+                                                </tr>
+                                              ) : null;
+                                            })()}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {competitors.length > 0 && (
+                                    <div>
+                                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">
+                                        Competitor Survey
+                                      </p>
+                                      <div className="rounded-lg border border-border overflow-x-auto max-w-full">
+                                        <table className="w-full text-xs min-w-[240px]">
+                                          <thead>
+                                            <tr className="bg-muted/50">
+                                              <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">
+                                                Brand
+                                              </th>
+                                              <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">
+                                                Qty
+                                              </th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            {competitors.map((c, i) => (
+                                              <tr
+                                                key={c.id ?? i}
+                                                className={i % 2 === 1 ? 'bg-muted/30' : ''}
+                                              >
+                                                <td className="px-3 py-1.5 text-foreground">
+                                                  {c.brand_name}
+                                                </td>
+                                                <td className="px-3 py-1.5 text-right text-foreground">
+                                                  {c.quantity}
+                                                </td>
+                                              </tr>
+                                            ))}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {!showReport && reportPeriodMode === 'daily' && (
+            <EmptyState message="Choose an MR and date, then open the DCR." />
           )}
         </div>
       )}
@@ -895,26 +1089,35 @@ export default function ManagerReports() {
 
         {activeTab === 'expenses' && (
           <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
-            <p className="text-sm font-medium">Expense Summary ({expenseRows.length} reports)</p>
-            <Button
-              variant="outline"
-              onClick={() => {
-                const rows = expenseRows.flatMap((r: any) =>
-                  (r.items ?? []).map((it: any) => ({
-                    Date: r.report_date,
-                    Category: it.category,
-                    Description: it.description,
-                    Amount: Number(it.amount ?? 0),
-                  })),
-                )
-                downloadExpenseExcel(rows, `Manager_Expenses_${currentMonth}.xlsx`)
-              }}
-            >
-              Download as Excel
-            </Button>
-            {expenseRows.map((row: any) => (
-              <div key={row.id} className="rounded-lg border p-3 text-sm">
-                <p>{row.report_date} - Used: {row.total_used}</p>
+            <p className="text-sm font-medium">Expense summary ({expenseRows.length} reports)</p>
+            <p className="text-xs text-muted-foreground">
+              Showing expense reports you are allowed to view for {currentMonth}. Line items appear under each date.
+            </p>
+            {expenseRows.length === 0 && (
+              <EmptyState message="No expense reports for this month, or none visible with your access." />
+            )}
+            {expenseRows.map(row => (
+              <div key={row.id} className="rounded-lg border border-border p-3 text-sm space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{formatDisplayDate(row.report_date)}</span>
+                  <Badge variant="secondary" className="text-xs">
+                    Used: {row.total_used}
+                  </Badge>
+                </div>
+                {(row.items ?? []).length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No line items.</p>
+                ) : (
+                  <ul className="text-xs text-muted-foreground space-y-1 border-t border-border pt-2">
+                    {row.items.map(it => (
+                      <li key={it.id} className="flex justify-between gap-2">
+                        <span className="min-w-0 truncate">
+                          {it.category}: {it.description}
+                        </span>
+                        <span className="shrink-0 font-medium text-foreground">{Number(it.amount ?? 0)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

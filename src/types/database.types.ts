@@ -66,6 +66,8 @@ export interface Doctor {
   birthday: string | null
   marriage_anniversary: string | null
   visit_frequency: 'weekly' | 'fortnightly' | 'monthly' | null
+  /** Target completed field visits per calendar month (MR-owned doctors). */
+  monthly_visit_target?: number
   master_list_complete: boolean
   is_active: boolean
   created_at: string
@@ -110,6 +112,10 @@ export interface DailyReport {
   status: ReportStatus
   submitted_at: string | null
   created_at: string
+  /** 'field' = normal DCR; 'leave' = Leave DCR for approved leave days */
+  report_kind?: 'field' | 'leave'
+  leave_dcr_category?: 'casual' | 'sick' | null
+  leave_dcr_remark?: string | null
   mr?: User
   manager?: User
 }
@@ -254,6 +260,8 @@ export interface ReportBlockStatus {
 export interface AllowedReportDate {
   report_date: string
   already_submitted: boolean
+  /** 'working' | 'leave' | 'holiday' | 'strike' | 'sunday' from get_allowed_report_dates */
+  day_type?: string
 }
 
 export interface ReportUnlockRequest {
@@ -362,11 +370,15 @@ export interface LeaveRequest {
   manager_id: string | null
   leave_date: string
   leave_type: 'full' | 'half_morning' | 'half_afternoon'
+  leave_category?: 'casual' | 'sick'
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   manager_note: string | null
   resolved_at: string | null
+  approved_by: string | null
   created_at: string
+  mr?: Pick<User, 'id' | 'full_name' | 'employee_code'>
+  approver?: Pick<User, 'id' | 'full_name'> | null
 }
 
 export interface StrikeReport {
@@ -374,6 +386,15 @@ export interface StrikeReport {
   mr_id: string
   strike_date: string
   reason?: string | null
+  created_at: string
+}
+
+export interface ManagerLeaveEntry {
+  id: string
+  manager_id: string
+  leave_date: string
+  leave_category: 'casual' | 'sick'
+  remark: string | null
   created_at: string
 }
 
@@ -388,10 +409,19 @@ export interface ExpenseReport {
   created_at: string
 }
 
+export type ExpenseItemCategory =
+  | 'Food'
+  | 'Stationery'
+  | 'Printing'
+  | 'Communication'
+  | 'Other'
+  /** Legacy rows only */
+  | 'Travel'
+
 export interface ExpenseItem {
   id: string
   expense_report_id: string
-  category: 'Travel' | 'Food' | 'Stationery' | 'Printing' | 'Communication' | 'Other'
+  category: ExpenseItemCategory
   description: string
   amount: number
   created_at: string

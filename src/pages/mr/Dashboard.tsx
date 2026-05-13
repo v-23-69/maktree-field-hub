@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, formatInputDate, lastDayOfMonthYyyyMmDd } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Download, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
@@ -23,10 +23,14 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
-import { useAllowedReportDates } from '@/hooks/useReport';
+import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange } from '@/hooks/useReport';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
+import { useMrLeaves } from '@/hooks/useLeaves';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import { saveDcrReportsPdf } from '@/lib/dcrPdf';
 
 type DrawerAction = 'strike' | 'holiday' | null;
 
@@ -44,7 +48,7 @@ export default function MRDashboard() {
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(userId);
   const { data: todayPlan } = useTodayTpPlan(userId);
   const { data: allowedDates = [] } = useAllowedReportDates(userId);
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id);
+  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
 
   // Deferred queries (below the fold)
   const { data: completionRows = [], isLoading: completionLoading } = useMasterListByMr(deferReady ? userId : '');
@@ -64,6 +68,14 @@ export default function MRDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
+
+  const [dcrExportFrom, setDcrExportFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return formatInputDate(d);
+  });
+  const [dcrExportTo, setDcrExportTo] = useState(() => todayInputDate());
+  const [dcrExportBusy, setDcrExportBusy] = useState(false);
 
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
@@ -108,6 +120,11 @@ export default function MRDashboard() {
       return (data ?? []) as DoctorAlert[];
     },
   });
+
+  const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
+  const { data: vfProgress } = useVisitFrequencyProgress(userId, todayInputDate(), deferReady);
+  const [callPreset, setCallPreset] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('monthly');
+  const { data: callAnalytics } = useCallsAndSpecialityAnalytics([userId], callPreset, todayInputDate(), deferReady);
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -156,7 +173,9 @@ export default function MRDashboard() {
 
   const todayDate = todayInputDate();
   const todayDcrDone = allowedDates.find(d => d.report_date === todayDate)?.already_submitted === true;
-  const pendingDcrDays = allowedDates.filter(d => !d.already_submitted && d.day_type === 'working');
+  const pendingDcrDays = allowedDates.filter(
+    d => !d.already_submitted && (d.day_type === 'working' || d.day_type === 'leave'),
+  );
   const allDcrDone = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted);
 
   const isPaused = user?.is_paused === true;
@@ -175,6 +194,52 @@ export default function MRDashboard() {
     setStrikeReason('');
     setHolidayDate(todayInputDate());
     setHolidayReason('');
+  };
+
+  const runDcrPdfExport = async (kind: 'thisMonth' | 'last7' | 'today' | 'range') => {
+    if (!supabase || !userId) return;
+    let from = '';
+    let to = '';
+    const t = todayInputDate();
+    if (kind === 'thisMonth') {
+      const m = t.slice(0, 7);
+      from = `${m}-01`;
+      to = lastDayOfMonthYyyyMmDd(m);
+    } else if (kind === 'last7') {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(end.getDate() - 6);
+      from = formatInputDate(start);
+      to = formatInputDate(end);
+    } else if (kind === 'today') {
+      from = t;
+      to = t;
+    } else {
+      from = dcrExportFrom;
+      to = dcrExportTo;
+    }
+    if (!from || !to || from > to) {
+      toast.error('Pick a valid date range.');
+      return;
+    }
+    setDcrExportBusy(true);
+    try {
+      const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(supabase, userId, from, to);
+      if (rows.length === 0) {
+        toast.error('No submitted DCRs in that range.');
+        return;
+      }
+      const name = user?.full_name?.replace(/\s+/g, '_') ?? 'DCR';
+      saveDcrReportsPdf(rows, {
+        fileName: `DCR_${name}_${from}_to_${to}.pdf`,
+        documentTitle: `Daily Call Reports — ${from} to ${to}`,
+      });
+      toast.success('PDF downloaded');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Download failed');
+    } finally {
+      setDcrExportBusy(false);
+    }
   };
 
   if (isPaused) {
@@ -404,25 +469,44 @@ export default function MRDashboard() {
           </div>
         )}
 
+        {deferReady &&
+          mrLeaves
+            .filter(l => l.status === 'approved')
+            .slice(0, 3)
+            .map(leave => (
+              <div key={leave.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+                <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100 leading-snug">
+                  Leave approved
+                  {leave.approver?.full_name ? ` by ${leave.approver.full_name}` : ''}
+                  {' — '}
+                  {formatDisplayDate(leave.leave_date)} ({leave.leave_category === 'sick' ? 'Sick' : 'Casual'})
+                </p>
+              </div>
+            ))}
+
         {/* Quick Actions */}
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
-          <div className="grid grid-cols-4 gap-2.5">
-            <button type="button" onClick={() => navigate('/mr/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
+          <div className="grid grid-cols-5 gap-2">
+            <button type="button" onClick={() => navigate('/mr/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
+              <div className="h-8 w-8 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Tour</span>
             </button>
-            <button type="button" onClick={() => navigate('/mr/expense')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Expense</span>
+            <button type="button" onClick={() => navigate('/mr/expense')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
+              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Expense</span>
             </button>
-            <button type="button" onClick={() => setAction('strike')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all border border-destructive/15">
-              <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-4 w-4 text-destructive" /></div>
-              <span className="text-[10px] font-semibold text-destructive text-center leading-tight">Strike</span>
+            <button type="button" onClick={() => setAction('strike')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all border border-destructive/15">
+              <div className="h-8 w-8 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-3.5 w-3.5 text-destructive" /></div>
+              <span className="text-[9px] font-semibold text-destructive text-center leading-tight">Strike</span>
             </button>
-            <button type="button" onClick={() => setAction('holiday')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Holiday</span>
+            <button type="button" onClick={() => setAction('holiday')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
+              <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Holiday</span>
+            </button>
+            <button type="button" onClick={() => navigate('/mr/leave')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
+              <div className="h-8 w-8 rounded-xl bg-violet-500/10 flex items-center justify-center"><Umbrella className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Leave</span>
             </button>
           </div>
           <div className="flex gap-2">
@@ -434,6 +518,86 @@ export default function MRDashboard() {
               <span className="text-[11px] text-muted-foreground font-medium">Holidays this year</span>
               <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{holidayCount}</span>
             </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => navigate('/mr/visit-frequency')}
+            className="w-full text-left glass-card p-3.5 rounded-xl active:scale-[0.99] transition flex items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                <BarChart3 className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">Visit frequency</p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {vfProgress ? `${vfProgress.totalDone} / ${vfProgress.totalTarget} progress this month` : 'Loading…'}
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </button>
+
+          <div className="glass-card p-3.5 space-y-3 rounded-xl">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">Calls & average</p>
+              <div className="flex gap-1 flex-wrap justify-end">
+                {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setCallPreset(p)}
+                    className={cn(
+                      'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
+                      callPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card text-muted-foreground',
+                    )}
+                  >
+                    {p === 'all' ? 'Till date' : p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
+                <p className="text-lg font-bold text-foreground tabular-nums">{callAnalytics?.totalCalls ?? 0}</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground font-medium">Avg / active day</p>
+                <p className="text-lg font-bold text-primary tabular-nums">
+                  {callAnalytics && callAnalytics.daysWithReports > 0
+                    ? callAnalytics.avgPerDay.toFixed(1)
+                    : '—'}
+                </p>
+              </div>
+            </div>
+            {callAnalytics && callAnalytics.bySpeciality.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Visits by speciality</p>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={callAnalytics.bySpeciality}
+                        dataKey="visits"
+                        nameKey="speciality"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        label={({ speciality, visits }) => `${speciality}: ${visits}`}
+                      >
+                        {callAnalytics.bySpeciality.map((_, i) => (
+                          <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -477,6 +641,79 @@ export default function MRDashboard() {
             </div>
           )}
         </div>
+
+        {/* DCR PDF — submitted reports only */}
+        {deferReady && userId && (
+          <div className="glass-card p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="section-title">Download my DCR (PDF)</p>
+              <Download className="h-4 w-4 text-muted-foreground shrink-0" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Only <span className="font-medium text-foreground">submitted</span> DCRs are included. Choose a preset or a custom date range.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="rounded-xl text-xs"
+                disabled={dcrExportBusy}
+                onClick={() => void runDcrPdfExport('today')}
+              >
+                Today
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="rounded-xl text-xs"
+                disabled={dcrExportBusy}
+                onClick={() => void runDcrPdfExport('last7')}
+              >
+                Last 7 days
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="rounded-xl text-xs"
+                disabled={dcrExportBusy}
+                onClick={() => void runDcrPdfExport('thisMonth')}
+              >
+                This month
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">From</p>
+                <Input
+                  type="date"
+                  value={dcrExportFrom}
+                  onChange={e => setDcrExportFrom(e.target.value)}
+                  className="h-9 text-xs rounded-lg"
+                />
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground">To</p>
+                <Input
+                  type="date"
+                  value={dcrExportTo}
+                  onChange={e => setDcrExportTo(e.target.value)}
+                  className="h-9 text-xs rounded-lg"
+                />
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="w-full rounded-xl font-semibold"
+              disabled={dcrExportBusy || !dcrExportFrom || !dcrExportTo}
+              onClick={() => void runDcrPdfExport('range')}
+            >
+              {dcrExportBusy ? 'Preparing…' : 'Download range (PDF)'}
+            </Button>
+          </div>
+        )}
 
         {/* Alerts */}
         {!alertsLoading && alerts.length > 0 && (

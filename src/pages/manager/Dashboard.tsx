@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, type LucideIcon } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -29,6 +29,9 @@ import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
 import { useAllowedReportDates } from '@/hooks/useReport';
+import { useExpenseReport } from '@/hooks/useExpense';
+import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
 type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'assign-self' | 'create-mr' | 'delete-mr' | 'set-ptr' | 'strike' | 'holiday' | null
@@ -38,6 +41,7 @@ export default function ManagerDashboard() {
   const navigate = useNavigate();
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
   const [action, setAction] = useState<QuickAction>(null);
+  const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly');
 
   const [deferReady, setDeferReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setDeferReady(true), 100); return () => clearTimeout(t); }, []);
@@ -46,12 +50,18 @@ export default function ManagerDashboard() {
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(user?.id ?? '');
   const { data: todayPlan } = useTodayTpPlan(user?.id ?? '');
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id);
+  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
   const unpauseUser = useUnpauseUser();
 
   // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
   const { data: stats } = useManagerDashboardStats(deferReady ? (user?.id ?? '') : '', deferReady ? mrIds : []);
+  const { data: teamCallAnalytics } = useCallsAndSpecialityAnalytics(
+    mrIds,
+    teamCallPreset,
+    todayInputDate(),
+    deferReady && mrIds.length > 0,
+  );
   const { data: areas = [] } = useAllAreas();
   const addDoctor = useAddDoctor();
   const addArea = useAddArea();
@@ -161,6 +171,9 @@ export default function ManagerDashboard() {
   };
   const today = todayInputDate()
 
+  const { data: mgrTodayExpenseReport } = useExpenseReport(deferReady ? (user?.id ?? '') : '', today);
+  const mgrTodayExpenseDone = mgrTodayExpenseReport?.status === 'submitted';
+
   const { data: todaysMrReports = [] } = useQuery({
     queryKey: ['manager-mr-today-report-status', user?.id, mrIds, today],
     enabled: !!user?.id && mrIds.length > 0 && !!supabase,
@@ -186,6 +199,30 @@ export default function ManagerDashboard() {
         byMr.set(r.mr_id, { submitted, reportId })
       }
       return mrIds.map(id => ({ mrId: id, ...(byMr.get(id) ?? { submitted: false, reportId: null }) }))
+    },
+  })
+
+  const { data: todaysMrExpenseRows = [] } = useQuery({
+    queryKey: ['manager-mr-today-expense-status', user?.id, mrIds, today],
+    enabled: !!user?.id && mrIds.length > 0 && !!supabase && deferReady,
+    queryFn: async (): Promise<Array<{ mrId: string; status: 'none' | 'draft' | 'submitted' }>> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase
+        .from('expense_reports')
+        .select('mr_id, status')
+        .in('mr_id', mrIds)
+        .eq('report_date', today)
+      if (error) throw error
+      const byMr = new Map<string, 'none' | 'draft' | 'submitted'>()
+      for (const id of mrIds) byMr.set(id, 'none')
+      type Er = { mr_id: string; status: string }
+      for (const r of (data ?? []) as Er[]) {
+        const st = r.status === 'submitted' ? 'submitted' : 'draft'
+        const prev = byMr.get(r.mr_id)
+        if (prev === 'submitted' || st === 'submitted') byMr.set(r.mr_id, 'submitted')
+        else byMr.set(r.mr_id, 'draft')
+      }
+      return mrIds.map(id => ({ mrId: id, status: byMr.get(id) ?? 'none' }))
     },
   })
 
@@ -222,7 +259,7 @@ export default function ManagerDashboard() {
   ]
 
   const moreActions: { key: QuickAction; label: string; icon: LucideIcon }[] = [
-    { key: 'set-ptr', label: 'Set PTR', icon: IndianRupee },
+    { key: 'set-ptr', label: 'Product PTR', icon: IndianRupee },
     { key: 'doctor', label: 'Add Doctor', icon: Stethoscope },
     { key: 'area', label: 'New Territory', icon: MapPin },
     { key: 'subarea', label: 'New Area', icon: MapPinned },
@@ -396,7 +433,20 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {/* Stats */}
+        {/* Your today (self) */}
+        <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+          <span className="font-semibold text-foreground">Your today</span>
+          <span className={cn('tabular-nums', mgrTodayDcrDone ? 'text-emerald-600' : 'text-muted-foreground')}>
+            DCR: {mgrTodayDcrDone ? 'Submitted' : 'Pending'}
+          </span>
+          <span className={cn('tabular-nums', mgrTodayExpenseDone ? 'text-emerald-600' : 'text-muted-foreground')}>
+            Expense: {mgrTodayExpenseDone ? 'Submitted' : mgrTodayExpenseReport?.id ? 'Draft' : 'Not started'}
+          </span>
+          <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs ml-auto" onClick={() => navigate('/manager/expense')}>
+            Open expense
+          </Button>
+        </div>
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
           <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" color="emerald" />
@@ -418,7 +468,7 @@ export default function ManagerDashboard() {
         {/* Quick Actions — frequently used */}
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
-          <div className="grid grid-cols-4 md:grid-cols-7 gap-2.5">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5">
             <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
@@ -439,12 +489,94 @@ export default function ManagerDashboard() {
               <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Manage Holidays</span>
             </button>
+            <button type="button" onClick={() => navigate('/manager/targets')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center"><Target className="h-4 w-4 text-violet-600 dark:text-violet-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Targets</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/leaves')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center"><ClipboardList className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Leaves</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/my-leave')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-teal-500/10 flex items-center justify-center"><Umbrella className="h-4 w-4 text-teal-600 dark:text-teal-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My leave</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/team/visit-frequency')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><BarChart3 className="h-4 w-4 text-primary" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Team visits</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/report/history')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><History className="h-4 w-4 text-primary" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My DCR history</span>
+            </button>
             {primaryActions.map(ab => (
               <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
                 <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><ab.icon className="h-4 w-4 text-primary" /></div>
                 <span className="text-[10px] font-semibold text-foreground text-center leading-tight">{ab.label}</span>
               </button>
             ))}
+          </div>
+
+          <div className="glass-card p-3.5 space-y-3 rounded-xl">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Team calls &amp; average</p>
+                <p className="text-[10px] text-muted-foreground">Submitted MR field DCRs only</p>
+              </div>
+              <div className="flex gap-1 flex-wrap justify-end">
+                {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setTeamCallPreset(p)}
+                    className={cn(
+                      'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
+                      teamCallPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card text-muted-foreground',
+                    )}
+                  >
+                    {p === 'all' ? 'Till date' : p}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
+                <p className="text-lg font-bold text-foreground tabular-nums">{teamCallAnalytics?.totalCalls ?? 0}</p>
+              </div>
+              <div className="rounded-lg bg-muted/40 px-3 py-2">
+                <p className="text-[10px] text-muted-foreground font-medium">Avg / active day</p>
+                <p className="text-lg font-bold text-primary tabular-nums">
+                  {teamCallAnalytics && teamCallAnalytics.daysWithReports > 0 ? teamCallAnalytics.avgPerDay.toFixed(1) : '—'}
+                </p>
+              </div>
+            </div>
+            {teamCallAnalytics && teamCallAnalytics.bySpeciality.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Visits by speciality (team)</p>
+                <div className="h-[200px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={teamCallAnalytics.bySpeciality}
+                        dataKey="visits"
+                        nameKey="speciality"
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={70}
+                        label={({ speciality, visits }) => `${speciality}: ${visits}`}
+                      >
+                        {teamCallAnalytics.bySpeciality.map((_, i) => (
+                          <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -458,18 +590,26 @@ export default function ManagerDashboard() {
           ))}
         </div>
 
-        {/* Today's MR Reports */}
+        {/* Today's MR — DCR & expense */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="section-title">Today's MR Reports</p>
-            <span className="text-[10px] text-muted-foreground font-medium">
-              {todaysMrReports.filter(r => r.submitted).length}/{mrs.length} submitted
-            </span>
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <p className="section-title">Today&apos;s MR — DCR &amp; expense</p>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground font-medium">
+              <span>
+                DCR: {todaysMrReports.filter(r => r.submitted).length}/{mrs.length}
+              </span>
+              <span>
+                Expense: {todaysMrExpenseRows.filter(r => r.status === 'submitted').length}/{mrs.length}
+              </span>
+            </div>
           </div>
           <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
             {mrs.map(mr => {
               const s = todaysMrReports.find(r => r.mrId === mr.id)
               const submitted = !!s?.submitted
+              const exp = todaysMrExpenseRows.find(r => r.mrId === mr.id)
+              const expDone = exp?.status === 'submitted'
+              const expDraft = exp?.status === 'draft'
               const mrPaused = (mr as { is_paused?: boolean }).is_paused === true
               const initials = mr.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
               return (
@@ -477,44 +617,72 @@ export default function ManagerDashboard() {
                   key={mr.id}
                   className={cn(
                     'w-full text-left glass-card p-3.5 transition-all',
-                    submitted && 'ring-1 ring-emerald-500/20',
+                    submitted && expDone && 'ring-1 ring-emerald-500/20',
                     mrPaused && 'ring-1 ring-destructive/20 opacity-80',
                   )}
                 >
-                  <button
-                    type="button"
-                    disabled={!submitted}
-                    onClick={() => {
-                      if (!submitted || !s?.reportId) return
-                      window.location.href = `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`
-                    }}
-                    className="w-full active:scale-[0.98]"
-                  >
-                    <div className="flex items-center gap-3">
-                      {mr.profile_photo_url ? (
-                        <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
-                      ) : (
-                        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
-                          <span className="text-[10px] font-bold text-primary">{initials}</span>
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
-                        <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
+                  <div className="flex items-center gap-3">
+                    {mr.profile_photo_url ? (
+                      <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
+                    ) : (
+                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
+                        <span className="text-[10px] font-bold text-primary">{initials}</span>
                       </div>
-                      {mrPaused ? (
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-destructive shrink-0">
-                          <Lock className="h-3.5 w-3.5" /> Paused
-                        </span>
-                      ) : submitted ? (
-                        <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 shrink-0">
-                          <CheckCircle2 className="h-4 w-4" /> Done
-                        </span>
-                      ) : (
-                        <span className="text-[11px] font-semibold text-muted-foreground/60 shrink-0">Pending</span>
-                      )}
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
+                      <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
                     </div>
-                  </button>
+                    {mrPaused && (
+                      <span className="flex items-center gap-1 text-[11px] font-bold text-destructive shrink-0">
+                        <Lock className="h-3.5 w-3.5" /> Paused
+                      </span>
+                    )}
+                  </div>
+
+                  {!mrPaused && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <div
+                        className={cn(
+                          'rounded-lg border px-2 py-2 text-center text-[11px] font-semibold',
+                          submitted
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                            : 'border-border bg-muted/30 text-muted-foreground',
+                        )}
+                      >
+                        DCR: {submitted ? 'Submitted' : 'Pending'}
+                      </div>
+                      <div
+                        className={cn(
+                          'rounded-lg border px-2 py-2 text-center text-[11px] font-semibold',
+                          expDone
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
+                            : expDraft
+                              ? 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                              : 'border-border bg-muted/30 text-muted-foreground',
+                        )}
+                      >
+                        Expense: {expDone ? 'Submitted' : expDraft ? 'Draft' : '—'}
+                      </div>
+                    </div>
+                  )}
+
+                  {submitted && !mrPaused && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 w-full rounded-xl text-xs h-9"
+                      onClick={() =>
+                        navigate(
+                          `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`,
+                        )
+                      }
+                    >
+                      View DCR
+                    </Button>
+                  )}
+
                   {mrPaused && (
                     <Button
                       size="sm"
@@ -522,7 +690,8 @@ export default function ManagerDashboard() {
                       className="mt-2 w-full rounded-xl text-xs h-8"
                       disabled={unpauseUser.isPending}
                       onClick={() => {
-                        void unpauseUser.mutateAsync(mr.id)
+                        void unpauseUser
+                          .mutateAsync(mr.id)
                           .then(() => toast.success(`${mr.full_name} unpaused`))
                           .catch(e => toast.error(e instanceof Error ? e.message : 'Failed to unpause'))
                       }}
@@ -549,7 +718,7 @@ export default function ManagerDashboard() {
               {action === 'assign-self' && 'Assign Area to Self'}
               {action === 'create-mr' && 'Create New MR'}
               {action === 'delete-mr' && 'Delete MR'}
-              {action === 'set-ptr' && 'Set Product PTR'}
+              {action === 'set-ptr' && 'Set product PTR (price per unit)'}
               {action === 'strike' && 'Mark Strike Day'}
               {action === 'holiday' && 'Mark Holiday'}
             </DrawerTitle>
@@ -892,6 +1061,16 @@ export default function ManagerDashboard() {
             )}
             {action === 'set-ptr' && (
               <>
+                <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-foreground leading-relaxed">
+                  <p className="font-semibold text-foreground mb-1">What is PTR?</p>
+                  <p className="text-muted-foreground">
+                    PTR is the <span className="font-medium text-foreground">price per unit</span> (rupees) for each
+                    company brand. MRs choose brand and quantity in the DCR under monthly support;{' '}
+                    <span className="font-medium text-foreground">monthly support (rupee-wise)</span> is calculated as{' '}
+                    <span className="font-medium text-foreground">PTR × quantity</span> and shown on reports. Only you
+                    (and admins) should maintain PTR so figures stay accurate.
+                  </p>
+                </div>
                 <div className="space-y-3">
                   {allProducts.map(p => (
                     <div key={p.id} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">

@@ -5,7 +5,7 @@ import type { User } from '@/types/database.types'
 /** Managers list for "Working With" — includes profile photo for UI. */
 export type ManagerRow = Pick<User, 'id' | 'full_name' | 'employee_code' | 'role' | 'profile_photo_url'>
 
-/** Options for daily report Step 1 (RPC list_working_with_options_for_report). */
+/** Options for daily report Step 1 (RPC list_working_with_options_for_report). `team_mr` is manager-only. */
 export type WorkingWithOptionKind = 'linked_manager' | 'team_mr' | 'peer_manager'
 
 export type WorkingWithOption = {
@@ -67,18 +67,22 @@ export function useManagers() {
  * Working-with dropdown for daily report: MR sees managers; manager sees team MRs + peer managers.
  * Falls back to list_managers_for_mr when the newer RPC is not deployed.
  */
-export function useWorkingWithReportOptions(userId: string | undefined) {
+export function useWorkingWithReportOptions(userId: string | undefined, viewerRole?: string | null) {
   return useQuery({
-    queryKey: ['working-with-report-options', userId],
+    queryKey: ['working-with-report-options', userId, viewerRole ?? ''],
     enabled: !!supabase && !!userId,
     queryFn: async (): Promise<WorkingWithOption[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('list_working_with_options_for_report')
       if (!error && Array.isArray(data)) {
-        return (data as WorkingWithOption[]).map(r => ({
+        let rows = (data as WorkingWithOption[]).map(r => ({
           ...r,
           option_kind: r.option_kind as WorkingWithOptionKind,
         }))
+        if (viewerRole === 'mr') {
+          rows = rows.filter(o => o.option_kind !== 'team_mr')
+        }
+        return rows
       }
       const rpcMsg = [error?.message, error?.details].filter(Boolean).join(' ')
       const rpcMissing =

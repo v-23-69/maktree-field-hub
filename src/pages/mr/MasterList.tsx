@@ -55,7 +55,7 @@ function missingTags(d: Doctor) {
   if (!d.qualification) tags.push('Qualification missing')
   if (!d.birthday) tags.push('Birthday missing')
   if (!d.marriage_anniversary) tags.push('Marriage Anniversary missing')
-  if (!d.visit_frequency) tags.push('Visit Frequency missing')
+  if (!d.monthly_visit_target || d.monthly_visit_target < 1) tags.push('Monthly visit target missing')
   return tags
 }
 

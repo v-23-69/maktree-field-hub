@@ -25,6 +25,9 @@ const ManagerAnalytics = lazy(() => import("@/pages/manager/Analytics"));
 const UnlockRequests = lazy(() => import("@/pages/manager/UnlockRequests"));
 const ManagerTargets = lazy(() => import("@/pages/manager/Targets"));
 const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
+const ManagerSelfLeave = lazy(() => import("@/pages/manager/ManagerSelfLeave"));
+const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency"));
+const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
 const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/Users"));
@@ -89,6 +92,7 @@ const App = () => (
             <Route path="/mr/dashboard" element={<ProtectedRoute allowedRoles={['mr']}><MRDashboard /></ProtectedRoute>} />
             <Route path="/mr/report/new" element={<ProtectedRoute allowedRoles={['mr']}><NewReport /></ProtectedRoute>} />
             <Route path="/mr/master-list" element={<ProtectedRoute allowedRoles={['mr']}><MasterList /></ProtectedRoute>} />
+            <Route path="/mr/visit-frequency" element={<ProtectedRoute allowedRoles={['mr']}><MRVisitFrequency /></ProtectedRoute>} />
             <Route path="/mr/leave" element={<ProtectedRoute allowedRoles={['mr']}><MRLeave /></ProtectedRoute>} />
             <Route path="/mr/expense" element={<ProtectedRoute allowedRoles={['mr']}><MRExpense /></ProtectedRoute>} />
             <Route path="/mr/tour-program" element={<ProtectedRoute allowedRoles={['mr']}><MRTourProgram /></ProtectedRoute>} />
@@ -102,8 +106,12 @@ const App = () => (
             <Route path="/manager/targets" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTargets /></ProtectedRoute>} />
             <Route path="/manager/analytics" element={<ProtectedRoute allowedRoles={['manager']}><ManagerAnalytics /></ProtectedRoute>} />
             <Route path="/manager/leaves" element={<ProtectedRoute allowedRoles={['manager']}><ManagerLeaves /></ProtectedRoute>} />
+            <Route path="/manager/my-leave" element={<ProtectedRoute allowedRoles={['manager']}><ManagerSelfLeave /></ProtectedRoute>} />
+            <Route path="/manager/team/visit-frequency" element={<ProtectedRoute allowedRoles={['manager']}><TeamVisitFrequency /></ProtectedRoute>} />
             <Route path="/manager/holidays" element={<ProtectedRoute allowedRoles={['manager']}><ManagerHolidays /></ProtectedRoute>} />
+            <Route path="/manager/report/history" element={<ProtectedRoute allowedRoles={['manager']}><ReportHistory /></ProtectedRoute>} />
             <Route path="/manager/report/new" element={<ProtectedRoute allowedRoles={['manager']}><NewReport /></ProtectedRoute>} />
+            <Route path="/manager/report/:id" element={<ProtectedRoute allowedRoles={['manager']}><ReportDetail /></ProtectedRoute>} />
             <Route path="/manager/expense" element={<ProtectedRoute allowedRoles={['manager']}><MRExpense /></ProtectedRoute>} />
             <Route path="/manager/tour-program" element={<ProtectedRoute allowedRoles={['manager']}><MRTourProgram /></ProtectedRoute>} />
 

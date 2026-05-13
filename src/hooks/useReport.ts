@@ -9,7 +9,7 @@ import type {
   ReportVisit,
 } from '@/types/database.types'
 
-async function loadReportVisits(
+export async function loadReportVisits(
   client: SupabaseClient,
   reportId: string,
 ): Promise<ReportVisit[]> {
@@ -145,20 +145,57 @@ async function loadReportVisits(
   })
 }
 
+/** Submitted DCRs for an MR in a calendar date range (inclusive), with visits loaded. */
+export async function fetchSubmittedReportsWithVisitsForMrInDateRange(
+  client: SupabaseClient,
+  mrId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Array<DailyReport & { visits: ReportVisit[] }>> {
+  const { data: reports, error } = await client
+    .from('daily_reports')
+    .select(
+      `
+      *,
+      mr:users!daily_reports_mr_id_fkey(*),
+      manager:users!daily_reports_manager_id_fkey(*)
+    `,
+    )
+    .eq('mr_id', mrId)
+    .eq('status', 'submitted')
+    .gte('report_date', fromDate)
+    .lte('report_date', toDate)
+    .order('report_date', { ascending: true })
+  if (error) throw error
+  const rows = (reports ?? []) as DailyReport[]
+  const out: Array<DailyReport & { visits: ReportVisit[] }> = []
+  for (const report of rows) {
+    const visits = await loadReportVisits(client, report.id)
+    out.push({ ...report, visits })
+  }
+  return out
+}
+
 /** Check for an existing daily report for MR + date (draft or submitted). */
 export async function findExistingDailyReport(
   client: SupabaseClient,
   mrId: string,
   reportDate: string,
-): Promise<{ id: string; status: string } | null> {
+): Promise<{ id: string; status: string; report_kind?: string | null; leave_dcr_category?: string | null; leave_dcr_remark?: string | null } | null> {
   const { data, error } = await client
     .from('daily_reports')
-    .select('id, status')
+    .select('id, status, report_kind, leave_dcr_category, leave_dcr_remark')
     .eq('mr_id', mrId)
     .eq('report_date', reportDate)
     .maybeSingle()
   if (error) throw error
-  return data as { id: string; status: string } | null
+  return data as {
+    id: string
+    status: string
+    report_kind?: string | null
+    leave_dcr_category?: string | null
+    leave_dcr_remark?: string | null
+  } | null
 }
 
 export interface SaveVisitInput {
@@ -334,6 +371,9 @@ export function useCreateReport() {
       managerId: string | null
       workingWithIds?: string[]
       reportDate: string
+      reportKind?: 'field' | 'leave'
+      leaveDcrCategory?: 'casual' | 'sick' | null
+      leaveDcrRemark?: string | null
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
@@ -345,6 +385,9 @@ export function useCreateReport() {
             working_with_ids: p.workingWithIds ?? [],
             report_date: p.reportDate,
             status: 'draft',
+            report_kind: p.reportKind ?? 'field',
+            leave_dcr_category: p.leaveDcrCategory ?? null,
+            leave_dcr_remark: p.leaveDcrRemark?.trim() || null,
           })
           .select()
           .single()
@@ -410,6 +453,9 @@ export function useSubmitReport() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
+      queryClient.invalidateQueries({ queryKey: ['calls-speciality-analytics'] })
     },
   })
 }

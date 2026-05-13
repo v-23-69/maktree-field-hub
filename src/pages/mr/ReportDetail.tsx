@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
@@ -11,16 +11,19 @@ import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/u
 import { Textarea } from '@/components/ui/textarea';
 import { useDailyReport } from '@/hooks/useReport';
 import type { ReportVisit } from '@/types/database.types';
-import { ChevronDown, Pill } from 'lucide-react';
+import { ChevronDown, Pill, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { saveDcrReportsPdf } from '@/lib/dcrPdf';
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const navRole = location.pathname.startsWith('/manager/') ? 'manager' : 'mr';
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const { user } = useAuth();
   const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
@@ -41,6 +44,25 @@ export default function ReportDetail() {
 
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
+  const downloadThisReportPdf = () => {
+    if (!report) return;
+    if (report.mr_id !== user?.id) {
+      toast.error('You can only download your own DCR here.');
+      return;
+    }
+    if (report.status !== 'submitted') {
+      toast.error('Submit this DCR before downloading as PDF.');
+      return;
+    }
+    const name = user?.full_name?.replace(/\s+/g, '_') ?? 'DCR';
+    const isLeave = (report.report_kind ?? 'field') === 'leave';
+    saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
+      fileName: `${isLeave ? 'Leave_DCR' : 'DCR'}_${name}_${report.report_date}.pdf`,
+      documentTitle: isLeave ? 'Leave DCR' : 'Daily Call Report (DCR)',
+    });
+    toast.success('PDF downloaded');
+  };
+
   const dateLabel = report?.report_date ? formatDisplayDate(report.report_date) : '';
 
   if (!id) {
@@ -48,7 +70,7 @@ export default function ReportDetail() {
       <div className="min-h-screen bg-background pb-24">
         <PageHeader title="Report" showBack />
         <EmptyState message="Invalid report." />
-        <BottomNav role="mr" />
+        <BottomNav role={navRole} />
       </div>
     );
   }
@@ -67,30 +89,71 @@ export default function ReportDetail() {
         )}
         {!isLoading && !isError && report && (
           <>
-            <div className="rounded-xl bg-card p-4 shadow-sm space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="rounded-xl bg-card p-4 shadow-sm space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <p className="font-semibold text-foreground">{dateLabel}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{report.status}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-muted-foreground capitalize">{report.status}</p>
+                    {(report.report_kind ?? 'field') === 'leave' && (
+                      <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
+                        Leave DCR
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-                <Badge
-                  className={cn(
-                    'rounded-full border-0 text-xs',
-                    report.status === 'submitted'
-                      ? 'bg-emerald-600/15 text-emerald-800'
-                      : 'bg-amber-500/15 text-amber-900',
+                <div className="flex flex-col gap-2 sm:items-end">
+                  <Badge
+                    className={cn(
+                      'rounded-full border-0 text-xs w-fit',
+                      report.status === 'submitted'
+                        ? 'bg-emerald-600/15 text-emerald-800'
+                        : 'bg-amber-500/15 text-amber-900',
+                    )}
+                  >
+                    {report.status === 'submitted' ? 'Submitted' : 'Draft'}
+                  </Badge>
+                  {report.status === 'submitted' && report.mr_id === user?.id && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-lg touch-target"
+                      onClick={() => downloadThisReportPdf()}
+                    >
+                      <Download className="h-4 w-4 mr-2 shrink-0" />
+                      Download PDF
+                    </Button>
                   )}
-                >
-                  {report.status === 'submitted' ? 'Submitted' : 'Draft'}
-                </Badge>
+                </div>
               </div>
-              {report.manager && (
+              {report.manager && (report.report_kind ?? 'field') === 'field' && (
                 <p className="text-xs text-muted-foreground pt-1 border-t border-border">
                   Working with: {(report.manager as { full_name?: string }).full_name ?? '—'}
                 </p>
               )}
             </div>
 
+            {(report.report_kind ?? 'field') === 'leave' ? (
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground">Leave DCR</p>
+                <p className="text-xs text-muted-foreground">
+                  Short attendance record for an approved leave day (no field visits).
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Badge variant="outline" className="text-xs">
+                    {(report.leave_dcr_category ?? '') === 'sick' ? 'Sick leave' : 'Casual leave'}
+                  </Badge>
+                </div>
+                {report.leave_dcr_remark?.trim() ? (
+                  <p className="text-sm text-foreground whitespace-pre-wrap border-t border-border pt-3 mt-1">
+                    {report.leave_dcr_remark.trim()}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground border-t border-border pt-3 mt-1">No remark.</p>
+                )}
+              </div>
+            ) : (
             <div>
               <p className="text-sm font-medium text-foreground mb-3">Doctor Visits ({sortedVisits.length})</p>
               {sortedVisits.length === 0 ? (
@@ -145,30 +208,6 @@ export default function ReportDetail() {
                               </div>
                             )}
 
-                            {competitors.length > 0 && (
-                              <div>
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Competitor Survey</p>
-                                <div className="rounded-lg border border-border overflow-x-auto max-w-full">
-                                  <table className="w-full text-xs min-w-[240px]">
-                                    <thead>
-                                      <tr className="bg-muted/50">
-                                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Brand</th>
-                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {competitors.map((c, i) => (
-                                        <tr key={c.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                                          <td className="px-3 py-1.5 text-foreground">{c.brand_name}</td>
-                                          <td className="px-3 py-1.5 text-right text-foreground">{c.quantity}</td>
-                                        </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            )}
-
                             {monthly.length > 0 && (
                               <div>
                                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Monthly Support</p>
@@ -209,6 +248,30 @@ export default function ReportDetail() {
                                 </div>
                               </div>
                             )}
+
+                            {competitors.length > 0 && (
+                              <div>
+                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5">Competitor Survey</p>
+                                <div className="rounded-lg border border-border overflow-x-auto max-w-full">
+                                  <table className="w-full text-xs min-w-[240px]">
+                                    <thead>
+                                      <tr className="bg-muted/50">
+                                        <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Brand</th>
+                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {competitors.map((c, i) => (
+                                        <tr key={c.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                                          <td className="px-3 py-1.5 text-foreground">{c.brand_name}</td>
+                                          <td className="px-3 py-1.5 text-right text-foreground">{c.quantity}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
@@ -217,8 +280,9 @@ export default function ReportDetail() {
                 </div>
               )}
             </div>
+            )}
 
-            <Button variant="outline" className="w-full" type="button" onClick={() => navigate('/mr/report/history')}>
+            <Button variant="outline" className="w-full" type="button" onClick={() => navigate(navRole === 'manager' ? '/manager/report/history' : '/mr/report/history')}>
               Back to history
             </Button>
 
@@ -297,7 +361,7 @@ export default function ReportDetail() {
         </DrawerContent>
       </Drawer>
 
-      <BottomNav role="mr" />
+      <BottomNav role={navRole} />
     </div>
   );
 }

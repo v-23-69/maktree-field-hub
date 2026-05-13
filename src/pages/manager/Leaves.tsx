@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
+import { formatDisplayDate } from '@/lib/dateUtils'
 
 export default function ManagerLeaves() {
   const { user } = useAuth()
@@ -41,8 +42,12 @@ export default function ManagerLeaves() {
 
         {tab !== 'calendar' && filteredLeaves.map(leave => (
           <div key={leave.id} className="rounded-xl border p-3 space-y-2">
-            <p className="text-sm font-medium">{leave.leave_date} - {leave.leave_type}</p>
-            <p className="text-xs text-muted-foreground">{leave.reason}</p>
+            <p className="text-sm font-semibold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
+            <p className="text-xs text-muted-foreground">
+              {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')} ·{' '}
+              {(leave.leave_category ?? 'casual') === 'sick' ? 'Sick' : 'Casual'}
+            </p>
+            <p className="text-xs text-foreground">{leave.reason}</p>
             <Input
               value={notes[leave.id] ?? ''}
               onChange={e => setNotes(prev => ({ ...prev, [leave.id]: e.target.value }))}
@@ -52,7 +57,12 @@ export default function ManagerLeaves() {
               <Button
                 onClick={() =>
                   void resolveLeave
-                    .mutateAsync({ leaveId: leave.id, status: 'approved', managerNote: notes[leave.id] })
+                    .mutateAsync({
+                      leaveId: leave.id,
+                      status: 'approved',
+                      managerNote: notes[leave.id],
+                      resolverUserId: user?.id ?? '',
+                    })
                     .then(() => toast.success('Approved'))
                 }
               >
@@ -62,7 +72,12 @@ export default function ManagerLeaves() {
                 variant="destructive"
                 onClick={() =>
                   void resolveLeave
-                    .mutateAsync({ leaveId: leave.id, status: 'rejected', managerNote: notes[leave.id] })
+                    .mutateAsync({
+                      leaveId: leave.id,
+                      status: 'rejected',
+                      managerNote: notes[leave.id],
+                      resolverUserId: user?.id ?? '',
+                    })
                     .then(() => toast.success('Rejected'))
                 }
               >

@@ -30,6 +30,8 @@ function getMonthDays(year: number, month: number) {
 export default function ReportHistory() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isManager = user?.role === 'manager';
+  const reportBase = isManager ? '/manager/report' : '/mr/report';
   const { data: reports = [], isLoading, isError } = useMrReportsWithVisitCounts(user?.id ?? '');
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
@@ -75,7 +77,7 @@ export default function ReportHistory() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title="Report History" showBack />
+      <PageHeader title={isManager ? 'My report history' : 'Report History'} showBack />
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <div className="flex gap-2">
@@ -149,7 +151,7 @@ export default function ReportHistory() {
                       disabled={isFuture}
                       onClick={() => {
                         const rep = reports.find(r => r.report_date === d.date);
-                        if (rep) navigate(`/mr/report/${rep.id}`);
+                        if (rep) navigate(`${reportBase}/${rep.id}`);
                       }}
                       className={cn(
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
@@ -196,7 +198,7 @@ export default function ReportHistory() {
               <button
                 key={report.id}
                 type="button"
-                onClick={() => navigate(`/mr/report/${report.id}`)}
+                onClick={() => navigate(`${reportBase}/${report.id}`)}
                 className="w-full rounded-xl bg-card p-4 shadow-sm text-left active:scale-[0.98] transition-transform animate-fade-in-up flex items-center gap-3"
                 style={{ animationDelay: `${i * 80}ms` }}
               >
@@ -224,7 +226,7 @@ export default function ReportHistory() {
         )}
       </div>
 
-      <BottomNav role={user?.role === 'manager' ? 'manager' : 'mr'} />
+      <BottomNav role={isManager ? 'manager' : 'mr'} />
     </div>
   );
 }

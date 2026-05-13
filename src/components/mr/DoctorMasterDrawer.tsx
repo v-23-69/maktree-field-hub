@@ -47,6 +47,7 @@ export default function DoctorMasterDrawer({
   const [visitFrequency, setVisitFrequency] = useState<
     'weekly' | 'fortnightly' | 'monthly' | ''
   >('')
+  const [monthlyVisitTarget, setMonthlyVisitTarget] = useState(4)
 
   const canSave = useMemo(() => {
     if (!open) return false
@@ -66,6 +67,11 @@ export default function DoctorMasterDrawer({
     setBirthday(activeDoctor?.birthday ?? '')
     setMarriageAnniversary(activeDoctor?.marriage_anniversary ?? '')
     setVisitFrequency(activeDoctor?.visit_frequency ?? '')
+    setMonthlyVisitTarget(
+      typeof activeDoctor?.monthly_visit_target === 'number' && activeDoctor.monthly_visit_target > 0
+        ? activeDoctor.monthly_visit_target
+        : 4,
+    )
   }, [open, activeDoctor])
 
   useEffect(() => {
@@ -86,6 +92,7 @@ export default function DoctorMasterDrawer({
           birthday,
           marriage_anniversary: marriageAnniversary,
           visit_frequency: visitFrequency ? (visitFrequency as any) : null,
+          monthly_visit_target: monthlyVisitTarget,
           speciality,
         })
         toast.success('Doctor details saved')
@@ -111,6 +118,7 @@ export default function DoctorMasterDrawer({
         birthday,
         marriage_anniversary: marriageAnniversary,
         visit_frequency: visitFrequency ? (visitFrequency as any) : null,
+        monthly_visit_target: monthlyVisitTarget,
       })
       toast.success('New doctor added')
       onSaved()
@@ -250,14 +258,31 @@ export default function DoctorMasterDrawer({
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Visit Frequency
+              Monthly visit target (DCR calls)
+            </Label>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              How many field visits with this doctor count toward the monthly goal (resets each calendar month).
+            </p>
+            <Input
+              type="number"
+              min={1}
+              max={99}
+              value={monthlyVisitTarget}
+              onChange={e => setMonthlyVisitTarget(Math.min(99, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+              className="touch-target rounded-lg"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Visit cadence (optional)
             </Label>
             <select
               value={visitFrequency}
               onChange={e => setVisitFrequency(e.target.value as any)}
               className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
             >
-              <option value="">Select frequency</option>
+              <option value="">Not set</option>
               <option value="weekly">Weekly</option>
               <option value="fortnightly">Fortnightly</option>
               <option value="monthly">Monthly</option>
