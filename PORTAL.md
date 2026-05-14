@@ -16,14 +16,12 @@ Mobile-first PWA for pharmaceutical field operations. Three roles: **MR** (Medic
 - Listens to `onAuthStateChange` for session refresh.
 - Post-login redirect: MR → `/mr/dashboard`, Manager → `/manager/dashboard`, Admin → `/admin/dashboard`.
 - Default password for new users: `Maktree@123` (set by edge function during user creation).
+- **Password changes are not done in the app.** MRs, managers, and admins sign in with credentials issued or reset in **Supabase** (e.g. Authentication → Users → send password recovery, or admin API). There is no in-app “change password” flow.
 
 ### Blocked Complaint (`/blocked-complaint`)
 - Shown when blocked user attempts login. Displays block reason.
 - User enters email + complaint text (min 50 chars).
 - Inserts row into `block_complaints` table. Admin reviews in Users page.
-
-### Change Password (`/profile`)
-- Uses `supabase.auth.updateUser({ password })` + session refresh.
 
 ### Protected Routes
 - `ProtectedRoute` component wraps every role-specific page.
@@ -236,6 +234,7 @@ All tables have RLS enabled. Policies enforce:
 ### Profile (`/profile`)
 - Photo upload (to Supabase Storage).
 - Editable fields: full_name, designation, dob, joining_date, mobile, aadhaar_number (masked display), pan_number, address, city, state, pincode, emergency_contact_name, emergency_contact_mobile.
+- **Login password is not changed in the app**; use Supabase (recovery email or admin) to set or reset passwords.
 - Completion progress bar (profile_complete_pct).
 - Missing fields highlighted.
 - Manager/Admin can view other user profiles at `/profile/:userId` (manager: read-only, admin: editable).
@@ -429,7 +428,7 @@ All tables have RLS enabled. Policies enforce:
 
 | Hook | Purpose |
 |------|---------|
-| `useAuth` | Auth context: signIn, logout, changePassword, user, authReady, blockedInfo |
+| `useAuth` | Auth context: signIn, logout, user, authReady, blockedInfo |
 | `useAreas` / `useAllAreas` / `useMrSubAreas` | Fetch areas, sub-areas, MR-specific sub-area access |
 | `useDoctors` | Fetch doctors by sub-area |
 | `useReport` / `useReportBlockStatus` / `useRequestReportUnlock` | Report CRUD, block status check, unlock requests |
@@ -515,7 +514,7 @@ src/
 │   ├── admin/                # AdminLayout
 │   └── mr/                   # ReportStep1-4, DoctorVisitDrawer, DoctorMasterDrawer
 ├── pages/
-│   ├── auth/                 # Login, BlockedComplaint, ChangePassword
+│   ├── auth/                 # Login, BlockedComplaint
 │   ├── mr/                   # Dashboard, NewReport, MasterList, ReportHistory, ReportDetail, Leave, Expense, TourProgram
 │   ├── manager/              # Dashboard, Reports, Analytics, UnlockRequests, Targets, Leaves, Holidays
 │   ├── admin/                # Dashboard, Users, Doctors, Areas, MRAccess, Targets, Holidays

@@ -8,9 +8,6 @@ interface AuthContextType extends AuthState {
     password: string,
   ) => Promise<{ success: boolean; error?: string }>
   logout: () => Promise<void>
-  changePassword: (
-    newPassword: string,
-  ) => Promise<{ success: boolean; error?: string }>
   blockedInfo: { isBlocked: boolean; blockReason: string | null } | null
   clearBlockedInfo: () => void
 }
@@ -189,33 +186,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const changePassword = useCallback(
-    async (newPassword: string) => {
-      if (!supabase) {
-        return { success: false, error: 'Supabase is not configured' }
-      }
-      try {
-        const { error: authError } = await supabase.auth.updateUser({
-          password: newPassword,
-        })
-        if (authError) throw authError
-
-        const { error: refreshError } = await supabase.auth.refreshSession()
-        if (refreshError) {
-          console.error('Session refresh error:', refreshError)
-        }
-
-        return { success: true }
-      } catch (error: unknown) {
-        console.error('Change password error:', error)
-        const message =
-          error instanceof Error ? error.message : 'Failed to change password'
-        return { success: false, error: message }
-      }
-    },
-    [],
-  )
-
   const value = useMemo((): AuthContextType => {
     return {
       user,
@@ -225,11 +195,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isProfileLoading,
       signIn,
       logout,
-      changePassword,
       blockedInfo,
       clearBlockedInfo,
     }
-  }, [user, authReady, isProfileLoading, signIn, logout, changePassword, blockedInfo, clearBlockedInfo])
+  }, [user, authReady, isProfileLoading, signIn, logout, blockedInfo, clearBlockedInfo])
 
   return (
     <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
