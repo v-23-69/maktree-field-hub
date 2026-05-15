@@ -15,6 +15,7 @@ import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useAddDoctor } from '@/hooks/useAdminDoctors';
 import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
 import { useAssignSubAreasToMrBatch, useMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
+import { useMrSubAreas } from '@/hooks/useAreas';
 import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
@@ -50,6 +51,7 @@ export default function ManagerDashboard() {
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(user?.id ?? '');
   const { data: todayPlan } = useTodayTpPlan(user?.id ?? '');
+  const { data: mgrSelfSubAreas = [] } = useMrSubAreas(user?.id ?? '');
   const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
   const unpauseUser = useUnpauseUser();
 
@@ -85,7 +87,13 @@ export default function ManagerDashboard() {
   }, [todayPlan, nameById]);
 
   const isPaused = user?.is_paused === true;
-  const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
+  const mgrTpApproved =
+    !!tpStatus &&
+    (tpStatus.current_month_tp_approved === true || tpStatus.current_month_tp_status === 'approved');
+  const mgrDcrBlocked = !isPaused && !tpStatusLoading && !!tpStatus && !mgrTpApproved;
+  const mgrHasSubAreaAccess =
+    tpStatus?.has_sub_area_access === true ||
+    (tpStatus?.has_sub_area_access === undefined && mgrSelfSubAreas.length > 0);
   const nextMonthDeadlineApproaching = tpStatus && !tpStatus.next_month_tp_exists && tpStatus.days_to_deadline <= 5 && tpStatus.days_to_deadline >= 0;
   const nextMonthOverdue = tpStatus?.is_overdue === true;
   const todayStr = formatDisplayDate(todayInputDate());
@@ -212,16 +220,25 @@ export default function ManagerDashboard() {
     enabled: !!user?.id && mrIds.length > 0 && !!supabase && deferReady,
     queryFn: async (): Promise<Array<{ mrId: string; status: 'none' | 'draft' | 'submitted' }>> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('expense_reports')
-        .select('mr_id, status')
-        .in('mr_id', mrIds)
-        .eq('report_date', today)
-      if (error) throw error
       const byMr = new Map<string, 'none' | 'draft' | 'submitted'>()
       for (const id of mrIds) byMr.set(id, 'none')
-      type Er = { mr_id: string; status: string }
-      for (const r of (data ?? []) as Er[]) {
+
+      const { data: rpcData, error: rpcErr } = await supabase.rpc('get_manager_team_expense_report_statuses', {
+        p_report_date: today,
+      })
+      let rows: Array<{ mr_id: string; status: string }> = []
+      if (!rpcErr && rpcData != null) {
+        rows = (Array.isArray(rpcData) ? rpcData : []) as Array<{ mr_id: string; status: string }>
+      } else {
+        const { data, error } = await supabase
+          .from('expense_reports')
+          .select('mr_id, status')
+          .in('mr_id', mrIds)
+          .eq('report_date', today)
+        if (error) throw error
+        rows = (data ?? []) as Array<{ mr_id: string; status: string }>
+      }
+      for (const r of rows) {
         const st = r.status === 'submitted' ? 'submitted' : 'draft'
         const prev = byMr.get(r.mr_id)
         if (prev === 'submitted' || st === 'submitted') byMr.set(r.mr_id, 'submitted')
@@ -297,60 +314,6 @@ export default function ManagerDashboard() {
     );
   }
 
-  if (!tpStatusLoading && currentMonthTpMissing) {
-    return (
-      <div className="min-h-screen bg-background pb-24">
-        <PageHeader title="Manager Dashboard" />
-        <div className="px-4 py-8 max-w-lg mx-auto space-y-6">
-          <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5">
-            <div className="flex items-center gap-3.5">
-              {user?.profile_photo_url ? (
-                <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow" />
-              ) : (
-                <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15">
-                  <span className="text-base font-extrabold text-primary">
-                    {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                  </span>
-                </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-extrabold text-foreground tracking-tight truncate">
-                  Hi, {user?.full_name?.split(' ')[0]}!
-                </h2>
-                <p className="text-xs text-muted-foreground font-medium">{todayStr}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
-            <div className="flex items-start gap-3">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-foreground">Tour Program Required</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Create your Tour Program for{' '}
-                  <span className="font-semibold text-foreground">
-                    {new Date(tpStatus!.current_month + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                  </span>{' '}
-                  before accessing dashboard features.
-                </p>
-              </div>
-            </div>
-            <Button
-              onClick={() => navigate('/manager/tour-program')}
-              className="w-full rounded-2xl h-12 text-sm font-bold"
-            >
-              <Calendar className="mr-2 h-5 w-5" />
-              Create Tour Program Now
-            </Button>
-          </div>
-        </div>
-        <BottomNav role="manager" />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Manager Dashboard" />
@@ -378,6 +341,27 @@ export default function ManagerDashboard() {
             </div>
           </div>
         </div>
+
+        {!mgrHasSubAreaAccess && !!user?.id && (
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm">
+            <p className="font-semibold text-foreground">We are setting up the portal for you</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed; team management below stays open.
+            </p>
+          </div>
+        )}
+
+        {mgrDcrBlocked && (
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+            <p className="font-semibold text-foreground">Your own DCR is paused until your tour program is approved</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Complete and submit your tour program (managers are auto-approved). Team MR tools below remain available.
+            </p>
+            <Button size="sm" variant="outline" className="mt-2 h-8 text-xs rounded-lg" onClick={() => navigate('/manager/tour-program')}>
+              Open tour program
+            </Button>
+          </div>
+        )}
 
         {/* TP Deadline Alert */}
         {(nextMonthDeadlineApproaching || nextMonthOverdue) && (
@@ -427,6 +411,10 @@ export default function ManagerDashboard() {
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Today's DCR Submitted</p>
               </div>
+            ) : mgrDcrBlocked ? (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-muted-foreground">
+                Complete your approved tour program before starting today&apos;s DCR.
+              </div>
             ) : (
               <Button
                 onClick={() => navigate('/manager/report/new')}
@@ -442,7 +430,8 @@ export default function ManagerDashboard() {
         <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
           <span className="font-semibold text-foreground">Your today</span>
           <span className={cn('tabular-nums', mgrTodayDcrDone ? 'text-emerald-600' : 'text-muted-foreground')}>
-            DCR: {mgrTodayDcrDone ? 'Submitted' : 'Pending'}
+            DCR:{' '}
+            {mgrTodayDcrDone ? 'Submitted' : mgrDcrBlocked ? 'Needs approved TP' : 'Pending'}
           </span>
           <span className={cn('tabular-nums', mgrTodayExpenseDone ? 'text-emerald-600' : 'text-muted-foreground')}>
             Expense: {mgrTodayExpenseDone ? 'Submitted' : mgrTodayExpenseReport?.id ? 'Draft' : 'Not started'}
@@ -485,13 +474,25 @@ export default function ManagerDashboard() {
 
         {/* Self Report CTA */}
         {!mgrTodayDcrDone && (
-          <Button
-            onClick={() => navigate('/manager/report/new')}
-            className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
-          >
-            <FilePlus className="mr-2 h-5 w-5" />
-            Create Daily Report
-          </Button>
+          mgrDcrBlocked ? (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full touch-target rounded-2xl h-12 text-sm font-semibold"
+              onClick={() => toast.message('Complete your tour program', { description: 'Open Tour Plan, fill the month, and submit. Your TP is auto-approved as a manager.' })}
+            >
+              <Lock className="mr-2 h-5 w-5" />
+              DCR locked until tour program is ready
+            </Button>
+          ) : (
+            <Button
+              onClick={() => navigate('/manager/report/new')}
+              className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
+            >
+              <FilePlus className="mr-2 h-5 w-5" />
+              Create Daily Report
+            </Button>
+          )
         )}
 
         {/* Quick Actions — frequently used */}

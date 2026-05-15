@@ -104,8 +104,47 @@ export function useSubmitTourProgram() {
         })
         .eq('id', payload.tourProgramId)
       if (error) throw error
+
+      const { data: authData } = await supabase.auth.getUser()
+      const uid = authData?.user?.id
+      if (!uid) return
+
+      const [{ data: me }, { data: tpRow }] = await Promise.all([
+        supabase.from('users').select('id, role').eq('auth_user_id', uid).maybeSingle(),
+        supabase.from('tour_programs').select('mr_id').eq('id', payload.tourProgramId).maybeSingle(),
+      ])
+      const role = (me as { role?: string } | null)?.role
+      const profileId = (me as { id?: string } | null)?.id
+      const tpMrId = (tpRow as { mr_id?: string } | null)?.mr_id
+      if (role === 'manager' && profileId && tpMrId && profileId === tpMrId) {
+        const { error: apErr } = await supabase
+          .from('tour_programs')
+          .update({ status: 'approved', approved_at: new Date().toISOString(), manager_note: null })
+          .eq('id', payload.tourProgramId)
+        if (apErr) throw apErr
+      }
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tour-program'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+    },
+  })
+}
+
+export function useBeginTourProgramRevision() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (tourProgramId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('begin_tour_program_revision', { p_tour_program_id: tourProgramId })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+    },
   })
 }
 
@@ -160,6 +199,8 @@ export function useResolveTourProgram() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-pending-tour-programs'] })
       queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
     },
   })
 }

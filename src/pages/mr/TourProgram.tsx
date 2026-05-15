@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -14,6 +15,7 @@ import {
   useTourProgram,
   useTourProgramHistory,
   useTourProgramEntries,
+  useBeginTourProgramRevision,
 } from '@/hooks/useTourProgram'
 import { supabase } from '@/lib/supabase'
 import { useMrSubAreasGrouped } from '@/hooks/useAreas'
@@ -143,6 +145,7 @@ const DayCard = memo(function DayCard({
 
 export default function TourProgramPage() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const isManager = user?.role === 'manager'
   const now = todayInputDate()
   const monthOptions = useMemo(() => {
@@ -169,6 +172,7 @@ export default function TourProgramPage() {
   const createOrUpdate = useCreateOrUpdateTourProgram()
   const submit = useSubmitTourProgram()
   const batchSave = useBatchSaveTourProgramEntries()
+  const beginRevision = useBeginTourProgramRevision()
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
   const { data: history = [] } = useTourProgramHistory(activeMrId)
   const { data: assignedAreaGroups = [] } = useMrSubAreasGrouped(activeMrId)
@@ -291,7 +295,16 @@ export default function TourProgramPage() {
         tpId = tp.id
       }
       const rows = buildEntryRows(tpId)
-      if (rows.length > 0) await batchSave.mutateAsync(rows)
+      if (rows.length > 0) {
+        await batchSave.mutateAsync(rows)
+        const st = tpQuery.data?.status
+        if (isManager && tab === 'self' && st === 'approved' && tpId && supabase) {
+          const { error: ecErr } = await supabase.rpc('increment_tour_program_edit_count', { p_tour_program_id: tpId })
+          if (ecErr) throw ecErr
+          void queryClient.invalidateQueries({ queryKey: ['tour-program', activeMrId, month] })
+        }
+      }
+
       toast.success('Tour program saved')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to save tour program')
@@ -327,7 +340,12 @@ export default function TourProgramPage() {
   const isApproved = currentStatus === 'approved'
   const isSubmitted = currentStatus === 'submitted'
   const isViewOnly = tab === 'team'
-  const canEdit = !isViewOnly && !isApproved && !isSubmitted
+  const managerSelf = isManager && tab === 'self'
+  const canEdit =
+    !isViewOnly &&
+    (managerSelf
+      ? isApproved || currentStatus === 'draft' || currentStatus === 'rejected' || currentStatus === 'not_created'
+      : !isApproved && !isSubmitted)
 
   const statusColor: Record<string, string> = {
     submitted: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20',
@@ -416,14 +434,21 @@ export default function TourProgramPage() {
         {(tab !== 'team' || viewMrId) && (
           <>
             <div className={cn('rounded-2xl border p-4', statusColor[currentStatus] ?? statusColor.not_created)}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <div className="flex items-center gap-2">
                   <CalendarDays className="h-4 w-4" />
                   <p className="text-sm font-bold">{monthOptions.find(m => m.value === month)?.label ?? month}</p>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider">
-                  {statusLabel[currentStatus] ?? currentStatus}
-                </span>
+                <div className="flex flex-col items-end gap-0.5 text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider">
+                    {statusLabel[currentStatus] ?? currentStatus}
+                  </span>
+                  {(tpQuery.data?.edit_count ?? 0) > 0 && (
+                    <span className="text-[10px] font-semibold text-muted-foreground">
+                      Edits recorded: {tpQuery.data?.edit_count ?? 0}
+                    </span>
+                  )}
+                </div>
               </div>
               {workingDayRows.length > 0 && (
                 <div className="mt-3 space-y-1.5">
@@ -443,6 +468,35 @@ export default function TourProgramPage() {
                 <p className="text-xs mt-2">Note: {tpQuery.data.manager_note}</p>
               )}
             </div>
+
+            {!isManager && !isViewOnly && (currentStatus === 'submitted' || currentStatus === 'approved') && tpQuery.data?.id && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-2xl h-11 text-sm font-semibold border-amber-500/40"
+                disabled={beginRevision.isPending}
+                onClick={() => {
+                  const id = tpQuery.data?.id
+                  if (!id) return
+                  void beginRevision.mutateAsync(id).then(() => {
+                    toast.success('Tour program unlocked for editing. Save your changes and submit again for manager approval.')
+                  }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not unlock TP'))
+                }}
+              >
+                {beginRevision.isPending ? 'Unlocking…' : 'Edit tour program (requires re-approval)'}
+              </Button>
+            )}
+
+            {allSubAreas.length === 0 && (tab === 'self' || viewMrId) && (
+              <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-foreground">
+                <p className="font-semibold">No field areas assigned yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {isManager
+                    ? 'Use Assign Self on your dashboard to link territories to your profile before planning.'
+                    : 'Your manager must assign sub-areas to you before you can build a tour program.'}
+                </p>
+              </div>
+            )}
 
             <div className="space-y-2">
               <p className="section-title">Daily Plan</p>

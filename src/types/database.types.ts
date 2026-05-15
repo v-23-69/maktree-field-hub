@@ -456,6 +456,8 @@ export interface TourProgram {
   is_late: boolean
   approved_at: string | null
   submitted_at: string | null
+  /** Increments when MR unlocks a submitted/approved TP for re-approval, or when a manager saves edits on an approved self TP. */
+  edit_count: number
   created_at: string
 }
 
@@ -474,6 +476,10 @@ export interface TpStatus {
   current_month: string
   current_month_tp_status: 'not_created' | 'draft' | 'submitted' | 'approved' | 'rejected'
   current_month_tp_exists: boolean
+  /** True when current month TP row exists with status approved (preferred over parsing status). */
+  current_month_tp_approved?: boolean
+  /** True when user has at least one sub-area in mr_sub_area_access. */
+  has_sub_area_access?: boolean
   next_month: string
   next_month_tp_status: 'not_created' | 'draft' | 'submitted' | 'approved' | 'rejected'
   next_month_tp_exists: boolean

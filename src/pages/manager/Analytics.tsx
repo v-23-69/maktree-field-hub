@@ -16,13 +16,24 @@ import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
+function defaultMonthRange(): { from: string; to: string } {
+  const today = new Date()
+  const y = today.getFullYear()
+  const m = String(today.getMonth() + 1).padStart(2, '0')
+  const d = String(today.getDate()).padStart(2, '0')
+  const to = `${y}-${m}-${d}`
+  const from = `${y}-${m}-01`
+  return { from, to }
+}
+
 export default function ManagerAnalytics() {
   const { user } = useAuth();
+  const defaults = useMemo(() => defaultMonthRange(), []);
   const [includeSelf, setIncludeSelf] = useState(true);
   const [rangePreset, setRangePreset] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [run, setRun] = useState(false);
+  const [fromDate, setFromDate] = useState(defaults.from);
+  const [toDate, setToDate] = useState(defaults.to);
+  const [run, setRun] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'area' | 'loyalty' | 'intel' | 'calls'>('overview');
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly');
   const [loyaltyProduct, setLoyaltyProduct] = useState('');
@@ -84,7 +95,7 @@ export default function ManagerAnalytics() {
     }
     setFromDate(from)
     setToDate(to)
-    setRun(false)
+    setRun(true)
   }
 
   const monthLabel = toDate ? toDate.slice(0, 7) : ''

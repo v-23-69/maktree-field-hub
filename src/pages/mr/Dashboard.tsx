@@ -27,6 +27,7 @@ import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange,
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
+import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
 import { useMrLeaves } from '@/hooks/useLeaves';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -52,7 +53,7 @@ export default function MRDashboard() {
 
   // Deferred queries (below the fold)
   const { data: completionRows = [], isLoading: completionLoading } = useMasterListByMr(deferReady ? userId : '');
-  const { data: subAreas = [] } = useMrSubAreas(deferReady ? userId : '');
+  const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(userId);
   const { data: targetRows = [], isLoading: targetsLoading } = useMrTargets(deferReady ? userId : '');
   const { data: stats } = useMrDashboardStats(deferReady ? userId : '');
   const { data: todayStrike } = useTodayStrike(deferReady ? userId : '');
@@ -184,9 +185,15 @@ export default function MRDashboard() {
   const allDcrDone = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted);
 
   const isPaused = user?.is_paused === true;
-  const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
+  const tpApproved =
+    !!tpStatus &&
+    (tpStatus.current_month_tp_approved === true || tpStatus.current_month_tp_status === 'approved');
+  const hasSubAreaAccess =
+    tpStatus?.has_sub_area_access === true ||
+    (tpStatus?.has_sub_area_access === undefined && subAreas.length > 0);
   const nextMonthDeadlineApproaching = tpStatus && !tpStatus.next_month_tp_exists && tpStatus.days_to_deadline <= 5 && tpStatus.days_to_deadline >= 0;
   const nextMonthOverdue = tpStatus?.is_overdue === true;
+  const tpGateLoading = tpStatusLoading || (!!userId && subAreasLoading);
 
   const workingWithNames = useMemo(() => {
     if (!todayPlan?.working_with_ids?.length) return [];
@@ -274,7 +281,55 @@ export default function MRDashboard() {
     );
   }
 
-  if (!tpStatusLoading && currentMonthTpMissing) {
+  if (tpGateLoading && userId) {
+    return (
+      <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-6">
+        <PageHeader title="Dashboard" />
+        <LoadingSpinner />
+        <p className="text-sm text-muted-foreground mt-4">Loading your workspace…</p>
+        <BottomNav role="mr" />
+      </div>
+    );
+  }
+
+  if (userId && tpStatus && !hasSubAreaAccess) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <PageHeader title="Dashboard" />
+        <div className="px-4 py-8 max-w-lg mx-auto space-y-6">
+          <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5">
+            <div className="flex items-center gap-3.5">
+              <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15">
+                <Sparkles className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-extrabold text-foreground tracking-tight truncate">
+                  Hi, {user?.full_name?.split(' ')[0]}!
+                </h2>
+                <p className="text-xs text-muted-foreground font-medium">{today}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border/60 bg-card/80 p-5 space-y-3 text-center">
+            <p className="text-base font-bold text-foreground">We are setting up the portal for you</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Your manager still needs to assign your field areas. Once territories are linked to your profile, you will be able to create your tour program and use the rest of the dashboard.
+            </p>
+          </div>
+        </div>
+        <BottomNav role="mr" />
+      </div>
+    );
+  }
+
+  if (userId && tpStatus && hasSubAreaAccess && !tpApproved) {
+    const st = tpStatus.current_month_tp_status;
+    const monthLabel = new Date(tpStatus.current_month + 'T00:00:00').toLocaleDateString(undefined, {
+      month: 'long',
+      year: 'numeric',
+    });
+    const isAwaitingApproval = st === 'submitted';
+    const isRejected = st === 'rejected';
     return (
       <div className="min-h-screen bg-background pb-24">
         <PageHeader title="Dashboard" />
@@ -304,19 +359,31 @@ export default function MRDashboard() {
                 <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-foreground">Tour Program Required</h3>
+                <h3 className="text-base font-bold text-foreground">
+                  {isAwaitingApproval ? 'Tour program pending approval' : isRejected ? 'Tour program needs attention' : 'Tour program required'}
+                </h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Create your Tour Program for{' '}
-                  <span className="font-semibold text-foreground">
-                    {new Date(tpStatus!.current_month + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
-                  </span>{' '}
-                  before accessing other features.
+                  {isAwaitingApproval ? (
+                    <>
+                      Your tour program for <span className="font-semibold text-foreground">{monthLabel}</span> is with your manager for approval.
+                      You will get full access as soon as it is approved.
+                    </>
+                  ) : isRejected ? (
+                    <>
+                      Your tour program for <span className="font-semibold text-foreground">{monthLabel}</span> was rejected. Open Tour Program to review feedback, update it, and submit again.
+                    </>
+                  ) : (
+                    <>
+                      Create and get your tour program approved for{' '}
+                      <span className="font-semibold text-foreground">{monthLabel}</span> before accessing other features.
+                    </>
+                  )}
                 </p>
               </div>
             </div>
             <Button onClick={() => navigate('/mr/tour-program')} className="w-full rounded-2xl h-12 text-sm font-bold">
               <Calendar className="mr-2 h-5 w-5" />
-              Create Tour Program Now
+              {isAwaitingApproval ? 'View tour program' : 'Create or update tour program'}
             </Button>
           </div>
         </div>

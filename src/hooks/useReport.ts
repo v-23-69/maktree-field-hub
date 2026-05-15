@@ -780,6 +780,7 @@ export function useMonthlySupportAggregateForManagerTeam(managerId: string, mont
 export type ReportVisitDaySummary = {
   visit_count: number
   doctors: Array<{ id: string; name: string }>
+  visits: ReportVisit[]
 }
 
 export function useReportVisitDaySummary(reportId: string | null) {
@@ -791,9 +792,9 @@ export function useReportVisitDaySummary(reportId: string | null) {
       const visits = await loadReportVisits(supabase, reportId)
       const doctors = visits.map(v => ({
         id: v.doctor_id,
-        name: (v.doctor as { full_name?: string } | undefined)?.full_name?.trim() || 'Doctor',
+        name: v.doctor?.full_name?.trim() || 'Doctor',
       }))
-      return { visit_count: visits.length, doctors }
+      return { visit_count: visits.length, doctors, visits }
     },
   })
 }

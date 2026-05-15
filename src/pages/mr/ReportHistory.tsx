@@ -6,7 +6,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useAuth } from '@/hooks/useAuth';
 import { useMrReportsWithVisitCounts, useReportVisitDaySummary } from '@/hooks/useReport';
-import { CheckCircle2, Clock, ChevronRight, ChevronLeft } from 'lucide-react';
+import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Stethoscope, Pill, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
@@ -92,25 +92,80 @@ export default function ReportHistory() {
       <Drawer open={!!summaryReportId} onOpenChange={open => { if (!open) closeSummary(); }}>
         <DrawerContent className="max-h-[85dvh]">
           <DrawerHeader className="border-b border-border">
-            <DrawerTitle className="text-base">DCR summary</DrawerTitle>
+            <DrawerTitle className="text-base">DCR day summary</DrawerTitle>
             <p className="text-xs text-muted-foreground">{summaryDateLabel}</p>
           </DrawerHeader>
           <div className="overflow-y-auto px-4 pb-6 pt-3 space-y-3">
             {summaryLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
             {!summaryLoading && daySummary && (
               <>
-                <p className="text-sm text-foreground">
-                  <span className="font-semibold">{daySummary.visit_count}</span> doctor visit
-                  {daySummary.visit_count === 1 ? '' : 's'}
-                </p>
-                {daySummary.doctors.length > 0 ? (
-                  <ul className="space-y-1.5">
-                    {daySummary.doctors.map(d => (
-                      <li key={d.id} className="text-sm rounded-lg border border-border px-3 py-2 bg-muted/30">
-                        {d.name}
-                      </li>
-                    ))}
-                  </ul>
+                <div className="rounded-xl border border-border/60 bg-gradient-to-br from-primary/5 to-background p-4 space-y-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Visits</p>
+                  <p className="text-2xl font-bold text-foreground tabular-nums">{daySummary.visit_count}</p>
+                  <p className="text-xs text-muted-foreground">Doctor call{daySummary.visit_count === 1 ? '' : 's'} on this submitted report</p>
+                </div>
+                {daySummary.visits.length > 0 ? (
+                  <div className="space-y-2">
+                    {daySummary.visits.map(v => {
+                      const d = v.doctor
+                      const spec = d?.speciality?.trim() || '—'
+                      const territory = d?.sub_area?.area?.name && d?.sub_area?.name
+                        ? `${d.sub_area.area.name} / ${d.sub_area.name}`
+                        : d?.sub_area?.name ?? '—'
+                      const promos = (v.promoted_products ?? [])
+                        .map(p => p.product?.name)
+                        .filter(Boolean) as string[]
+                      const monthly = v.monthly_support_entries ?? []
+                      const competitors = v.competitor_entries ?? []
+                      return (
+                        <div key={v.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-3.5 space-y-2">
+                          <div className="flex items-start gap-2">
+                            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                              <Stethoscope className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-bold text-foreground leading-tight">{d?.full_name ?? 'Doctor'}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{spec}</p>
+                              <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
+                                <Building2 className="h-3 w-3 shrink-0" />
+                                {territory}
+                              </p>
+                            </div>
+                          </div>
+                          {promos.length > 0 && (
+                            <div className="rounded-lg bg-muted/40 px-2.5 py-2 space-y-1">
+                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                                <Pill className="h-3 w-3" /> Promotions
+                              </p>
+                              <p className="text-xs text-foreground">{promos.join(', ')}</p>
+                            </div>
+                          )}
+                          {monthly.length > 0 && (
+                            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-2.5 py-2 space-y-1">
+                              <p className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">Monthly support</p>
+                              <ul className="text-xs text-foreground space-y-0.5">
+                                {monthly.map(m => (
+                                  <li key={m.id} className="flex justify-between gap-2">
+                                    <span className="truncate min-w-0">{m.product?.name ?? 'Product'}</span>
+                                    <span className="shrink-0 tabular-nums font-medium">
+                                      Qty {m.quantity}
+                                      {m.amount_inr != null ? ` · Rs ${Number(m.amount_inr).toLocaleString('en-IN')}` : ''}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {competitors.length > 0 && (
+                            <div className="text-[11px] text-muted-foreground">
+                              <span className="font-semibold text-foreground">Competitors: </span>
+                              {competitors.map(c => `${c.brand_name} (${c.quantity})`).join(', ')}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
                 ) : (
                   <p className="text-sm text-muted-foreground">No visit rows on this report.</p>
                 )}
