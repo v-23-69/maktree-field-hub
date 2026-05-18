@@ -14,7 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useAddDoctor } from '@/hooks/useAdminDoctors';
 import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
-import { useAssignSubAreasToMrBatch, useMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
+import { useAssignSubAreasToMrBatch, useMrSubAreaAccess, useSaveMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
+import { Check } from 'lucide-react';
 import { useMrSubAreas } from '@/hooks/useAreas';
 import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
@@ -72,6 +73,7 @@ export default function ManagerDashboard() {
   const addArea = useAddArea();
   const addSubArea = useAddSubArea();
   const assignSubAreasBatch = useAssignSubAreasToMrBatch();
+  const saveMrSubAreaAccess = useSaveMrSubAreaAccess();
   const createUser = useCreateUser();
   const deleteMr = useDeleteMrUser();
   const { data: allProducts = [] } = useProducts();
@@ -146,6 +148,12 @@ export default function ManagerDashboard() {
   const [transferToMrId, setTransferToMrId] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const { data: deleteMrSubAreas = [] } = useMrSubAreaAccess(deleteMrId);
+  const { data: assignMrServerAccess = [] } = useMrSubAreaAccess(assignMrId);
+  const { data: selfServerAccess = [] } = useMrSubAreaAccess(
+    action === 'assign-self' ? (user?.id ?? '') : '',
+  );
+  const assignServerSet = useMemo(() => new Set(assignMrServerAccess), [assignMrServerAccess]);
+  const selfServerSet = useMemo(() => new Set(selfServerAccess), [selfServerAccess]);
 
   const allSubAreas = useMemo(
     () =>
@@ -190,6 +198,36 @@ export default function ManagerDashboard() {
       return next;
     });
   };
+
+  useEffect(() => {
+    if (!assignMrId) {
+      setAssignSelectedSubAreas(new Set());
+      return;
+    }
+    setAssignSelectedSubAreas(new Set(assignMrServerAccess));
+  }, [assignMrId, assignMrServerAccess]);
+
+  useEffect(() => {
+    if (action !== 'assign-self' || !user?.id) return;
+    setSelfSelectedSubAreas(new Set(selfServerAccess));
+  }, [action, user?.id, selfServerAccess]);
+
+  const selectAllAssignFiltered = () => {
+    setAssignSelectedSubAreas(prev => {
+      const next = new Set(prev);
+      for (const sa of assignSubAreasFiltered) next.add(sa.id);
+      return next;
+    });
+  };
+
+  const selectAllSelfFiltered = () => {
+    setSelfSelectedSubAreas(prev => {
+      const next = new Set(prev);
+      for (const sa of selfSubAreasFiltered) next.add(sa.id);
+      return next;
+    });
+  };
+
   const today = todayInputDate()
 
   const { data: mgrTodayExpenseReport } = useExpenseReport(deferReady ? (user?.id ?? '') : '', today);
@@ -901,10 +939,7 @@ export default function ManagerDashboard() {
                   <Label className="text-xs">Area</Label>
                   <select
                     value={assignPickAreaId}
-                    onChange={e => {
-                      setAssignPickAreaId(e.target.value)
-                      setAssignSelectedSubAreas(new Set())
-                    }}
+                    onChange={e => setAssignPickAreaId(e.target.value)}
                     className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
                   >
                     <option value="">All Territories</option>
@@ -914,7 +949,18 @@ export default function ManagerDashboard() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Areas (select one or more)</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs">Areas (select to assign or remove)</Label>
+                    {assignSubAreasFiltered.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={selectAllAssignFiltered}
+                        className="text-[10px] font-semibold text-primary shrink-0"
+                      >
+                        Select all
+                      </button>
+                    )}
+                  </div>
                   <div className="max-h-52 overflow-y-auto space-y-2 rounded-lg border border-border p-2">
                     {assignSubAreasFiltered.length === 0 ? (
                       <p className="text-xs text-muted-foreground px-1">No areas in this territory.</p>
@@ -926,7 +972,13 @@ export default function ManagerDashboard() {
                             checked={assignSelectedSubAreas.has(sa.id)}
                             onChange={() => toggleAssignSubArea(sa.id)}
                           />
-                          <span>{sa.areaName} — {sa.name}</span>
+                          <span className="flex-1">{sa.areaName} — {sa.name}</span>
+                          {assignServerSet.has(sa.id) && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+                              <Check className="h-3 w-3" />
+                              Assigned
+                            </span>
+                          )}
                         </label>
                       ))
                     )}
@@ -934,27 +986,23 @@ export default function ManagerDashboard() {
                 </div>
                 <Button
                   type="button"
-                  disabled={assignSubAreasBatch.isPending}
+                  disabled={saveMrSubAreaAccess.isPending}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                   onClick={() => {
                     if (!assignMrId) {
                       toast.error('Choose an MR')
                       return
                     }
-                    if (assignSelectedSubAreas.size === 0) {
-                      toast.error('Select at least one area')
-                      return
-                    }
-                    void assignSubAreasBatch
+                    void saveMrSubAreaAccess
                       .mutateAsync({ mrId: assignMrId, subAreaIds: [...assignSelectedSubAreas] })
                       .then(() => {
-                        toast.success('Areas assigned to MR')
+                        toast.success('Area assignments saved')
                         closeDrawer()
                       })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not assign areas'))
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save assignments'))
                   }}
                 >
-                  {assignSubAreasBatch.isPending ? 'Saving…' : 'Save assignments'}
+                  {saveMrSubAreaAccess.isPending ? 'Saving…' : 'Save assignments'}
                 </Button>
               </>
             )}
@@ -965,10 +1013,7 @@ export default function ManagerDashboard() {
                   <Label className="text-xs">Area</Label>
                   <select
                     value={selfPickAreaId}
-                    onChange={e => {
-                      setSelfPickAreaId(e.target.value)
-                      setSelfSelectedSubAreas(new Set())
-                    }}
+                    onChange={e => setSelfPickAreaId(e.target.value)}
                     className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
                   >
                     <option value="">All Territories</option>
@@ -978,7 +1023,18 @@ export default function ManagerDashboard() {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-xs">Areas (select one or more)</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label className="text-xs">Areas (select to assign or remove)</Label>
+                    {selfSubAreasFiltered.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={selectAllSelfFiltered}
+                        className="text-[10px] font-semibold text-primary shrink-0"
+                      >
+                        Select all
+                      </button>
+                    )}
+                  </div>
                   <div className="max-h-52 overflow-y-auto space-y-2 rounded-lg border border-border p-2">
                     {selfSubAreasFiltered.length === 0 ? (
                       <p className="text-xs text-muted-foreground px-1">No areas in this territory.</p>
@@ -990,7 +1046,13 @@ export default function ManagerDashboard() {
                             checked={selfSelectedSubAreas.has(sa.id)}
                             onChange={() => toggleSelfSubArea(sa.id)}
                           />
-                          <span>{sa.areaName} — {sa.name}</span>
+                          <span className="flex-1">{sa.areaName} — {sa.name}</span>
+                          {selfServerSet.has(sa.id) && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
+                              <Check className="h-3 w-3" />
+                              Assigned
+                            </span>
+                          )}
                         </label>
                       ))
                     )}
@@ -998,27 +1060,23 @@ export default function ManagerDashboard() {
                 </div>
                 <Button
                   type="button"
-                  disabled={assignSubAreasBatch.isPending}
+                  disabled={saveMrSubAreaAccess.isPending}
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                   onClick={() => {
                     if (!user?.id) {
                       toast.error('Not signed in')
                       return
                     }
-                    if (selfSelectedSubAreas.size === 0) {
-                      toast.error('Select at least one area')
-                      return
-                    }
-                    void assignSubAreasBatch
+                    void saveMrSubAreaAccess
                       .mutateAsync({ mrId: user.id, subAreaIds: [...selfSelectedSubAreas] })
                       .then(() => {
-                        toast.success('Areas assigned to self')
+                        toast.success('Area assignments saved')
                         closeDrawer()
                       })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not assign area'))
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save assignments'))
                   }}
                 >
-                  {assignSubAreasBatch.isPending ? 'Saving…' : 'Save assignments'}
+                  {saveMrSubAreaAccess.isPending ? 'Saving…' : 'Save assignments'}
                 </Button>
               </>
             )}

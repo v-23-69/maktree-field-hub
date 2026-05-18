@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 
 /** One saved doctor visit (local form state). */
 export interface VisitFormEntry {
@@ -117,6 +118,7 @@ export default function NewReport() {
   const navState = (location.state as ReportNavState | null) ?? null
   const mrId = user?.id ?? ''
 
+  const { goBack: safeGoBack } = usePreventAccidentalBack(true)
   const { data: tpStatus, isLoading: tpLoading } = useTpStatus(mrId)
   const { data: wwSanitizeOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role)
 
@@ -253,7 +255,7 @@ export default function NewReport() {
   if (blockLoading || tpLoading) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="New Daily Report" showBack />
+        <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
         <div className="px-4 py-6">
           <LoadingSpinner />
         </div>
@@ -266,7 +268,7 @@ export default function NewReport() {
     const monthLabel = tpStatus ? new Date(tpStatus.current_month + 'T00:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) : 'this month';
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="New Daily Report" showBack />
+        <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
         <div className="px-4 py-8 max-w-lg mx-auto space-y-5">
           <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/5 p-5 space-y-4">
             <div className="flex items-start gap-3">
@@ -297,7 +299,7 @@ export default function NewReport() {
   if (blockError) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="New Daily Report" showBack />
+        <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
         <div className="px-4 py-6">
           <p className="text-sm text-destructive">Could not load report block status.</p>
         </div>
@@ -310,7 +312,7 @@ export default function NewReport() {
     if (blockStatus.has_pending_request) {
       return (
         <div className="min-h-screen bg-background pb-20">
-          <PageHeader title="New Daily Report" showBack />
+          <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
           <div className="px-4 py-6 space-y-4">
             <div className="flex items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
               <AlertTriangle className="h-5 w-5 text-amber-700" />
@@ -329,7 +331,7 @@ export default function NewReport() {
 
     return (
       <div className="min-h-screen bg-background pb-20">
-        <PageHeader title="New Daily Report" showBack />
+        <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
         <div className="px-4 py-6 space-y-4">
           <div className="flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-4">
             <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
@@ -386,7 +388,7 @@ export default function NewReport() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title="New Daily Report" showBack />
+      <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
 
       {/* Step indicator */}
       <div className="px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">

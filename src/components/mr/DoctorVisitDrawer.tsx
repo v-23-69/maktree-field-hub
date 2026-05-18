@@ -9,6 +9,7 @@ import type { Doctor, Product } from '@/types/database.types';
 import type { VisitFormEntry } from '@/pages/mr/NewReport';
 import { useChemistsByDoctor, useChemistsBySubArea } from '@/hooks/useDoctors';
 import { toast } from 'sonner';
+import { parseQuantityInput, quantityInputDisplay } from '@/lib/quantityInput';
 
 const defaultCompetitors = (): { brandName: string; quantity: number }[] => [
   { brandName: '', quantity: 0 },
@@ -181,7 +182,7 @@ export default function DoctorVisitDrawer({
                 const selectedProduct = products.find(p => p.id === ms.productId);
                 const ptr = selectedProduct?.ptr ?? 0;
                 const lineTotal = Math.round(ptr * (ms.quantity || 0) * 100) / 100;
-                const showAmount = ms.productId && (ms.quantity || 0) > 0;
+                const showAmount = !!ms.productId;
                 return (
                   <div key={i} className="rounded-xl bg-muted/50 p-3 space-y-2 border border-border/60">
                     <div className="flex items-center gap-2">
@@ -204,12 +205,13 @@ export default function DoctorVisitDrawer({
                       <Input
                         type="number"
                         min={0}
-                        value={ms.quantity || ''}
+                        inputMode="numeric"
+                        value={quantityInputDisplay(ms.quantity)}
                         onChange={e => {
                           const next = [...monthlySupport];
                           next[i] = {
                             ...next[i],
-                            quantity: parseInt(e.target.value, 10) || 0,
+                            quantity: parseQuantityInput(e.target.value, ms.quantity),
                           };
                           setMonthlySupport(next);
                         }}
@@ -256,7 +258,7 @@ export default function DoctorVisitDrawer({
                   const p = products.find(pr => pr.id === ms.productId);
                   return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
                 }, 0);
-                const hasAnyQty = monthlySupport.some(ms => ms.productId && (ms.quantity || 0) > 0);
+                const hasAnyQty = monthlySupport.some(ms => ms.productId);
                 const rounded = Math.round(totalRupeeWise * 100) / 100;
                 return hasAnyQty ? (
                   <div className="flex items-center justify-between rounded-xl bg-primary/5 border border-primary/20 px-3 py-2">
@@ -304,12 +306,13 @@ export default function DoctorVisitDrawer({
                   <Input
                     type="number"
                     min={0}
-                    value={c.quantity || ''}
+                    inputMode="numeric"
+                    value={quantityInputDisplay(c.quantity)}
                     onChange={e => {
                       const next = [...competitors];
                       next[i] = {
                         ...next[i],
-                        quantity: parseInt(e.target.value, 10) || 0,
+                        quantity: parseQuantityInput(e.target.value, c.quantity),
                       };
                       setCompetitors(next);
                     }}

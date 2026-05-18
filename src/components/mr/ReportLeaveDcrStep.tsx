@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import ReportStepFooter from '@/components/mr/ReportStepFooter'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -99,7 +100,7 @@ export default function ReportLeaveDcrStep({ data, onChange, onBack, onClearDraf
   if (!user) return <LoadingSpinner />
 
   return (
-    <div className="space-y-5 animate-fade-in pb-24">
+    <div className="space-y-5 animate-fade-in pb-36">
       <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
         <p className="text-xs font-semibold text-primary">Leave DCR</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
@@ -140,16 +141,12 @@ export default function ReportLeaveDcrStep({ data, onChange, onBack, onClearDraf
         />
       </div>
 
-      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-md border-t border-border/40">
-        <div className="max-w-lg mx-auto flex gap-2">
-          <Button type="button" variant="outline" className="flex-1 rounded-2xl" onClick={onBack} disabled={busy}>
-            Back
-          </Button>
-          <Button type="button" className="flex-1 rounded-2xl font-bold" onClick={() => void handleSubmit()} disabled={busy}>
-            {busy ? 'Submitting…' : 'Submit Leave DCR'}
-          </Button>
-        </div>
-      </div>
+      <ReportStepFooter
+        onBack={onBack}
+        onNext={() => void handleSubmit()}
+        nextLabel={busy ? 'Submitting…' : 'Submit Leave DCR'}
+        nextDisabled={busy}
+      />
     </div>
   )
 }

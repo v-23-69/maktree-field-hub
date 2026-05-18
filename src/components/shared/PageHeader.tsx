@@ -5,10 +5,12 @@ import { useAuth } from '@/hooks/useAuth';
 interface PageHeaderProps {
   title: string;
   showBack?: boolean;
+  /** When set, used instead of navigate(-1) — use with usePreventAccidentalBack().goBack */
+  onBack?: () => void;
   rightAction?: React.ReactNode;
 }
 
-export default function PageHeader({ title, showBack, rightAction }: PageHeaderProps) {
+export default function PageHeader({ title, showBack, onBack, rightAction }: PageHeaderProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -23,7 +25,8 @@ export default function PageHeader({ title, showBack, rightAction }: PageHeaderP
     <header className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-6 h-14 md:h-16">
       {showBack ? (
         <button
-          onClick={() => navigate(-1)}
+          type="button"
+          onClick={() => (onBack ? onBack() : navigate(-1))}
           className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-foreground/5 active:scale-90 transition-all"
         >
           <ArrowLeft className="h-5 w-5 text-foreground" />

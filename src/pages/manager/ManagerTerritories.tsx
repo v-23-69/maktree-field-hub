@@ -6,6 +6,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Check } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
 import { useAllAreas } from '@/hooks/useAreas'
@@ -20,6 +21,8 @@ export default function ManagerTerritories() {
   const [checkedSubAreas, setCheckedSubAreas] = useState<string[]>([])
   const { data: serverAccess = [], isLoading: accessLoading } = useMrSubAreaAccess(selectedMr)
   const saveAccess = useSaveMrSubAreaAccess()
+  const serverAssignedSet = useMemo(() => new Set(serverAccess), [serverAccess])
+  const [territoryFilter, setTerritoryFilter] = useState('')
 
   const mrOptions = useMemo(() => {
     const self = user
@@ -53,6 +56,19 @@ export default function ManagerTerritories() {
     setCheckedSubAreas(prev =>
       prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id],
     )
+  }
+
+  const filteredAreas = useMemo(
+    () => (territoryFilter ? areas.filter(a => a.id === territoryFilter) : areas),
+    [areas, territoryFilter],
+  )
+
+  const selectAllInTerritory = (areaId: string) => {
+    const subAreas = (areas.find(a => a.id === areaId)?.sub_areas ?? [])
+    setCheckedSubAreas(prev => {
+      const toAdd = subAreas.map(sa => sa.id).filter(id => !prev.includes(id))
+      return [...prev, ...toAdd]
+    })
   }
 
   const toggleArea = (areaId: string) => {
@@ -108,11 +124,30 @@ export default function ManagerTerritories() {
 
         {selectedMr && !loading && (
           <div className="space-y-4 animate-fade-in">
+            <div className="space-y-2">
+              <Label className="text-xs">Filter by territory</Label>
+              <select
+                value={territoryFilter}
+                onChange={e => setTerritoryFilter(e.target.value)}
+                className="flex h-11 w-full rounded-lg border border-input bg-card px-3 text-sm touch-target"
+              >
+                <option value="">All territories</option>
+                {areas.map(a => (
+                  <option key={a.id} value={a.id}>{a.name}</option>
+                ))}
+              </select>
+            </div>
+
             <p className="text-xs font-medium text-primary">
               {checkedSubAreas.length} of {allSubAreaIds.length} sub-areas selected
+              {serverAssignedSet.size > 0 && (
+                <span className="text-muted-foreground font-normal">
+                  {' '}· {serverAssignedSet.size} currently assigned
+                </span>
+              )}
             </p>
 
-            {areas.map(area => {
+            {filteredAreas.map(area => {
               const subAreas = area.sub_areas ?? []
               const checkedCount = subAreas.filter(sa => checkedSubAreas.includes(sa.id)).length
               const allChecked = subAreas.length > 0 && checkedCount === subAreas.length
@@ -129,19 +164,40 @@ export default function ManagerTerritories() {
                       />
                       <span className="font-medium text-foreground text-sm">{area.name}</span>
                     </label>
-                    <span className="text-[10px] text-muted-foreground">{checkedCount} of {subAreas.length}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-muted-foreground">{checkedCount} of {subAreas.length}</span>
+                      {subAreas.length > 0 && checkedCount < subAreas.length && (
+                        <button
+                          type="button"
+                          onClick={() => selectAllInTerritory(area.id)}
+                          className="text-[10px] font-semibold text-primary"
+                        >
+                          Select all
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-2.5 pl-1">
-                    {subAreas.map(sa => (
-                      <label key={sa.id} className="flex items-center gap-3 touch-target cursor-pointer">
-                        <Checkbox
-                          checked={checkedSubAreas.includes(sa.id)}
-                          onCheckedChange={() => toggleSubArea(sa.id)}
-                        />
-                        <span className="text-sm text-foreground">{sa.name}</span>
-                      </label>
-                    ))}
+                    {subAreas.map(sa => {
+                      const isAssigned = serverAssignedSet.has(sa.id)
+                      const isChecked = checkedSubAreas.includes(sa.id)
+                      return (
+                        <label key={sa.id} className="flex items-center gap-3 touch-target cursor-pointer">
+                          <Checkbox
+                            checked={isChecked}
+                            onCheckedChange={() => toggleSubArea(sa.id)}
+                          />
+                          <span className="text-sm text-foreground flex-1">{sa.name}</span>
+                          {isAssigned && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                              <Check className="h-3 w-3" />
+                              Assigned
+                            </span>
+                          )}
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
               )

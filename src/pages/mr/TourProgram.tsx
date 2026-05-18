@@ -6,7 +6,8 @@ import BottomNav from '@/components/shared/BottomNav'
 import { Button } from '@/components/ui/button'
 import { todayInputDate, calendarWeekdaySun0, formatShortDateIst } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
-import { CalendarDays, Check, AlertCircle, ChevronDown, ChevronUp, Users, Save, X, Trash2 } from 'lucide-react'
+import { CalendarDays, Check, AlertCircle, Users, Save, Trash2 } from 'lucide-react'
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
 import {
@@ -22,7 +23,6 @@ import {
 } from '@/hooks/useTourProgram'
 import { supabase } from '@/lib/supabase'
 import { useMrSubAreasGrouped } from '@/hooks/useAreas'
-import { useWorkingWithReportOptions } from '@/hooks/useManagers'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
 
 function formatMonth(monthStr: string) {
@@ -45,31 +45,23 @@ function generateMonthDays(monthStr: string) {
   })
 }
 
-type LocalEntry = { sub_area_id: string; working_with_ids: string[]; is_solo?: boolean }
+type LocalEntry = { sub_area_id: string }
 
 type SubAreaItem = { id: string; name: string; areaName: string }
-type WwOption = { id: string; full_name: string; role: string }
 
 interface DayCardProps {
   dateStr: string
   local: LocalEntry | undefined
   canEdit: boolean
   allSubAreas: SubAreaItem[]
-  workingWithOptions: WwOption[]
-  nameById: Map<string, string>
   onSubAreaChange: (date: string, value: string) => void
-  onToggleWw: (date: string, userId: string) => void
-  onSetSolo: (date: string) => void
 }
 
 const DayCard = memo(function DayCard({
-  dateStr, local, canEdit, allSubAreas, workingWithOptions, nameById, onSubAreaChange, onToggleWw, onSetSolo,
+  dateStr, local, canEdit, allSubAreas, onSubAreaChange,
 }: DayCardProps) {
-  const [expanded, setExpanded] = useState(false)
   const dateLabel = formatShortDateIst(dateStr)
-  const isSolo = !!local?.is_solo
-  const selectedIds = local?.working_with_ids ?? []
-  const filled = !!local?.sub_area_id && (isSolo || selectedIds.length > 0)
+  const filled = !!local?.sub_area_id
 
   return (
     <div className={cn('glass-card p-3.5 space-y-2.5', filled && 'ring-1 ring-emerald-500/20')}>
@@ -84,7 +76,7 @@ const DayCard = memo(function DayCard({
           value={local?.sub_area_id ?? ''}
           onChange={e => onSubAreaChange(dateStr, e.target.value)}
         >
-          <option value="">Select area</option>
+          <option value="">Select assigned area</option>
           {allSubAreas.map(sa => (
             <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
           ))}
@@ -97,83 +89,6 @@ const DayCard = memo(function DayCard({
         </div>
       )}
 
-      {canEdit ? (
-        <div className="space-y-1.5">
-          {(isSolo || selectedIds.length > 0) && (
-            <div className="flex flex-wrap gap-1.5">
-              {isSolo && (
-                <button
-                  type="button"
-                  onClick={() => onSetSolo(dateStr)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-primary/10 text-primary px-2 py-1 text-[10px] font-semibold active:scale-95 transition-transform"
-                >
-                  Solo
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-              {selectedIds.map(id => (
-                <button key={id} type="button" onClick={() => onToggleWw(dateStr, id)}
-                  className="inline-flex items-center gap-1 rounded-lg bg-primary/10 text-primary px-2 py-1 text-[10px] font-semibold active:scale-95 transition-transform"
-                >
-                  {nameById.get(id) ?? 'Unknown'}
-                  <X className="h-3 w-3" />
-                </button>
-              ))}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setExpanded(p => !p)}
-            className="flex items-center gap-1 text-[10px] text-primary font-semibold"
-          >
-            <Users className="h-3 w-3" />
-            {expanded
-              ? 'Hide options'
-              : isSolo || selectedIds.length > 0
-                ? 'Change working with'
-                : 'Select working with'}
-            {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
-          {expanded && (
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                type="button"
-                onClick={() => onSetSolo(dateStr)}
-                className={cn(
-                  'col-span-2 rounded-lg px-2 py-2 text-[11px] font-semibold border transition-all active:scale-95',
-                  isSolo
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-card text-foreground border-border/60 hover:border-primary/40',
-                )}
-              >
-                Solo
-              </button>
-              {workingWithOptions.map(m => {
-                const on = selectedIds.includes(m.id)
-                return (
-                  <button key={m.id} type="button" onClick={() => onToggleWw(dateStr, m.id)}
-                    className={cn(
-                      'rounded-lg px-2 py-1.5 text-[10px] font-medium border transition-all active:scale-95 text-left leading-tight',
-                      on ? 'bg-primary text-primary-foreground border-primary' : 'bg-card text-foreground border-border/60 hover:border-primary/40'
-                    )}
-                  >
-                    {m.full_name}
-                    <span className="block text-[8px] opacity-70">{m.role}</span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-foreground">
-          {isSolo
-            ? 'Solo'
-            : selectedIds.length > 0
-              ? selectedIds.map(id => nameById.get(id) ?? 'Unknown').join(', ')
-              : 'Not set'}
-        </div>
-      )}
     </div>
   )
 })
@@ -214,18 +129,8 @@ export default function TourProgramPage() {
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
   const { data: history = [] } = useTourProgramHistory(activeMrId)
   const { data: assignedAreaGroups = [] } = useMrSubAreasGrouped(activeMrId)
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role)
   const { data: teamMrs = [] } = useManagerMrs(isManager ? selfId : '')
-
-  const tpPickListWorkingWith = useMemo(() => {
-    if (isManager) return workingWithOptions
-    return workingWithOptions.filter(o => o.role === 'manager')
-  }, [isManager, workingWithOptions])
-
-  const mrManagerIdSet = useMemo(() => {
-    if (isManager) return null
-    return new Set(tpPickListWorkingWith.map(o => o.id))
-  }, [isManager, tpPickListWorkingWith])
+  const { goBack: safeGoBack } = usePreventAccidentalBack(true)
 
   const [workingDays, setWorkingDays] = useState<Array<{ work_date: string; day_type: string; holiday_name: string | null }>>([])
 
@@ -245,59 +150,26 @@ export default function TourProgramPage() {
 
   const lastSyncKey = useRef('')
   useEffect(() => {
-    const key = dbEntries.map(e => `${e.work_date}:${e.sub_area_id}:${(e.working_with_ids ?? []).join(',')}`).join('|')
-    const setKey = mrManagerIdSet ? [...mrManagerIdSet].sort().join(',') : ''
-    const fullKey = `${key}|${setKey}`
-    if (fullKey === lastSyncKey.current) return
-    lastSyncKey.current = fullKey
+    const key = dbEntries.map(e => `${e.work_date}:${e.sub_area_id}`).join('|')
+    if (key === lastSyncKey.current) return
+    lastSyncKey.current = key
     const map: Record<string, LocalEntry> = {}
     for (const e of dbEntries) {
-      let ids = (e.working_with_ids && e.working_with_ids.length > 0)
-        ? e.working_with_ids
-        : (e.working_with ? [e.working_with] : [])
-      if (mrManagerIdSet && mrManagerIdSet.size > 0) ids = ids.filter(id => mrManagerIdSet.has(id))
-      map[e.work_date] = {
-        sub_area_id: e.sub_area_id ?? '',
-        working_with_ids: ids,
-        is_solo: ids.length === 0 && !!e.sub_area_id,
-      }
+      map[e.work_date] = { sub_area_id: e.sub_area_id ?? '' }
     }
     setLocalEntries(map)
-  }, [dbEntries, mrManagerIdSet])
+  }, [dbEntries])
 
   const updateSubArea = useCallback((date: string, value: string) => {
     setLocalEntries(prev => ({
       ...prev,
-      [date]: { ...(prev[date] ?? { sub_area_id: '', working_with_ids: [], is_solo: false }), sub_area_id: value },
+      [date]: { ...(prev[date] ?? { sub_area_id: '' }), sub_area_id: value },
     }))
-  }, [])
-
-  const setWorkingWithSolo = useCallback((date: string) => {
-    setLocalEntries(prev => {
-      const current = prev[date] ?? { sub_area_id: '', working_with_ids: [], is_solo: false }
-      if (current.is_solo) {
-        return { ...prev, [date]: { ...current, is_solo: false } }
-      }
-      return { ...prev, [date]: { ...current, is_solo: true, working_with_ids: [] } }
-    })
-  }, [])
-
-  const toggleWorkingWith = useCallback((date: string, userId: string) => {
-    setLocalEntries(prev => {
-      const current = prev[date] ?? { sub_area_id: '', working_with_ids: [], is_solo: false }
-      const ids = current.working_with_ids.includes(userId)
-        ? current.working_with_ids.filter(id => id !== userId)
-        : [...current.working_with_ids, userId]
-      return { ...prev, [date]: { ...current, working_with_ids: ids, is_solo: false } }
-    })
   }, [])
 
   const workingDayRows = useMemo(() => workingDays.filter(d => d.day_type === 'working'), [workingDays])
   const filledCount = useMemo(
-    () => workingDayRows.filter(d => {
-      const e = localEntries[d.work_date]
-      return e?.sub_area_id && (!!e.is_solo || e.working_with_ids.length > 0)
-    }).length,
+    () => workingDayRows.filter(d => !!localEntries[d.work_date]?.sub_area_id).length,
     [workingDayRows, localEntries],
   )
   const allFilled = filledCount === workingDayRows.length && workingDayRows.length > 0
@@ -306,13 +178,6 @@ export default function TourProgramPage() {
     assignedAreaGroups.flatMap(g => g.sub_areas.map(sa => ({ ...sa, areaName: g.area.name }))),
     [assignedAreaGroups],
   )
-
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const o of workingWithOptions) map.set(o.id, o.full_name)
-    for (const mr of teamMrs) map.set(mr.id, mr.full_name ?? mr.id)
-    return map
-  }, [workingWithOptions, teamMrs])
 
   const buildEntryRows = (tpId: string) =>
     workingDayRows
@@ -327,11 +192,7 @@ export default function TourProgramPage() {
           work_date: day.work_date,
           sub_area_id: local?.sub_area_id || null,
           working_with: null as string | null,
-          working_with_ids: (() => {
-            const raw = local?.working_with_ids ?? []
-            if (mrManagerIdSet && mrManagerIdSet.size > 0) return raw.filter(id => mrManagerIdSet.has(id))
-            return raw
-          })(),
+          working_with_ids: [] as string[],
           day_type: 'working' as const,
           notes: null as string | null,
         }
@@ -423,7 +284,7 @@ export default function TourProgramPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title="Tour Program" showBack />
+      <PageHeader title="Tour Program" showBack onBack={safeGoBack} />
 
       <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {isManager && (
@@ -632,11 +493,7 @@ export default function TourProgramPage() {
                       local={localEntries[day.work_date]}
                       canEdit={canEdit}
                       allSubAreas={allSubAreas}
-                      workingWithOptions={tpPickListWorkingWith}
-                      nameById={nameById}
                       onSubAreaChange={updateSubArea}
-                      onToggleWw={toggleWorkingWith}
-                      onSetSolo={setWorkingWithSolo}
                     />
                   )
                 })}
@@ -649,7 +506,7 @@ export default function TourProgramPage() {
                   <div className="flex items-start gap-2 rounded-xl bg-amber-500/5 border border-amber-500/20 p-3">
                     <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
-                      {workingDayRows.length - filledCount} working day(s) still need area and working-with
+                      {workingDayRows.length - filledCount} working day(s) still need an assigned area
                     </p>
                   </div>
                 )}

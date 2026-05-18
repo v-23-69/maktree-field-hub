@@ -1,3 +1,4 @@
+import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -118,7 +119,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
   const canProceed = !!selected?.report_date && !selectedAlreadySubmitted && !allSubmitted
 
   return (
-    <div className="space-y-5 animate-fade-in pb-20">
+    <div className="space-y-5 animate-fade-in pb-36">
       {data.tpAutoFilled && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
           <p className="text-xs text-primary font-medium">
@@ -372,17 +373,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
       </div>
       )}
 
-      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-md border-t border-border/40">
-        <div className="max-w-lg mx-auto">
-          <Button
-            onClick={onNext}
-            disabled={!canProceed}
-            className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold shadow-lg shadow-primary/20"
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <ReportStepFooter showBack={false} onNext={onNext} nextDisabled={!canProceed} />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -54,7 +55,7 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden">
+    <div className="space-y-5 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden pb-36">
       {data.tpAutoFilled && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
           <p className="text-xs text-primary font-semibold">
@@ -92,18 +93,7 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
         </div>
       ))}
 
-      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-md border-t border-border/40">
-        <div className="flex gap-3 max-w-lg mx-auto">
-          <Button variant="outline" onClick={onBack} className="flex-1 touch-target rounded-2xl font-semibold">Back</Button>
-          <Button
-            onClick={onNext}
-            disabled={!canProceed}
-            className="flex-1 touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 font-bold shadow-lg shadow-primary/20"
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+      <ReportStepFooter onBack={onBack} onNext={onNext} nextDisabled={!canProceed} />
     </div>
   );
 }

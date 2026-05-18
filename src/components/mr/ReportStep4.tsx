@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
+import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -200,7 +201,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in pb-20">
+    <div className="space-y-5 animate-fade-in pb-36">
       <h3 className="text-base font-semibold text-foreground">Review Your Report</h3>
 
       <div className="space-y-3">
@@ -383,18 +384,12 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
         )}
       </div>
 
-      <div className="fixed bottom-20 left-0 right-0 px-4 pb-3 pt-2 bg-background/95 backdrop-blur-sm border-t border-border">
-        <div className="flex gap-3 max-w-lg mx-auto">
-          <Button variant="outline" onClick={onBack} disabled={isSubmitting} className="flex-1 touch-target rounded-lg">Back</Button>
-          <Button
-            onClick={() => setShowConfirm(true)}
-            disabled={isSubmitting}
-            className="flex-1 touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-          >
-            {isSubmitting ? 'Submitting…' : 'Submit Report'}
-          </Button>
-        </div>
-      </div>
+      <ReportStepFooter
+        onBack={onBack}
+        onNext={() => setShowConfirm(true)}
+        nextLabel={isSubmitting ? 'Submitting…' : 'Submit Report'}
+        nextDisabled={isSubmitting}
+      />
 
       <ConfirmDialog
         open={showConfirm}
