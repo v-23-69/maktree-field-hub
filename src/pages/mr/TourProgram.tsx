@@ -8,6 +8,7 @@ import { todayInputDate, calendarWeekdaySun0, formatShortDateIst } from '@/lib/d
 import { useAuth } from '@/hooks/useAuth'
 import { CalendarDays, Check, AlertCircle, ChevronDown, ChevronUp, Users, Save, X, Trash2 } from 'lucide-react'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
+import { cn } from '@/lib/utils'
 import {
   useCreateOrUpdateTourProgram,
   useBatchSaveTourProgramEntries,
