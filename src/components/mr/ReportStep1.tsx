@@ -241,7 +241,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
             Leave DCR: the next step only asks for leave type and a remark. Working with colleagues is not required.
           </p>
         </div>
-      ) : user?.role === 'mr' && data.reportKind === 'sunday' ? (
+      ) : data.reportKind === 'sunday' ? (
         <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
           <p className="text-xs font-medium text-sky-900 dark:text-sky-100 leading-relaxed">
             Sunday DCR: the next step confirms no field visits for this Sunday. No doctor entries are required.

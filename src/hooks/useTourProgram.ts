@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type {
   TourProgram,
   TourProgramDeletionRequest,
@@ -167,6 +168,7 @@ export function useManagerPendingTourPrograms(managerId: string) {
   return useQuery({
     queryKey: ['manager-pending-tour-programs', managerId],
     enabled: !!managerId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async () => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data: mrs, error: mrErr } = await supabase.rpc('list_mrs_for_manager')
@@ -232,13 +234,13 @@ export function useTpStatus(userId: string) {
   return useQuery({
     queryKey: ['tp-status', userId],
     enabled: !!userId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<TpStatus> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('get_tp_status_for_user', { p_user_id: userId })
       if (error) throw error
       return data as TpStatus
     },
-    staleTime: 60_000,
   })
 }
 
@@ -246,6 +248,7 @@ export function useTodayTpPlan(userId: string) {
   return useQuery({
     queryKey: ['today-tp-plan', userId],
     enabled: !!userId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<TodayTpPlan | null> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('get_today_tp_plan', { p_user_id: userId })
@@ -253,7 +256,6 @@ export function useTodayTpPlan(userId: string) {
       if (!data || Object.keys(data).length === 0) return null
       return data as TodayTpPlan
     },
-    staleTime: 60_000,
   })
 }
 
@@ -276,6 +278,7 @@ export function useTpDeletionRequestsForManager() {
   return useQuery({
     queryKey: ['tp-deletion-requests-manager'],
     enabled: !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<TourProgramDeletionRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('list_tour_program_deletion_requests_for_manager')

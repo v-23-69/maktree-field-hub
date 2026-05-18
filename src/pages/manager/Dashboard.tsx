@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, PiggyBank, type LucideIcon } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, PiggyBank, Bell, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -29,7 +29,10 @@ import { useTpStatus, useTodayTpPlan, useUnpauseUser } from '@/hooks/useTourProg
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
-import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam, useMarkSundayDcr } from '@/hooks/useReport';
+import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport';
+import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
+import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
+import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount';
 import { useExpenseReport } from '@/hooks/useExpense';
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -106,9 +109,12 @@ export default function ManagerDashboard() {
   const { data: mgrHolidays = [] } = useMrHolidays(deferReady ? (user?.id ?? '') : '');
 
   const { data: mgrAllowedDates = [] } = useAllowedReportDates(user?.id ?? '');
-  const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === todayInputDate())?.already_submitted === true;
-  const markSundayDcr = useMarkSundayDcr();
-  const showMgrSundayDcr = isSundayYmd(todayInputDate()) && !mgrTodayDcrDone;
+  const mgrTodayDate = todayInputDate();
+  const mgrTodayIsSunday = isSundayYmd(mgrTodayDate);
+  const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === mgrTodayDate)?.already_submitted === true;
+  const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
+  const pendingMgrRequests = useManagerPendingRequestsCount(user?.id ?? '');
+  useDashboardLiveRefresh(!!user?.id);
   const teamMonthYyyyMm = todayInputDate().slice(0, 7);
   const { data: teamMonthlySupport } = useMonthlySupportAggregateForManagerTeam(
     deferReady ? (user?.id ?? '') : '',
@@ -395,18 +401,7 @@ export default function ManagerDashboard() {
                 <p className="text-xs text-muted-foreground mt-0.5">Submit Sunday DCR if you had no field visits.</p>
               </div>
             </div>
-            <Button
-              type="button"
-              className="w-full rounded-2xl h-12 text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white"
-              disabled={markSundayDcr.isPending}
-              onClick={() => {
-                void markSundayDcr.mutateAsync(undefined).then(() => {
-                  toast.success('Sunday DCR submitted');
-                }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not submit'));
-              }}
-            >
-              {markSundayDcr.isPending ? 'Submitting…' : 'Mark Sunday DCR'}
-            </Button>
+            <MarkSundayDcrButton reportDate={mgrTodayDate} className="w-full rounded-2xl h-12 text-sm" />
           </div>
         )}
 
@@ -441,7 +436,7 @@ export default function ManagerDashboard() {
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-muted-foreground">
                 Complete your approved tour program before starting today&apos;s DCR.
               </div>
-            ) : (
+            ) : mgrTodayIsSunday ? null : (
               <Button
                 onClick={() => navigate('/manager/report/new')}
                 className="w-full rounded-2xl h-11 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
@@ -499,7 +494,7 @@ export default function ManagerDashboard() {
         )}
 
         {/* Self Report CTA */}
-        {!mgrTodayDcrDone && (
+        {!mgrTodayDcrDone && !mgrTodayIsSunday && (
           mgrDcrBlocked ? (
             <Button
               type="button"
@@ -525,6 +520,15 @@ export default function ManagerDashboard() {
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5">
+            <button type="button" onClick={() => navigate('/manager/requests')} className="relative flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center"><Bell className="h-4 w-4 text-rose-600 dark:text-rose-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Requests</span>
+              {pendingMgrRequests > 0 && (
+                <span className="absolute top-1.5 right-2 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center">
+                  {pendingMgrRequests > 99 ? '99+' : pendingMgrRequests}
+                </span>
+              )}
+            </button>
             <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>

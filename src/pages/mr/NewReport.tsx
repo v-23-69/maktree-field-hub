@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { todayInputDate } from '@/lib/dateUtils';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { todayInputDate, isSundayYmd } from '@/lib/dateUtils';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import ReportStep1 from '@/components/mr/ReportStep1';
@@ -46,6 +46,11 @@ export interface ReportFormData {
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
 const LEAVE_STEPS = ['Date', 'Leave DCR'];
 const DRAFT_KEY = 'maktree_report_draft';
+
+type ReportNavState = {
+  date?: string
+  reportKind?: 'field' | 'leave' | 'sunday'
+}
 
 function migrateDraft(raw: unknown): ReportFormData | null {
   if (!raw || typeof raw !== 'object') return null
@@ -108,6 +113,8 @@ function loadDraft(): ReportFormData | null {
 export default function NewReport() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const navState = (location.state as ReportNavState | null) ?? null
   const mrId = user?.id ?? ''
 
   const { data: tpStatus, isLoading: tpLoading } = useTpStatus(mrId)
@@ -135,6 +142,48 @@ export default function NewReport() {
   }, [formData]);
 
   useEffect(() => {
+    if (!navState?.date && !navState?.reportKind) return
+    setFormData(prev => {
+      const date = navState.date ?? prev.date
+      const reportKind = navState.reportKind ?? prev.reportKind
+      if (date === prev.date && reportKind === prev.reportKind) return prev
+      return {
+        ...prev,
+        date,
+        reportKind,
+        ...(reportKind === 'sunday' || reportKind === 'leave'
+          ? {
+              selectedSubAreaIds: [],
+              visits: {},
+              workingWithIds: [],
+              workingWithId: '',
+              tpAutoFilled: false,
+            }
+          : {}),
+      }
+    })
+    if (navState.reportKind === 'sunday') setStep(5)
+    else if (navState.reportKind === 'leave') setStep(2)
+  }, [navState?.date, navState?.reportKind])
+
+  useEffect(() => {
+    if (!isSundayYmd(formData.date)) return
+    setFormData(prev => {
+      if (prev.reportKind === 'sunday') return prev
+      return {
+        ...prev,
+        reportKind: 'sunday',
+        selectedSubAreaIds: [],
+        visits: {},
+        workingWithIds: [],
+        workingWithId: '',
+        tpAutoFilled: false,
+      }
+    })
+    setStep(5)
+  }, [formData.date])
+
+  useEffect(() => {
     if (user?.role !== 'mr' || wwSanitizeOpts.length === 0) return
     const allowed = new Set(wwSanitizeOpts.map(o => o.id))
     setFormData(prev => {
@@ -148,6 +197,7 @@ export default function NewReport() {
   useEffect(() => {
     const applyTourPlanAutofill = async () => {
       if (!supabase || !mrId || !formData.date) return
+      if (isSundayYmd(formData.date) || formData.reportKind === 'sunday') return
       const { data, error } = await supabase.rpc('get_tour_plan_for_date', {
         p_mr_id: mrId,
         p_date: formData.date,
@@ -399,7 +449,7 @@ export default function NewReport() {
             onBack={() => setStep(1)}
           />
         )}
-        {step === 3 && (
+        {step === 3 && !leaveFlow && !sundayFlow && (
           <ReportStep3
             data={formData}
             onChange={updateData}
@@ -407,7 +457,7 @@ export default function NewReport() {
             onBack={() => setStep(2)}
           />
         )}
-        {step === 4 && (
+        {step === 4 && !leaveFlow && !sundayFlow && (
           <ReportStep4
             data={formData}
             onBack={() => setStep(3)}

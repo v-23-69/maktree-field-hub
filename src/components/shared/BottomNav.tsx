@@ -3,7 +3,7 @@ import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings,
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { useManagerUnlockRequests } from '@/hooks/useUnlockRequests';
+import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount';
 
 interface NavItem {
   to: string;
@@ -43,8 +43,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
   const location = useLocation();
   const { user } = useAuth();
   const managerId = role === 'manager' ? user?.id ?? '' : '';
-  const { data: unlockData } = useManagerUnlockRequests(managerId);
-  const pendingCount = unlockData?.pending?.length ?? 0;
+  const pendingCount = useManagerPendingRequestsCount(managerId);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 glass border-t"

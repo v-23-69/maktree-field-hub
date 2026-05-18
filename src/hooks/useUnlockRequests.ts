@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type { ReportUnlockRequest } from '@/types/database.types'
 
 type UnlockRequestRow = ReportUnlockRequest & {
@@ -10,6 +11,7 @@ export function useManagerUnlockRequests(managerId: string) {
   return useQuery({
     queryKey: ['manager-unlock-requests', managerId],
     enabled: !!managerId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<{
       pending: UnlockRequestRow[]
       resolved: UnlockRequestRow[]

@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { monthDateRangeForSql, todayInputDate } from '@/lib/dateUtils'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type {
   AllowedReportDate,
   Chemist,
@@ -593,6 +594,7 @@ export function useManagerMrReportDates(mrId: string) {
 export function useAllowedReportDates(mrId: string) {
   return useQuery({
     queryKey: ['allowed-report-dates', mrId],
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<AllowedReportDate[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('get_allowed_report_dates', {

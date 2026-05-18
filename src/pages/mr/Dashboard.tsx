@@ -23,7 +23,11 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
-import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr, useMarkSundayDcr } from '@/hooks/useReport';
+import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr } from '@/hooks/useReport';
+import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
+import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
+import type { AllowedReportDate } from '@/types/database.types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
@@ -62,8 +66,6 @@ export default function MRDashboard() {
   const { data: mrHolidays = [] } = useMrHolidays(deferReady ? userId : '');
   const { data: holidayCount = 0 } = useMrHolidayCount(deferReady ? userId : '');
   const markHoliday = useMarkMrHoliday();
-  const markSundayDcr = useMarkSundayDcr();
-
   const [action, setAction] = useState<DrawerAction>(null);
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
@@ -79,9 +81,12 @@ export default function MRDashboard() {
   const [dcrExportTo, setDcrExportTo] = useState(() => todayInputDate());
   const [dcrExportBusy, setDcrExportBusy] = useState(false);
 
+  useDashboardLiveRefresh(!!userId)
+
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
     enabled: !!userId && !!supabase && deferReady,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<DcrDailyStatus | null> => {
       if (!supabase) return null;
       const { data, error } = await supabase
@@ -173,19 +178,31 @@ export default function MRDashboard() {
       .sort((a, b) => a.daysRemaining - b.daysRemaining);
   }, [targetRows]);
 
-  const checklist = [
-    { label: 'DCR Report', done: dailyStatus?.dcr_done, path: '/mr/report/new' },
-    { label: 'Expense Report', done: dailyStatus?.expense_done, path: '/mr/expense' },
-  ];
-
   const todayDate = todayInputDate();
+  const todayIsSunday = isSundayYmd(todayDate);
   const todayDcrDone = allowedDates.find(d => d.report_date === todayDate)?.already_submitted === true;
-  const pendingDcrDays = allowedDates.filter(
-    d =>
-      !d.already_submitted &&
-      (d.day_type === 'working' || d.day_type === 'leave' || d.day_type === 'sunday'),
+  const pendingFieldDcrDays = allowedDates.filter(
+    d => !d.already_submitted && d.day_type !== 'sunday',
+  );
+  const pendingSundayDcrDays = allowedDates.filter(
+    d => !d.already_submitted && d.day_type === 'sunday',
   );
   const allDcrDone = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted);
+
+  const openFieldReport = (d: AllowedReportDate) => {
+    const reportKind = d.day_type === 'leave' ? 'leave' as const : 'field' as const
+    navigate('/mr/report/new', { state: { date: d.report_date, reportKind } })
+  }
+
+  const checklist = [
+    {
+      label: todayIsSunday && !todayDcrDone ? 'Sunday DCR' : 'DCR Report',
+      done: dailyStatus?.dcr_done,
+      path: todayIsSunday && !todayDcrDone ? undefined : '/mr/report/new',
+      sundayDate: todayIsSunday && !todayDcrDone ? todayDate : undefined,
+    },
+    { label: 'Expense Report', done: dailyStatus?.expense_done, path: '/mr/expense' },
+  ];
 
   const isPaused = user?.is_paused === true;
   const tpApproved =
@@ -459,18 +476,7 @@ export default function MRDashboard() {
                 </p>
               </div>
             </div>
-            <Button
-              type="button"
-              className="w-full rounded-2xl h-12 text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white"
-              disabled={markSundayDcr.isPending}
-              onClick={() => {
-                void markSundayDcr.mutateAsync(undefined).then(() => {
-                  toast.success('Sunday DCR submitted');
-                }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not submit'));
-              }}
-            >
-              {markSundayDcr.isPending ? 'Submitting…' : 'Mark Sunday DCR'}
-            </Button>
+            <MarkSundayDcrButton reportDate={todayDate} className="w-full rounded-2xl h-12 text-sm" />
           </div>
         )}
 
@@ -511,7 +517,7 @@ export default function MRDashboard() {
                 <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Today's DCR Submitted</p>
               </div>
-            ) : (
+            ) : todayIsSunday ? null : (
               <Button
                 onClick={() => navigate('/mr/report/new')}
                 className="w-full rounded-2xl h-12 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
@@ -524,7 +530,7 @@ export default function MRDashboard() {
         )}
 
         {/* Fallback CTA when no plan for today */}
-        {(!todayPlan || !todayPlan.sub_area_id) && !todayDcrDone && (
+        {(!todayPlan || !todayPlan.sub_area_id) && !todayDcrDone && !todayIsSunday && (
           <Button
             onClick={() => navigate('/mr/report/new')}
             className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-14 text-[15px] font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
@@ -535,17 +541,17 @@ export default function MRDashboard() {
         )}
 
         {/* Pending DCR days */}
-        {pendingDcrDays.length > 0 && !allDcrDone && (
+        {pendingFieldDcrDays.length > 0 && !allDcrDone && (
           <div className="glass-card p-4 space-y-3">
             <p className="section-title">Pending DCR Reports</p>
             <div className="space-y-1.5">
-              {pendingDcrDays.map(d => {
+              {pendingFieldDcrDays.map(d => {
                 const isToday = d.report_date === todayDate;
                 return (
                   <button
                     key={d.report_date}
                     type="button"
-                    onClick={() => navigate('/mr/report/new')}
+                    onClick={() => openFieldReport(d)}
                     className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted/40 active:scale-[0.98] transition-all border border-border"
                   >
                     <div className="flex items-center gap-2">
@@ -555,11 +561,30 @@ export default function MRDashboard() {
                       </span>
                     </div>
                     <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
-                      Pending
+                      {d.day_type === 'leave' ? 'Leave DCR' : 'Pending'}
                     </Badge>
                   </button>
                 );
               })}
+            </div>
+          </div>
+        )}
+
+        {pendingSundayDcrDays.length > 0 && !allDcrDone && (
+          <div className="glass-card p-4 space-y-3 border border-sky-500/20">
+            <p className="section-title text-sky-800 dark:text-sky-200">Pending Sunday DCR</p>
+            <div className="space-y-2">
+              {pendingSundayDcrDays.map(d => (
+                <div
+                  key={d.report_date}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2.5"
+                >
+                  <span className="text-sm font-medium text-foreground">
+                    {d.report_date === todayDate ? 'Today (Sunday)' : formatShortDateIst(d.report_date)}
+                  </span>
+                  <MarkSundayDcrButton reportDate={d.report_date} className="shrink-0" />
+                </div>
+              ))}
             </div>
           </div>
         )}
@@ -738,7 +763,9 @@ export default function MRDashboard() {
               </p>
             )}
           </div>
-          {dailyStatus?.is_working_day === false ? (
+          {todayIsSunday && !todayDcrDone ? (
+            <MarkSundayDcrButton reportDate={todayDate} className="w-full rounded-xl h-11" />
+          ) : dailyStatus?.is_working_day === false ? (
             <div className="flex items-center gap-2 py-2">
               <Sparkles className="h-4 w-4 text-amber-500" />
               <p className="text-sm text-muted-foreground">Today is a holiday. No reports needed.</p>
@@ -749,7 +776,8 @@ export default function MRDashboard() {
                 <button
                   key={item.label}
                   className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-muted/40 active:scale-[0.98] transition-all"
-                  onClick={() => navigate(item.path)}
+                  onClick={() => { if (item.path) navigate(item.path) }}
+                  disabled={!item.path}
                 >
                   {item.done ? (
                     <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />

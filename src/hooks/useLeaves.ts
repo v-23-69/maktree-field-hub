@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type { LeaveRequest, ManagerLeaveEntry } from '@/types/database.types'
 
 export function useMrLeaves(mrId: string) {
@@ -37,6 +38,7 @@ export function useManagerLeaves(managerId: string) {
   return useQuery({
     queryKey: ['manager-leaves', managerId],
     enabled: !!managerId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<LeaveRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase

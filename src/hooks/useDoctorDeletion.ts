@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type { DoctorDeletionRequest } from '@/types/database.types'
 
 export function useMyDoctorDeletionRequests(mrId: string) {
@@ -28,6 +29,7 @@ export function useManagerDoctorDeletionRequests(managerId: string) {
   return useQuery({
     queryKey: ['doctor-deletion-requests-mgr', managerId],
     enabled: !!managerId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<DoctorDeletionRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
