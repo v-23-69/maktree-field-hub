@@ -10,6 +10,7 @@ import { useAllowedReportDates } from '@/hooks/useReport';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useEffect, useCallback, useMemo } from 'react';
+import { formatShortDateIst } from '@/lib/dateUtils';
 
 function Avatar({ src, name, size = 'sm' }: { src?: string | null; name: string; size?: 'sm' | 'md' }) {
   const px = size === 'md' ? 'h-9 w-9' : 'h-7 w-7';
@@ -138,10 +139,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
           <div className="grid grid-cols-1 gap-2">
             {allowedDates.slice(0, 3).map((d, idx) => {
               const whenLabel = idx === 0 ? 'Today' : idx === 1 ? 'Yesterday' : 'Day Before'
-              const dt = new Date(d.report_date)
-              const weekday = dt.toLocaleDateString(undefined, { weekday: 'short' })
-              const day = dt.getDate()
-              const month = dt.toLocaleDateString(undefined, { month: 'short' })
+              const dateLine = formatShortDateIst(d.report_date)
 
               const isSelected = d.report_date === data.date
               const isSubmitted = d.already_submitted
@@ -154,9 +152,10 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                   onClick={() => {
                     if (isSubmitted) return
                     const leaveDay = !isManagerReporter && d.day_type === 'leave'
+                    const sundayDay = d.day_type === 'sunday'
                     onChange({
                       date: d.report_date,
-                      reportKind: leaveDay ? 'leave' : 'field',
+                      reportKind: leaveDay ? 'leave' : sundayDay ? 'sunday' : 'field',
                       ...(leaveDay
                         ? {
                             selectedSubAreaIds: [],
@@ -167,10 +166,20 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                             leaveDcrRemark: '',
                             tpAutoFilled: false,
                           }
-                        : {
-                            leaveDcrCategory: '',
-                            leaveDcrRemark: '',
-                          }),
+                        : sundayDay
+                          ? {
+                              selectedSubAreaIds: [],
+                              visits: {},
+                              workingWithIds: [],
+                              workingWithId: '',
+                              leaveDcrCategory: '',
+                              leaveDcrRemark: '',
+                              tpAutoFilled: false,
+                            }
+                          : {
+                              leaveDcrCategory: '',
+                              leaveDcrRemark: '',
+                            }),
                     })
                   }}
                   className={cn(
@@ -185,7 +194,7 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                     <div>
                       <p className="text-sm font-semibold text-foreground">{whenLabel}</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {weekday} {day} {month}
+                        {dateLine}
                       </p>
                     </div>
 
@@ -193,6 +202,11 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
                       {d.day_type === 'leave' && !isSubmitted && !isManagerReporter && (
                         <Badge variant="outline" className="text-[10px] border-violet-500/40 text-violet-700 dark:text-violet-300">
                           Leave DCR
+                        </Badge>
+                      )}
+                      {d.day_type === 'sunday' && !isSubmitted && (
+                        <Badge variant="outline" className="text-[10px] border-sky-500/40 text-sky-800 dark:text-sky-200">
+                          Sunday DCR
                         </Badge>
                       )}
                       {isSubmitted ? (
@@ -225,6 +239,12 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
         <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
           <p className="text-xs font-medium text-violet-900 dark:text-violet-100 leading-relaxed">
             Leave DCR: the next step only asks for leave type and a remark. Working with colleagues is not required.
+          </p>
+        </div>
+      ) : user?.role === 'mr' && data.reportKind === 'sunday' ? (
+        <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
+          <p className="text-xs font-medium text-sky-900 dark:text-sky-100 leading-relaxed">
+            Sunday DCR: the next step confirms no field visits for this Sunday. No doctor entries are required.
           </p>
         </div>
       ) : (

@@ -11,7 +11,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import { AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
-import { useManagerPendingTourPrograms, useResolveTourProgram, useTourProgramEntries } from '@/hooks/useTourProgram'
+import {
+  useManagerPendingTourPrograms,
+  useResolveTourProgram,
+  useTourProgramEntries,
+  useTpDeletionRequestsForManager,
+  useResolveTourProgramDeletionRequest,
+} from '@/hooks/useTourProgram'
+import { useManagerMrs } from '@/hooks/useManagerTeam'
 import { useAllAreas } from '@/hooks/useAreas'
 import { supabase } from '@/lib/supabase'
 
@@ -24,7 +31,7 @@ export default function UnlockRequests() {
 
   const pending = data?.pending ?? []
   const resolved = data?.resolved ?? []
-  const [tab, setTab] = useState<'unlock' | 'tour-programs'>('unlock')
+  const [tab, setTab] = useState<'unlock' | 'tour-programs' | 'tp-deletions'>('unlock')
   const { data: pendingTp = [] } = useManagerPendingTourPrograms(managerId)
   const resolveTp = useResolveTourProgram()
   const [tpNoteById, setTpNoteById] = useState<Record<string, string>>({})
@@ -34,6 +41,14 @@ export default function UnlockRequests() {
   const subAreaNameById = new Map(
     areas.flatMap(area => (area.sub_areas ?? []).map(sa => [sa.id, `${area.name} / ${sa.name}`] as const)),
   )
+
+  const { data: tpDeletionReqs = [] } = useTpDeletionRequestsForManager()
+  const resolveTpDeletion = useResolveTourProgramDeletionRequest()
+  const { data: teamMrs = [] } = useManagerMrs(managerId)
+  const mrNameById = useMemo(() => new Map(teamMrs.map(m => [m.id, m.full_name?.trim() || 'MR'] as const)), [teamMrs])
+
+  const mrLabel = (mrId: string) =>
+    mrId === user?.id ? (user?.full_name?.trim() || 'You') : (mrNameById.get(mrId) ?? 'MR')
 
   const wwIds = useMemo(() => {
     const s = new Set<string>()
@@ -69,6 +84,7 @@ export default function UnlockRequests() {
 
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState('')
+  const [tpDelNotes, setTpDelNotes] = useState<Record<string, string>>({})
 
   const pendingCount = pending.length
   const resolvedCount = resolved.length
@@ -216,9 +232,15 @@ export default function UnlockRequests() {
       <PageHeader title="Requests" />
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
-        <div className="flex gap-2">
-          <Button variant={tab === 'unlock' ? 'default' : 'outline'} className="flex-1" onClick={() => setTab('unlock')}>Unlock Requests</Button>
-          <Button variant={tab === 'tour-programs' ? 'default' : 'outline'} className="flex-1" onClick={() => setTab('tour-programs')}>Tour Programs</Button>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <Button variant={tab === 'unlock' ? 'default' : 'outline'} className="w-full text-sm" onClick={() => setTab('unlock')}>Unlock</Button>
+          <Button variant={tab === 'tour-programs' ? 'default' : 'outline'} className="w-full text-sm" onClick={() => setTab('tour-programs')}>Tour programs</Button>
+          <Button variant={tab === 'tp-deletions' ? 'default' : 'outline'} className="w-full text-sm relative" onClick={() => setTab('tp-deletions')}>
+            TP deletions
+            {tpDeletionReqs.length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5">{tpDeletionReqs.length}</Badge>
+            )}
+          </Button>
         </div>
         {isLoading && <LoadingSpinner />}
         {isError && <EmptyState message="Could not load unlock requests." />}
@@ -348,6 +370,80 @@ export default function UnlockRequests() {
                           })
                           .then(() => toast.success('Tour program rejected'))
                       }}
+                    >
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === 'tp-deletions' && (
+          <div className="space-y-3">
+            {tpDeletionReqs.length === 0 ? (
+              <EmptyState message="No pending tour program deletion requests." />
+            ) : (
+              tpDeletionReqs.map(req => (
+                <div key={req.id} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-foreground truncate">{mrLabel(req.mr_id)}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Requested {req.created_at ? new Date(req.created_at).toLocaleString() : '—'}
+                      </p>
+                    </div>
+                    <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground break-all">
+                    Tour program: <span className="font-mono text-foreground">{req.tour_program_id ?? '—'}</span>
+                  </p>
+                  <div>
+                    <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" htmlFor={`tpdel-note-${req.id}`}>
+                      Note to MR (optional for approve)
+                    </label>
+                    <Textarea
+                      id={`tpdel-note-${req.id}`}
+                      value={tpDelNotes[req.id] ?? ''}
+                      onChange={e => setTpDelNotes(prev => ({ ...prev, [req.id]: e.target.value }))}
+                      className="mt-1 min-h-[64px] rounded-lg text-sm"
+                      placeholder="Optional comment…"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-600/90"
+                      disabled={resolveTpDeletion.isPending}
+                      onClick={() =>
+                        void resolveTpDeletion
+                          .mutateAsync({
+                            requestId: req.id,
+                            approve: true,
+                            managerNote: (tpDelNotes[req.id] ?? '').trim() || null,
+                          })
+                          .then(() => toast.success('Tour program removed'))
+                          .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+                      }
+                    >
+                      Approve delete
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="rounded-lg"
+                      disabled={resolveTpDeletion.isPending}
+                      onClick={() =>
+                        void resolveTpDeletion
+                          .mutateAsync({
+                            requestId: req.id,
+                            approve: false,
+                            managerNote: (tpDelNotes[req.id] ?? '').trim() || null,
+                          })
+                          .then(() => toast.success('Request rejected'))
+                          .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+                      }
                     >
                       Reject
                     </Button>

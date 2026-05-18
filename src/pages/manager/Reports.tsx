@@ -310,10 +310,12 @@ export default function ManagerReports() {
       return;
     }
     const mrName = mrUser?.full_name ?? 'MR';
-    const isLeave = (report.report_kind ?? 'field') === 'leave';
+    const rk = (report.report_kind ?? 'field') as string;
+    const pdfSlug = rk === 'leave' ? 'Leave_DCR' : rk === 'sunday' ? 'Sunday_DCR' : 'DCR';
+    const pdfTitle = rk === 'leave' ? 'Leave DCR' : rk === 'sunday' ? 'Sunday DCR' : 'Daily Call Report (DCR)';
     saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
-      fileName: `${isLeave ? 'Leave_DCR' : 'DCR'}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
-      documentTitle: isLeave ? 'Leave DCR' : 'Daily Call Report (DCR)',
+      fileName: `${pdfSlug}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
+      documentTitle: pdfTitle,
     });
     toast.success('PDF downloaded');
   };

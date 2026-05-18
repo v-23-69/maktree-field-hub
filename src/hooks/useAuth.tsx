@@ -99,22 +99,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     let mounted = true
     void (async () => {
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (!mounted) return
-      if (
-        sessionError &&
-        /refresh token|invalid.*token/i.test(sessionError.message ?? '')
-      ) {
-        await supabase.auth.signOut({ scope: 'local' })
-        setUser(null)
-        setAuthReady(true)
-        setIsProfileLoading(false)
-        sessionStorage.removeItem(PROFILE_CACHE_KEY)
-        return
-      }
-      if (session?.user) {
-        void loadProfile(session.user.id, true)
-      } else {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        if (!mounted) return
+        const errMsg = [sessionError?.message, sessionError?.name].filter(Boolean).join(' ')
+        if (
+          sessionError &&
+          /refresh token|invalid.*token|token.*not found|not found/i.test(errMsg)
+        ) {
+          await supabase.auth.signOut({ scope: 'local' })
+          setUser(null)
+          setAuthReady(true)
+          setIsProfileLoading(false)
+          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          return
+        }
+        if (session?.user) {
+          void loadProfile(session.user.id, true)
+        } else {
+          setUser(null)
+          setAuthReady(true)
+          setIsProfileLoading(false)
+          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+        }
+      } catch (e) {
+        if (!mounted) return
+        const msg = e instanceof Error ? e.message : String(e)
+        if (/refresh token|invalid.*token|token.*not found|AuthApiError/i.test(msg)) {
+          await supabase.auth.signOut({ scope: 'local' })
+        }
         setUser(null)
         setAuthReady(true)
         setIsProfileLoading(false)
@@ -126,14 +139,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!mounted) return
         if (event === 'TOKEN_REFRESHED') return
-        if (session?.user) {
-          const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
-          if (sameUser) {
+        try {
+          if (session?.user) {
+            const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
+            if (sameUser) {
+              setAuthReady(true)
+              return
+            }
+            void loadProfile(session.user.id, true)
+          } else {
+            setUser(null)
             setAuthReady(true)
-            return
+            setIsProfileLoading(false)
+            sessionStorage.removeItem(PROFILE_CACHE_KEY)
+            lastLoadedAuthUserIdRef.current = null
+            lastLoadedAtRef.current = 0
           }
-          void loadProfile(session.user.id, true)
-        } else {
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (/refresh token|invalid.*token|token.*not found|AuthApiError/i.test(msg)) {
+            await supabase.auth.signOut({ scope: 'local' })
+          }
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
