@@ -77,7 +77,9 @@ export function saveDcrReportsPdf(
   }
 
   for (const report of reports) {
-    const isLeave = (report.report_kind ?? 'field') === 'leave'
+    const rk = (report.report_kind ?? 'field') as string
+    const isLeave = rk === 'leave'
+    const isSunday = rk === 'sunday'
 
     if (isLeave) {
       writeLines(`Leave DCR — ${formatDisplayDate(report.report_date)}`, 12, true)
@@ -92,6 +94,14 @@ export function saveDcrReportsPdf(
       } else {
         writeLines('Remark: —', 9, false)
       }
+      y += 10
+      continue
+    }
+
+    if (isSunday) {
+      writeLines(`Sunday DCR — ${formatDisplayDate(report.report_date)}`, 12, true)
+      writeLines(`Status: ${report.status}`, 10, false)
+      writeLines('Non-field Sunday; no doctor visits recorded.', 9, false)
       y += 10
       continue
     }

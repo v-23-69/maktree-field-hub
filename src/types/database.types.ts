@@ -112,8 +112,8 @@ export interface DailyReport {
   status: ReportStatus
   submitted_at: string | null
   created_at: string
-  /** 'field' = normal DCR; 'leave' = Leave DCR for approved leave days */
-  report_kind?: 'field' | 'leave'
+  /** 'field' = normal DCR; 'leave' = Leave DCR; 'sunday' = Sunday DCR (no visits) */
+  report_kind?: 'field' | 'leave' | 'sunday'
   leave_dcr_category?: 'casual' | 'sick' | null
   leave_dcr_remark?: string | null
   mr?: User
@@ -459,6 +459,17 @@ export interface TourProgram {
   /** Increments when MR unlocks a submitted/approved TP for re-approval, or when a manager saves edits on an approved self TP. */
   edit_count: number
   created_at: string
+}
+
+export interface TourProgramDeletionRequest {
+  id: string
+  tour_program_id: string | null
+  mr_id: string
+  status: 'pending' | 'approved' | 'rejected'
+  manager_note: string | null
+  resolved_by: string | null
+  created_at: string
+  resolved_at: string | null
 }
 
 export interface TourProgramEntry {

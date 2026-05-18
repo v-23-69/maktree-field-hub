@@ -23,13 +23,13 @@ import { useProducts, useUpdateProductPtr } from '@/hooks/useProducts';
 import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { todayInputDate, formatDisplayDate } from '@/lib/dateUtils';
+import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { useTpStatus, useTodayTpPlan, useUnpauseUser } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
-import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport';
+import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam, useMarkSundayDcr } from '@/hooks/useReport';
 import { useExpenseReport } from '@/hooks/useExpense';
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -107,6 +107,8 @@ export default function ManagerDashboard() {
 
   const { data: mgrAllowedDates = [] } = useAllowedReportDates(user?.id ?? '');
   const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === todayInputDate())?.already_submitted === true;
+  const markSundayDcr = useMarkSundayDcr();
+  const showMgrSundayDcr = isSundayYmd(todayInputDate()) && !mgrTodayDcrDone;
   const teamMonthYyyyMm = todayInputDate().slice(0, 7);
   const { data: teamMonthlySupport } = useMonthlySupportAggregateForManagerTeam(
     deferReady ? (user?.id ?? '') : '',
@@ -384,6 +386,30 @@ export default function ManagerDashboard() {
           </div>
         )}
 
+        {showMgrSundayDcr && (
+          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <Calendar className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-foreground">Today is Sunday (IST)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Submit Sunday DCR if you had no field visits.</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="w-full rounded-2xl h-12 text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white"
+              disabled={markSundayDcr.isPending}
+              onClick={() => {
+                void markSundayDcr.mutateAsync(undefined).then(() => {
+                  toast.success('Sunday DCR submitted');
+                }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not submit'));
+              }}
+            >
+              {markSundayDcr.isPending ? 'Submitting…' : 'Mark Sunday DCR'}
+            </Button>
+          </div>
+        )}
+
         {/* Today's Plan from TP */}
         {todayPlan && todayPlan.sub_area_id && (
           <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-background border border-emerald-500/15 p-5 space-y-3">
@@ -502,6 +528,10 @@ export default function ManagerDashboard() {
             <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/territories')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center"><MapPinned className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Territories</span>
             </button>
             <button type="button" onClick={() => navigate('/manager/expense')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>

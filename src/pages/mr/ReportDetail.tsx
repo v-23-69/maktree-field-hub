@@ -42,6 +42,10 @@ export default function ReportDetail() {
     [visits],
   );
 
+  const reportKind = (report?.report_kind ?? 'field') as 'field' | 'leave' | 'sunday';
+  const isLeaveDetail = reportKind === 'leave';
+  const isSundayDetail = reportKind === 'sunday';
+
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
   const downloadThisReportPdf = () => {
@@ -55,10 +59,11 @@ export default function ReportDetail() {
       return;
     }
     const name = user?.full_name?.replace(/\s+/g, '_') ?? 'DCR';
-    const isLeave = (report.report_kind ?? 'field') === 'leave';
+    const pdfSlug = isLeaveDetail ? 'Leave_DCR' : isSundayDetail ? 'Sunday_DCR' : 'DCR';
+    const pdfTitle = isLeaveDetail ? 'Leave DCR' : isSundayDetail ? 'Sunday DCR' : 'Daily Call Report (DCR)';
     saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
-      fileName: `${isLeave ? 'Leave_DCR' : 'DCR'}_${name}_${report.report_date}.pdf`,
-      documentTitle: isLeave ? 'Leave DCR' : 'Daily Call Report (DCR)',
+      fileName: `${pdfSlug}_${name}_${report.report_date}.pdf`,
+      documentTitle: pdfTitle,
     });
     toast.success('PDF downloaded');
   };
@@ -95,9 +100,14 @@ export default function ReportDetail() {
                   <p className="font-semibold text-foreground">{dateLabel}</p>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="text-xs text-muted-foreground capitalize">{report.status}</p>
-                    {(report.report_kind ?? 'field') === 'leave' && (
+                    {isLeaveDetail && (
                       <Badge variant="outline" className="text-[10px] border-primary/40 text-primary">
                         Leave DCR
+                      </Badge>
+                    )}
+                    {isSundayDetail && (
+                      <Badge variant="outline" className="text-[10px] border-muted-foreground/40 text-muted-foreground">
+                        Sunday DCR
                       </Badge>
                     )}
                   </div>
@@ -127,14 +137,14 @@ export default function ReportDetail() {
                   )}
                 </div>
               </div>
-              {report.manager && (report.report_kind ?? 'field') === 'field' && (
+              {report.manager && reportKind === 'field' && (
                 <p className="text-xs text-muted-foreground pt-1 border-t border-border">
                   Working with: {(report.manager as { full_name?: string }).full_name ?? '—'}
                 </p>
               )}
             </div>
 
-            {(report.report_kind ?? 'field') === 'leave' ? (
+            {isLeaveDetail ? (
               <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-2">
                 <p className="text-sm font-semibold text-foreground">Leave DCR</p>
                 <p className="text-xs text-muted-foreground">
@@ -152,6 +162,13 @@ export default function ReportDetail() {
                 ) : (
                   <p className="text-xs text-muted-foreground border-t border-border pt-3 mt-1">No remark.</p>
                 )}
+              </div>
+            ) : isSundayDetail ? (
+              <div className="rounded-xl border border-border/80 bg-muted/20 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground">Sunday DCR</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Non-field day recorded for Sunday. No doctor visits are listed for this date.
+                </p>
               </div>
             ) : (
             <div>

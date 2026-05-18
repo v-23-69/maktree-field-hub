@@ -1,6 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import type { TourProgram, TourProgramEntry, TpStatus, TodayTpPlan } from '@/types/database.types'
+import type {
+  TourProgram,
+  TourProgramDeletionRequest,
+  TourProgramEntry,
+  TpStatus,
+  TodayTpPlan,
+} from '@/types/database.types'
 
 export function useTourProgram(mrId: string, month: string) {
   return useQuery({
@@ -262,6 +268,83 @@ export function useUnpauseUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-mrs'] })
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
+    },
+  })
+}
+
+export function useTpDeletionRequestsForManager() {
+  return useQuery({
+    queryKey: ['tp-deletion-requests-manager'],
+    enabled: !!supabase,
+    queryFn: async (): Promise<TourProgramDeletionRequest[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('list_tour_program_deletion_requests_for_manager')
+      if (error) throw error
+      return (data ?? []) as TourProgramDeletionRequest[]
+    },
+  })
+}
+
+export function useRequestTourProgramDeletion() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (tourProgramId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('request_tour_program_deletion', {
+        p_tour_program_id: tourProgramId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tp-deletion-requests-manager'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+    },
+  })
+}
+
+export function useResolveTourProgramDeletionRequest() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: {
+      requestId: string
+      approve: boolean
+      managerNote?: string | null
+    }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('resolve_tour_program_deletion_request', {
+        p_request_id: payload.requestId,
+        p_approve: payload.approve,
+        p_manager_note: payload.managerNote ?? null,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tp-deletion-requests-manager'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program-history'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-tour-programs'] })
+    },
+  })
+}
+
+export function useDeleteTourProgramAsManager() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (tourProgramId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('delete_tour_program_as_manager', {
+        p_tour_program_id: tourProgramId,
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program-history'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-tour-programs'] })
     },
   })
 }

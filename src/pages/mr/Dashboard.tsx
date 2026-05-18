@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate, formatInputDate, lastDayOfMonthYyyyMmDd } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, formatInputDate, lastDayOfMonthYyyyMmDd, isSundayYmd, formatShortDateIst } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Download, Umbrella, BarChart3, PiggyBank } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
@@ -23,7 +23,7 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
-import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr } from '@/hooks/useReport';
+import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr, useMarkSundayDcr } from '@/hooks/useReport';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
@@ -62,6 +62,7 @@ export default function MRDashboard() {
   const { data: mrHolidays = [] } = useMrHolidays(deferReady ? userId : '');
   const { data: holidayCount = 0 } = useMrHolidayCount(deferReady ? userId : '');
   const markHoliday = useMarkMrHoliday();
+  const markSundayDcr = useMarkSundayDcr();
 
   const [action, setAction] = useState<DrawerAction>(null);
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
@@ -180,7 +181,9 @@ export default function MRDashboard() {
   const todayDate = todayInputDate();
   const todayDcrDone = allowedDates.find(d => d.report_date === todayDate)?.already_submitted === true;
   const pendingDcrDays = allowedDates.filter(
-    d => !d.already_submitted && (d.day_type === 'working' || d.day_type === 'leave'),
+    d =>
+      !d.already_submitted &&
+      (d.day_type === 'working' || d.day_type === 'leave' || d.day_type === 'sunday'),
   );
   const allDcrDone = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted);
 
@@ -199,6 +202,8 @@ export default function MRDashboard() {
     if (!todayPlan?.working_with_ids?.length) return [];
     return todayPlan.working_with_ids.map(id => nameById.get(id) ?? id.slice(0, 8));
   }, [todayPlan, nameById]);
+
+  const showSundayDcrCta = isSundayYmd(todayDate) && !todayDcrDone;
 
   const closeDrawer = () => {
     setAction(null);
@@ -442,6 +447,33 @@ export default function MRDashboard() {
           </div>
         )}
 
+        {/* Sunday DCR (IST) */}
+        {showSundayDcrCta && (
+          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3">
+            <div className="flex items-start gap-2">
+              <Calendar className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-bold text-foreground">Today is Sunday (IST)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Tap below to submit your Sunday DCR if you had no field visits.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              className="w-full rounded-2xl h-12 text-sm font-bold bg-sky-600 hover:bg-sky-700 text-white"
+              disabled={markSundayDcr.isPending}
+              onClick={() => {
+                void markSundayDcr.mutateAsync(undefined).then(() => {
+                  toast.success('Sunday DCR submitted');
+                }).catch(e => toast.error(e instanceof Error ? e.message : 'Could not submit'));
+              }}
+            >
+              {markSundayDcr.isPending ? 'Submitting…' : 'Mark Sunday DCR'}
+            </Button>
+          </div>
+        )}
+
         {/* Today's Plan from TP */}
         {todayPlan && todayPlan.sub_area_id && (
           <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-background border border-emerald-500/15 p-5 space-y-4">
@@ -508,7 +540,6 @@ export default function MRDashboard() {
             <p className="section-title">Pending DCR Reports</p>
             <div className="space-y-1.5">
               {pendingDcrDays.map(d => {
-                const dt = new Date(d.report_date + 'T00:00:00');
                 const isToday = d.report_date === todayDate;
                 return (
                   <button
@@ -520,7 +551,7 @@ export default function MRDashboard() {
                     <div className="flex items-center gap-2">
                       <Circle className="h-4 w-4 text-amber-500 shrink-0" />
                       <span className="text-sm font-medium text-foreground">
-                        {isToday ? 'Today' : dt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}
+                        {isToday ? 'Today' : formatShortDateIst(d.report_date)}
                       </span>
                     </div>
                     <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">

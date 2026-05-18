@@ -4,10 +4,10 @@ import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import { Button } from '@/components/ui/button'
-import { todayInputDate } from '@/lib/dateUtils'
+import { todayInputDate, calendarWeekdaySun0, formatShortDateIst } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
-import { CalendarDays, Check, AlertCircle, ChevronDown, ChevronUp, Users, Save, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { CalendarDays, Check, AlertCircle, ChevronDown, ChevronUp, Users, Save, X, Trash2 } from 'lucide-react'
+import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import {
   useCreateOrUpdateTourProgram,
   useBatchSaveTourProgramEntries,
@@ -16,6 +16,8 @@ import {
   useTourProgramHistory,
   useTourProgramEntries,
   useBeginTourProgramRevision,
+  useRequestTourProgramDeletion,
+  useDeleteTourProgramAsManager,
 } from '@/hooks/useTourProgram'
 import { supabase } from '@/lib/supabase'
 import { useMrSubAreasGrouped } from '@/hooks/useAreas'
@@ -33,9 +35,10 @@ function generateMonthDays(monthStr: string) {
   const daysInMonth = new Date(year, mon, 0).getDate()
   return Array.from({ length: daysInMonth }, (_, i) => {
     const d = new Date(year, mon - 1, i + 1)
+    const work_date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
     return {
-      work_date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`,
-      day_type: d.getDay() === 0 ? 'sunday' : 'working',
+      work_date,
+      day_type: calendarWeekdaySun0(work_date) === 0 ? 'sunday' : 'working',
       holiday_name: null as string | null,
     }
   })
@@ -61,8 +64,7 @@ const DayCard = memo(function DayCard({
   dateStr, local, canEdit, allSubAreas, workingWithOptions, nameById, onSubAreaChange, onToggleWw,
 }: DayCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const dateObj = new Date(dateStr + 'T00:00:00')
-  const dateLabel = dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', weekday: 'short' })
+  const dateLabel = formatShortDateIst(dateStr)
   const filled = !!local?.sub_area_id && (local?.working_with_ids?.length ?? 0) > 0
   const selectedIds = local?.working_with_ids ?? []
 
@@ -173,6 +175,9 @@ export default function TourProgramPage() {
   const submit = useSubmitTourProgram()
   const batchSave = useBatchSaveTourProgramEntries()
   const beginRevision = useBeginTourProgramRevision()
+  const requestTpDeletion = useRequestTourProgramDeletion()
+  const deleteTpAsManager = useDeleteTourProgramAsManager()
+  const [tpDeleteOpen, setTpDeleteOpen] = useState(false)
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
   const { data: history = [] } = useTourProgramHistory(activeMrId)
   const { data: assignedAreaGroups = [] } = useMrSubAreasGrouped(activeMrId)
@@ -347,6 +352,12 @@ export default function TourProgramPage() {
       ? isApproved || currentStatus === 'draft' || currentStatus === 'rejected' || currentStatus === 'not_created'
       : !isApproved && !isSubmitted)
 
+  const tpIdForActions = tpQuery.data?.id
+  const showTpDelete =
+    !!tpIdForActions &&
+    currentStatus !== 'not_created' &&
+    (!isManager ? !isViewOnly : tab === 'self' || (tab === 'team' && !!viewMrId))
+
   const statusColor: Record<string, string> = {
     submitted: 'text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20',
     approved: 'text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
@@ -487,6 +498,52 @@ export default function TourProgramPage() {
               </Button>
             )}
 
+            {showTpDelete && (
+              <>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="w-full rounded-2xl h-11 text-sm font-semibold"
+                  disabled={requestTpDeletion.isPending || deleteTpAsManager.isPending}
+                  onClick={() => setTpDeleteOpen(true)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {isManager ? 'Delete tour program' : 'Request deletion (manager approval)'}
+                </Button>
+                <ConfirmDialog
+                  open={tpDeleteOpen}
+                  onOpenChange={setTpDeleteOpen}
+                  title={isManager ? 'Delete this tour program?' : 'Request tour program deletion?'}
+                  description={
+                    isManager
+                      ? 'This permanently removes all planned days for this month for the selected profile.'
+                      : 'Your manager will review and approve before the tour program is removed.'
+                  }
+                  confirmLabel={isManager ? 'Delete' : 'Send request'}
+                  destructive={isManager}
+                  confirmDisabled={requestTpDeletion.isPending || deleteTpAsManager.isPending}
+                  onConfirm={() => {
+                    const id = tpQuery.data?.id
+                    if (!id) return
+                    void (async () => {
+                      try {
+                        if (isManager) {
+                          await deleteTpAsManager.mutateAsync(id)
+                          toast.success('Tour program deleted')
+                        } else {
+                          await requestTpDeletion.mutateAsync(id)
+                          toast.success('Deletion request sent to your manager')
+                        }
+                        setTpDeleteOpen(false)
+                      } catch (e) {
+                        toast.error(e instanceof Error ? e.message : 'Failed')
+                      }
+                    })()
+                  }}
+                />
+              </>
+            )}
+
             {allSubAreas.length === 0 && (tab === 'self' || viewMrId) && (
               <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm text-foreground">
                 <p className="font-semibold">No field areas assigned yet</p>
@@ -502,8 +559,7 @@ export default function TourProgramPage() {
               <p className="section-title">Daily Plan</p>
               <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
                 {workingDays.map(day => {
-                  const dateObj = new Date(day.work_date + 'T00:00:00')
-                  const dateLabel = dateObj.toLocaleDateString(undefined, { day: 'numeric', month: 'short', weekday: 'short' })
+                  const dateLabel = formatShortDateIst(day.work_date)
 
                   if (day.day_type === 'sunday') {
                     return (

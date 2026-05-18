@@ -29,6 +29,7 @@ const ManagerSelfLeave = lazy(() => import("@/pages/manager/ManagerSelfLeave"));
 const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency"));
 const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
 const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
+const ManagerTerritories = lazy(() => import("@/pages/manager/ManagerTerritories"));
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/Users"));
 const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
@@ -109,6 +110,7 @@ const App = () => (
             <Route path="/manager/my-leave" element={<ProtectedRoute allowedRoles={['manager']}><ManagerSelfLeave /></ProtectedRoute>} />
             <Route path="/manager/team/visit-frequency" element={<ProtectedRoute allowedRoles={['manager']}><TeamVisitFrequency /></ProtectedRoute>} />
             <Route path="/manager/holidays" element={<ProtectedRoute allowedRoles={['manager']}><ManagerHolidays /></ProtectedRoute>} />
+            <Route path="/manager/territories" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTerritories /></ProtectedRoute>} />
             <Route path="/manager/report/history" element={<ProtectedRoute allowedRoles={['manager']}><ReportHistory /></ProtectedRoute>} />
             <Route path="/manager/report/new" element={<ProtectedRoute allowedRoles={['manager']}><NewReport /></ProtectedRoute>} />
             <Route path="/manager/report/:id" element={<ProtectedRoute allowedRoles={['manager']}><ReportDetail /></ProtectedRoute>} />

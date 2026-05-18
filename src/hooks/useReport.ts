@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { monthDateRangeForSql } from '@/lib/dateUtils'
+import { monthDateRangeForSql, todayInputDate } from '@/lib/dateUtils'
 import type {
   AllowedReportDate,
   Chemist,
@@ -391,7 +391,7 @@ export function useCreateReport() {
       managerId: string | null
       workingWithIds?: string[]
       reportDate: string
-      reportKind?: 'field' | 'leave'
+      reportKind?: 'field' | 'leave' | 'sunday'
       leaveDcrCategory?: 'casual' | 'sick' | null
       leaveDcrRemark?: string | null
     }) => {
@@ -476,6 +476,7 @@ export function useSubmitReport() {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
       queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
       queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
       queryClient.invalidateQueries({ queryKey: ['calls-speciality-analytics'] })
       queryClient.invalidateQueries({ queryKey: ['monthly-support-aggregate'] })
@@ -795,6 +796,26 @@ export function useReportVisitDaySummary(reportId: string | null) {
         name: v.doctor?.full_name?.trim() || 'Doctor',
       }))
       return { visit_count: visits.length, doctors, visits }
+    },
+  })
+}
+
+export function useMarkSundayDcr() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (reportDate?: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const d = reportDate ?? todayInputDate()
+      const { data, error } = await supabase.rpc('mark_sunday_dcr', { p_report_date: d })
+      if (error) throw error
+      return data as string
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
+      queryClient.invalidateQueries({ queryKey: ['daily-report'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
     },
   })
 }
