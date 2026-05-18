@@ -30,6 +30,8 @@ const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency
 const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
 const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
 const ManagerTerritories = lazy(() => import("@/pages/manager/ManagerTerritories"));
+const ManagerTeamHub = lazy(() => import("@/pages/manager/TeamHub"));
+const ManagerTeamMrDetail = lazy(() => import("@/pages/manager/TeamMrDetail"));
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/Users"));
 const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
@@ -111,6 +113,8 @@ const App = () => (
             <Route path="/manager/team/visit-frequency" element={<ProtectedRoute allowedRoles={['manager']}><TeamVisitFrequency /></ProtectedRoute>} />
             <Route path="/manager/holidays" element={<ProtectedRoute allowedRoles={['manager']}><ManagerHolidays /></ProtectedRoute>} />
             <Route path="/manager/territories" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTerritories /></ProtectedRoute>} />
+            <Route path="/manager/team" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTeamHub /></ProtectedRoute>} />
+            <Route path="/manager/team/:mrId" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTeamMrDetail /></ProtectedRoute>} />
             <Route path="/manager/report/history" element={<ProtectedRoute allowedRoles={['manager']}><ReportHistory /></ProtectedRoute>} />
             <Route path="/manager/report/new" element={<ProtectedRoute allowedRoles={['manager']}><NewReport /></ProtectedRoute>} />
             <Route path="/manager/report/:id" element={<ProtectedRoute allowedRoles={['manager']}><ReportDetail /></ProtectedRoute>} />

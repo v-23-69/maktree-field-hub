@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { useDoctorsBySubAreas } from '@/hooks/useDoctors';
-import { CheckCircle2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import DoctorVisitDrawer from '@/components/mr/DoctorVisitDrawer';
 import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -18,9 +18,10 @@ interface Props {
   onChange: (d: Partial<ReportFormData>) => void;
   onNext: () => void;
   onBack: () => void;
+  hideFooter?: boolean;
 }
 
-export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
+export default function ReportStep3({ data, onChange, onNext, onBack, hideFooter }: Props) {
   const [activeDoctorId, setActiveDoctorId] = useState<string | null>(null);
   const [deleteDoctorId, setDeleteDoctorId] = useState<string | null>(null);
   const { data: doctors = [], isLoading, isError } = useDoctorsBySubAreas(data.selectedSubAreaIds);
@@ -63,7 +64,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
 
   if (isError) {
     return (
-      <div className="space-y-4 pb-36">
+      <div className="space-y-4">
         <EmptyState message="Could not load doctors for the selected areas." />
         <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
       </div>
@@ -75,10 +76,17 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
     : '';
 
   return (
-    <div className="space-y-4 animate-fade-in pb-36">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-foreground">Add Doctor Visits</p>
-        <span className="text-xs font-semibold text-primary bg-primary/10 rounded-full px-2.5 py-0.5">{visitCount} visited</span>
+    <div className="space-y-4 animate-fade-in">
+      <div className="glass-card !rounded-2xl p-4 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-foreground">Doctor visits</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+            Tap a doctor to add products, chemist, monthly support & competitors.
+          </p>
+        </div>
+        <span className="shrink-0 text-xs font-bold text-primary bg-primary/10 rounded-full px-3 py-1.5 tabular-nums">
+          {visitCount}/{doctors.length}
+        </span>
       </div>
 
       {grouped.length === 0 ? (
@@ -93,35 +101,59 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
               <div className="space-y-2">
                 {docs.map((doc, i) => {
                   const hasVisit = !!data.visits[doc.id];
+                  const visit = data.visits[doc.id];
                   return (
                     <div
                       key={doc.id}
                       className={cn(
-                        'w-full max-w-full min-w-0 flex items-center gap-2 sm:gap-3 rounded-xl p-3 sm:p-4 shadow-sm overflow-hidden animate-fade-in',
-                        hasVisit ? 'bg-primary/5 border border-primary/20' : 'bg-card',
+                        'w-full max-w-full min-w-0 flex items-center gap-2 sm:gap-3 rounded-2xl p-3 sm:p-3.5 overflow-hidden animate-fade-in border',
+                        hasVisit
+                          ? 'glass-card !rounded-2xl bg-primary/5 border-primary/25'
+                          : 'bg-card border-border/60 shadow-sm',
                       )}
                       style={{ animationDelay: `${i * 40}ms` }}
                     >
                       <button
                         type="button"
                         onClick={() => setActiveDoctorId(doc.id)}
-                        className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 text-left active:scale-[0.98] transition-all"
+                        className="flex-1 min-w-0 flex items-center gap-3 text-left active:scale-[0.98] transition-all"
                       >
+                        <div
+                          className={cn(
+                            'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-xs font-bold',
+                            hasVisit
+                              ? 'bg-primary text-primary-foreground'
+                              : 'bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {hasVisit ? (
+                            <CheckCircle2 className="h-5 w-5" />
+                          ) : (
+                            doc.full_name.slice(0, 1).toUpperCase()
+                          )}
+                        </div>
                         <div className="flex-1 min-w-0 overflow-hidden">
                           <p className="font-semibold text-foreground text-sm truncate">{doc.full_name}</p>
                           <p className="text-xs text-muted-foreground">{doc.speciality}</p>
+                          {hasVisit && visit && (
+                            <p className="text-[10px] text-muted-foreground mt-1 truncate">
+                              {visit.chemistName ? `${visit.chemistName} · ` : ''}
+                              {visit.productsPromoted.length} product
+                              {visit.productsPromoted.length === 1 ? '' : 's'}
+                              {visit.monthlySupport.length > 0 &&
+                                ` · ${visit.monthlySupport.length} support`}
+                            </p>
+                          )}
                         </div>
                         {hasVisit ? (
-                          <div className="flex items-center gap-1.5 text-xs font-medium text-primary shrink-0">
-                            <CheckCircle2 className="h-4 w-4" />
-                            <Pencil className="h-3.5 w-3.5" />
-                            <span>Edit</span>
-                          </div>
+                          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide text-primary bg-primary/10 px-2 py-1 rounded-lg">
+                            Edit
+                          </span>
                         ) : (
-                          <div className="flex items-center gap-1 text-xs font-medium text-primary shrink-0">
+                          <span className="shrink-0 flex items-center gap-0.5 text-xs font-semibold text-primary">
                             <Plus className="h-4 w-4" />
-                            <span>Add Visit</span>
-                          </div>
+                            Add
+                          </span>
                         )}
                       </button>
                       {hasVisit && (
@@ -166,7 +198,7 @@ export default function ReportStep3({ data, onChange, onNext, onBack }: Props) {
         }}
       />
 
-      <ReportStepFooter onBack={onBack} onNext={onNext} />
+      {!hideFooter && <ReportStepFooter onBack={onBack} onNext={onNext} />}
     </div>
   );
 }

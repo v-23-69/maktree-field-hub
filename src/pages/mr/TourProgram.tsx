@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef, memo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
@@ -109,9 +110,18 @@ export default function TourProgramPage() {
     })
   }, [now])
 
+  const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<'self' | 'team'>('self')
   const [month, setMonth] = useState(monthOptions[0].value)
   const [viewMrId, setViewMrId] = useState('')
+
+  useEffect(() => {
+    const teamMr = searchParams.get('teamMr')
+    if (teamMr && isManager) {
+      setTab('team')
+      setViewMrId(teamMr)
+    }
+  }, [searchParams, isManager])
   const [localEntries, setLocalEntries] = useState<Record<string, LocalEntry>>({})
   const [saving, setSaving] = useState(false)
 

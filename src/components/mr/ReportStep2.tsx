@@ -1,6 +1,7 @@
 import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useMrSubAreasGrouped } from '@/hooks/useAreas';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -13,9 +14,11 @@ interface Props {
   onChange: (d: Partial<ReportFormData>) => void;
   onNext: () => void;
   onBack: () => void;
+  hideFooter?: boolean;
+  onCanProceedChange?: (canProceed: boolean) => void;
 }
 
-export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
+export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter, onCanProceedChange }: Props) {
   const { user } = useAuth();
   const { data: grouped = [], isLoading, isError } = useMrSubAreasGrouped(user?.id ?? '');
 
@@ -27,6 +30,10 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
   };
 
   const canProceed = data.selectedSubAreaIds.length > 0;
+
+  useEffect(() => {
+    onCanProceedChange?.(canProceed);
+  }, [canProceed, onCanProceedChange]);
 
   if (isLoading) return <LoadingSpinner />;
 
@@ -55,7 +62,7 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden pb-36">
+    <div className="space-y-5 animate-fade-in w-full max-w-full min-w-0 overflow-x-hidden">
       {data.tpAutoFilled && (
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3.5">
           <p className="text-xs text-primary font-semibold">
@@ -93,7 +100,9 @@ export default function ReportStep2({ data, onChange, onNext, onBack }: Props) {
         </div>
       ))}
 
-      <ReportStepFooter onBack={onBack} onNext={onNext} nextDisabled={!canProceed} />
+      {!hideFooter && (
+        <ReportStepFooter onBack={onBack} onNext={onNext} nextDisabled={!canProceed} />
+      )}
     </div>
   );
 }

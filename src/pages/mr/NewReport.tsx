@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { todayInputDate, isSundayYmd } from '@/lib/dateUtils';
 import PageHeader from '@/components/shared/PageHeader';
@@ -8,6 +8,8 @@ import ReportStep2 from '@/components/mr/ReportStep2';
 import ReportStep3 from '@/components/mr/ReportStep3';
 import ReportStep4 from '@/components/mr/ReportStep4';
 import ReportSundayDcrStep from '@/components/mr/ReportSundayDcrStep';
+import ReportLeaveDcrStep from '@/components/mr/ReportLeaveDcrStep';
+import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useReportBlockStatus, useRequestReportUnlock } from '@/hooks/useReport';
@@ -20,6 +22,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
+import { coerceQuantity } from '@/lib/quantityInput';
 
 /** One saved doctor visit (local form state). */
 export interface VisitFormEntry {
@@ -27,8 +30,8 @@ export interface VisitFormEntry {
   subAreaId: string
   productsPromoted: string[]
   chemistName: string
-  competitors: { brandName: string; quantity: number }[]
-  monthlySupport: { productId: string; quantity: number }[]
+  competitors: { brandName: string; quantity: number | null }[]
+  monthlySupport: { productId: string; quantity: number | null }[]
 }
 
 export interface ReportFormData {
@@ -93,11 +96,17 @@ function migrateVisits(v: Record<string, unknown>): Record<string, VisitFormEntr
         : [],
       chemistName: typeof e.chemistName === 'string' ? e.chemistName : '',
       competitors: Array.isArray(e.competitors)
-        ? (e.competitors as { brandName: string; quantity: number }[])
-        : [{ brandName: '', quantity: 0 }],
+        ? (e.competitors as { brandName?: string; quantity?: unknown }[]).map(c => ({
+            brandName: typeof c.brandName === 'string' ? c.brandName : '',
+            quantity: coerceQuantity(c.quantity),
+          }))
+        : [{ brandName: '', quantity: null }],
       monthlySupport: Array.isArray(e.monthlySupport)
-        ? (e.monthlySupport as { productId: string; quantity: number }[])
-        : [{ productId: '', quantity: 0 }],
+        ? (e.monthlySupport as { productId?: string; quantity?: unknown }[]).map(m => ({
+            productId: typeof m.productId === 'string' ? m.productId : '',
+            quantity: coerceQuantity(m.quantity),
+          }))
+        : [{ productId: '', quantity: null }],
     }
   }
   return out
@@ -123,6 +132,9 @@ export default function NewReport() {
   const { data: wwSanitizeOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role)
 
   const [step, setStep] = useState(1);
+  const [step1CanProceed, setStep1CanProceed] = useState(false);
+  const [step2CanProceed, setStep2CanProceed] = useState(false);
+  const [childFooter, setChildFooter] = useState<ReportStepFooterProps | null>(null);
   const [unlockReason, setUnlockReason] = useState('')
   const [formData, setFormData] = useState<ReportFormData>(() => {
     const draft = loadDraft();
@@ -138,6 +150,9 @@ export default function NewReport() {
       leaveDcrRemark: '',
     };
   });
+
+  const leaveFlow = user?.role === 'mr' && formData.reportKind === 'leave';
+  const sundayFlow = formData.reportKind === 'sunday';
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
@@ -242,6 +257,10 @@ export default function NewReport() {
     localStorage.removeItem(DRAFT_KEY);
   }, []);
 
+  useEffect(() => {
+    setChildFooter(null);
+  }, [step]);
+
   const {
     data: blockStatus,
     isLoading: blockLoading,
@@ -251,6 +270,37 @@ export default function NewReport() {
 
   const navRole = user?.role === 'manager' ? 'manager' : 'mr';
   const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
+  const stepLabels = sundayFlow ? ['Date', 'Sunday DCR'] : leaveFlow ? LEAVE_STEPS : STEPS;
+
+  const dockedFooter = useMemo((): ReportStepFooterProps | null => {
+    if (step === 1 && !leaveFlow && !sundayFlow) {
+      return {
+        showBack: false,
+        onNext: () => {
+          if (sundayFlow) setStep(5)
+          else setStep(2)
+        },
+        nextDisabled: !step1CanProceed,
+      }
+    }
+    if (step === 2 && !leaveFlow && !sundayFlow) {
+      return {
+        onBack: () => setStep(1),
+        onNext: () => setStep(3),
+        nextDisabled: !step2CanProceed,
+      }
+    }
+    if (step === 3 && !leaveFlow && !sundayFlow) {
+      return {
+        onBack: () => setStep(2),
+        onNext: () => setStep(4),
+      }
+    }
+    if ((step === 4 && !leaveFlow && !sundayFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow)) {
+      return childFooter
+    }
+    return null
+  }, [step, leaveFlow, sundayFlow, step1CanProceed, step2CanProceed, childFooter])
 
   if (blockLoading || tpLoading) {
     return (
@@ -382,16 +432,11 @@ export default function NewReport() {
     )
   }
 
-  const leaveFlow = user?.role === 'mr' && formData.reportKind === 'leave'
-  const sundayFlow = formData.reportKind === 'sunday'
-  const stepLabels = sundayFlow ? ['Date', 'Sunday DCR'] : leaveFlow ? LEAVE_STEPS : STEPS
-
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
       <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
 
-      {/* Step indicator */}
-      <div className="px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
+      <div className="shrink-0 px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full">
         <div className="flex items-center gap-1">
           {stepLabels.map((s, i) => {
             const visualStep = sundayFlow
@@ -421,54 +466,71 @@ export default function NewReport() {
         </div>
       </div>
 
-      <div className="px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto">
-        {step === 1 && (
-          <ReportStep1
-            data={formData}
-            onChange={updateData}
-            onNext={() => {
-              if (sundayFlow) setStep(5)
-              else setStep(2)
-            }}
-          />
-        )}
-        {step === 5 && sundayFlow && (
-          <ReportSundayDcrStep data={formData} onBack={() => setStep(1)} onClearDraft={clearDraft} />
-        )}
-        {step === 2 && leaveFlow && (
-          <ReportLeaveDcrStep
-            data={formData}
-            onChange={updateData}
-            onBack={() => setStep(1)}
-            onClearDraft={clearDraft}
-          />
-        )}
-        {step === 2 && !leaveFlow && !sundayFlow && (
-          <ReportStep2
-            data={formData}
-            onChange={updateData}
-            onNext={() => setStep(3)}
-            onBack={() => setStep(1)}
-          />
-        )}
-        {step === 3 && !leaveFlow && !sundayFlow && (
-          <ReportStep3
-            data={formData}
-            onChange={updateData}
-            onNext={() => setStep(4)}
-            onBack={() => setStep(2)}
-          />
-        )}
-        {step === 4 && !leaveFlow && !sundayFlow && (
-          <ReportStep4
-            data={formData}
-            onBack={() => setStep(3)}
-            onClearDraft={clearDraft}
-          />
-        )}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+        <div className="px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full">
+          {step === 1 && (
+            <ReportStep1
+              data={formData}
+              onChange={updateData}
+              hideFooter
+              onCanProceedChange={setStep1CanProceed}
+              onNext={() => {
+                if (sundayFlow) setStep(5)
+                else setStep(2)
+              }}
+            />
+          )}
+          {step === 5 && sundayFlow && (
+            <ReportSundayDcrStep
+              data={formData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+              onDockedFooter={setChildFooter}
+            />
+          )}
+          {step === 2 && leaveFlow && (
+            <ReportLeaveDcrStep
+              data={formData}
+              onChange={updateData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+              onDockedFooter={setChildFooter}
+            />
+          )}
+          {step === 2 && !leaveFlow && !sundayFlow && (
+            <ReportStep2
+              data={formData}
+              onChange={updateData}
+              hideFooter
+              onCanProceedChange={setStep2CanProceed}
+              onNext={() => setStep(3)}
+              onBack={() => setStep(1)}
+            />
+          )}
+          {step === 3 && !leaveFlow && !sundayFlow && (
+            <ReportStep3
+              data={formData}
+              onChange={updateData}
+              hideFooter
+              onNext={() => setStep(4)}
+              onBack={() => setStep(2)}
+            />
+          )}
+          {step === 4 && !leaveFlow && !sundayFlow && (
+            <ReportStep4
+              data={formData}
+              onBack={() => setStep(3)}
+              onClearDraft={clearDraft}
+              hideFooter
+              onDockedFooter={setChildFooter}
+            />
+          )}
+        </div>
       </div>
 
-      <BottomNav role={navRole} />
+      {dockedFooter && <ReportStepFooter docked {...dockedFooter} />}
     </div>
   );
 }

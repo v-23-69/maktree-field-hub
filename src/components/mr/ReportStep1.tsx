@@ -31,9 +31,11 @@ interface Props {
   data: ReportFormData;
   onChange: (d: Partial<ReportFormData>) => void;
   onNext: () => void;
+  hideFooter?: boolean;
+  onCanProceedChange?: (canProceed: boolean) => void;
 }
 
-export default function ReportStep1({ data, onChange, onNext }: Props) {
+export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanProceedChange }: Props) {
   const { user } = useAuth();
   const {
     data: workingOptions = [],
@@ -118,8 +120,12 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
 
   const canProceed = !!selected?.report_date && !selectedAlreadySubmitted && !allSubmitted
 
+  useEffect(() => {
+    onCanProceedChange?.(canProceed)
+  }, [canProceed, onCanProceedChange])
+
   return (
-    <div className="space-y-5 animate-fade-in pb-36">
+    <div className="space-y-5 animate-fade-in min-w-0">
       {data.tpAutoFilled && (
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
           <p className="text-xs text-primary font-medium">
@@ -352,8 +358,8 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
             )}
 
             {data.workingWithIds.length > 0 && (
-              <div className="rounded-xl bg-primary/5 border border-primary/20 p-3">
-                <p className="text-xs text-primary font-medium">
+              <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 mb-1">
+                <p className="text-xs text-primary font-medium leading-relaxed break-words">
                   Working with: {data.workingWithIds
                     .map(id => {
                       const opt = workingOptions.find(o => o.id === id)
@@ -373,7 +379,9 @@ export default function ReportStep1({ data, onChange, onNext }: Props) {
       </div>
       )}
 
-      <ReportStepFooter showBack={false} onNext={onNext} nextDisabled={!canProceed} />
+      {!hideFooter && (
+        <ReportStepFooter showBack={false} onNext={onNext} nextDisabled={!canProceed} />
+      )}
     </div>
   );
 }

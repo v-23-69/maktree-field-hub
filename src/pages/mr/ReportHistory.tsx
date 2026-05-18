@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
+import DcrPdfDownloadCard from '@/components/mr/DcrPdfDownloadCard';
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
@@ -30,6 +32,7 @@ function getMonthDays(year: number, month: number) {
 
 export default function ReportHistory() {
   const navigate = useNavigate();
+  const { goBack: safeGoBack } = usePreventAccidentalBack(true);
   const { user } = useAuth();
   const isManager = user?.role === 'manager';
   const reportBase = isManager ? '/manager/report' : '/mr/report';
@@ -87,7 +90,7 @@ export default function ReportHistory() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title={isManager ? 'My report history' : 'Report History'} showBack />
+      <PageHeader title={isManager ? 'My report history' : 'Report History'} showBack onBack={safeGoBack} />
 
       <Drawer open={!!summaryReportId} onOpenChange={open => { if (!open) closeSummary(); }}>
         <DrawerContent className="max-h-[85dvh]">
@@ -186,6 +189,9 @@ export default function ReportHistory() {
       </Drawer>
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
+        {!isManager && user?.id && (
+          <DcrPdfDownloadCard mrId={user.id} mrName={user.full_name} />
+        )}
         <div className="flex gap-2">
           <Button
             variant={view === 'calendar' ? 'default' : 'outline'}

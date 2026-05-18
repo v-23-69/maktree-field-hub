@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, Plus, MapPin, MapPinned, UserPlus, UserMinus, UserCheck, IndianRupee, AlertTriangle, Lock, Play, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, BarChart3, PiggyBank, Bell, type LucideIcon } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -12,41 +12,33 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
-import { useAddDoctor } from '@/hooks/useAdminDoctors';
-import { useAddArea, useAddSubArea } from '@/hooks/useAdminAreasMutations';
-import { useAssignSubAreasToMrBatch, useMrSubAreaAccess, useSaveMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
-import { Check } from 'lucide-react';
+import { useMrSubAreaAccess, useSaveMrSubAreaAccess } from '@/hooks/useAdminMrAccess';
 import { useMrSubAreas } from '@/hooks/useAreas';
-import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
-import { useProducts, useUpdateProductPtr } from '@/hooks/useProducts';
 import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
-import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabase';
 import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
-import { useTpStatus, useTodayTpPlan, useUnpauseUser } from '@/hooks/useTourProgram';
+import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
-import { useAllowedReportDates, useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport';
+import { useAllowedReportDates } from '@/hooks/useReport';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount';
 import { useExpenseReport } from '@/hooks/useExpense';
-import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 
 const FILTERS = ['Today', 'This Week', 'This Month'] as const;
-type QuickAction = 'doctor' | 'area' | 'subarea' | 'assign' | 'assign-self' | 'create-mr' | 'delete-mr' | 'set-ptr' | 'strike' | 'holiday' | null
+type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  usePreventAccidentalBack(true);
   const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
   const [action, setAction] = useState<QuickAction>(null);
-  const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly');
 
   const [deferReady, setDeferReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setDeferReady(true), 100); return () => clearTimeout(t); }, []);
@@ -57,27 +49,12 @@ export default function ManagerDashboard() {
   const { data: todayPlan } = useTodayTpPlan(user?.id ?? '');
   const { data: mgrSelfSubAreas = [] } = useMrSubAreas(user?.id ?? '');
   const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
-  const unpauseUser = useUnpauseUser();
 
   // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
   const { data: stats } = useManagerDashboardStats(deferReady ? (user?.id ?? '') : '', deferReady ? mrIds : []);
-  const { data: teamCallAnalytics } = useCallsAndSpecialityAnalytics(
-    mrIds,
-    teamCallPreset,
-    todayInputDate(),
-    deferReady && mrIds.length > 0,
-  );
   const { data: areas = [] } = useAllAreas();
-  const addDoctor = useAddDoctor();
-  const addArea = useAddArea();
-  const addSubArea = useAddSubArea();
-  const assignSubAreasBatch = useAssignSubAreasToMrBatch();
   const saveMrSubAreaAccess = useSaveMrSubAreaAccess();
-  const createUser = useCreateUser();
-  const deleteMr = useDeleteMrUser();
-  const { data: allProducts = [] } = useProducts();
-  const updatePtr = useUpdateProductPtr();
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -117,11 +94,6 @@ export default function ManagerDashboard() {
   const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
   const pendingMgrRequests = useManagerPendingRequestsCount(user?.id ?? '');
   useDashboardLiveRefresh(!!user?.id);
-  const teamMonthYyyyMm = todayInputDate().slice(0, 7);
-  const { data: teamMonthlySupport } = useMonthlySupportAggregateForManagerTeam(
-    deferReady ? (user?.id ?? '') : '',
-    teamMonthYyyyMm,
-  );
 
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
@@ -129,30 +101,11 @@ export default function ManagerDashboard() {
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
 
-  const [doctorName, setDoctorName] = useState('');
-  const [doctorSpec, setDoctorSpec] = useState('');
-  const [doctorSubAreaId, setDoctorSubAreaId] = useState('');
-  const [areaName, setAreaName] = useState('');
-  const [subAreaName, setSubAreaName] = useState('');
-  const [subAreaAreaId, setSubAreaAreaId] = useState('');
-  const [assignMrId, setAssignMrId] = useState('');
-  const [assignPickAreaId, setAssignPickAreaId] = useState('');
-  const [assignSelectedSubAreas, setAssignSelectedSubAreas] = useState<Set<string>>(new Set());
   const [selfPickAreaId, setSelfPickAreaId] = useState('');
   const [selfSelectedSubAreas, setSelfSelectedSubAreas] = useState<Set<string>>(new Set());
-  const [newMrName, setNewMrName] = useState('');
-  const [newMrCode, setNewMrCode] = useState('');
-  const [newMrEmail, setNewMrEmail] = useState('');
-  const [newMrSubAreas, setNewMrSubAreas] = useState<Set<string>>(new Set());
-  const [deleteMrId, setDeleteMrId] = useState('');
-  const [transferToMrId, setTransferToMrId] = useState('');
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const { data: deleteMrSubAreas = [] } = useMrSubAreaAccess(deleteMrId);
-  const { data: assignMrServerAccess = [] } = useMrSubAreaAccess(assignMrId);
   const { data: selfServerAccess = [] } = useMrSubAreaAccess(
     action === 'assign-self' ? (user?.id ?? '') : '',
   );
-  const assignServerSet = useMemo(() => new Set(assignMrServerAccess), [assignMrServerAccess]);
   const selfServerSet = useMemo(() => new Set(selfServerAccess), [selfServerAccess]);
 
   const allSubAreas = useMemo(
@@ -167,28 +120,11 @@ export default function ManagerDashboard() {
     [areas],
   );
 
-  const assignSubAreasFiltered = useMemo(
-    () =>
-      assignPickAreaId
-        ? allSubAreas.filter(sa => sa.areaId === assignPickAreaId)
-        : allSubAreas,
-    [allSubAreas, assignPickAreaId],
-  );
-
   const selfSubAreasFiltered = useMemo(
     () =>
       selfPickAreaId ? allSubAreas.filter(sa => sa.areaId === selfPickAreaId) : allSubAreas,
     [allSubAreas, selfPickAreaId],
   );
-
-  const toggleAssignSubArea = (id: string) => {
-    setAssignSelectedSubAreas(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
 
   const toggleSelfSubArea = (id: string) => {
     setSelfSelectedSubAreas(prev => {
@@ -200,25 +136,9 @@ export default function ManagerDashboard() {
   };
 
   useEffect(() => {
-    if (!assignMrId) {
-      setAssignSelectedSubAreas(new Set());
-      return;
-    }
-    setAssignSelectedSubAreas(new Set(assignMrServerAccess));
-  }, [assignMrId, assignMrServerAccess]);
-
-  useEffect(() => {
     if (action !== 'assign-self' || !user?.id) return;
     setSelfSelectedSubAreas(new Set(selfServerAccess));
   }, [action, user?.id, selfServerAccess]);
-
-  const selectAllAssignFiltered = () => {
-    setAssignSelectedSubAreas(prev => {
-      const next = new Set(prev);
-      for (const sa of assignSubAreasFiltered) next.add(sa.id);
-      return next;
-    });
-  };
 
   const selectAllSelfFiltered = () => {
     setSelfSelectedSubAreas(prev => {
@@ -233,105 +153,15 @@ export default function ManagerDashboard() {
   const { data: mgrTodayExpenseReport } = useExpenseReport(deferReady ? (user?.id ?? '') : '', today);
   const mgrTodayExpenseDone = mgrTodayExpenseReport?.status === 'submitted';
 
-  const { data: todaysMrReports = [] } = useQuery({
-    queryKey: ['manager-mr-today-report-status', user?.id, mrIds, today],
-    enabled: !!user?.id && mrIds.length > 0 && !!supabase,
-    queryFn: async (): Promise<Array<{ mrId: string; submitted: boolean; reportId: string | null }>> => {
-      if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('daily_reports')
-        .select('id, mr_id, status, report_date')
-        .in('mr_id', mrIds)
-        .eq('report_date', today)
-      if (error) throw error
-
-      const byMr = new Map<string, { submitted: boolean; reportId: string | null }>()
-      for (const id of mrIds) byMr.set(id, { submitted: false, reportId: null })
-      type Row = { mr_id: string; status: string; id: string }
-      for (const r of (data ?? []) as Row[]) {
-        const prev = byMr.get(r.mr_id)
-        const submitted = r.status === 'submitted' || !!prev?.submitted
-        const reportId =
-          r.status === 'submitted'
-            ? r.id
-            : prev?.reportId ?? r.id
-        byMr.set(r.mr_id, { submitted, reportId })
-      }
-      return mrIds.map(id => ({ mrId: id, ...(byMr.get(id) ?? { submitted: false, reportId: null }) }))
-    },
-  })
-
-  const { data: todaysMrExpenseRows = [] } = useQuery({
-    queryKey: ['manager-mr-today-expense-status', user?.id, mrIds, today],
-    enabled: !!user?.id && mrIds.length > 0 && !!supabase && deferReady,
-    queryFn: async (): Promise<Array<{ mrId: string; status: 'none' | 'draft' | 'submitted' }>> => {
-      if (!supabase) throw new Error('Supabase not configured')
-      const byMr = new Map<string, 'none' | 'draft' | 'submitted'>()
-      for (const id of mrIds) byMr.set(id, 'none')
-
-      const { data: rpcData, error: rpcErr } = await supabase.rpc('get_manager_team_expense_report_statuses', {
-        p_report_date: today,
-      })
-      let rows: Array<{ mr_id: string; status: string }> = []
-      if (!rpcErr && rpcData != null) {
-        rows = (Array.isArray(rpcData) ? rpcData : []) as Array<{ mr_id: string; status: string }>
-      } else {
-        const { data, error } = await supabase
-          .from('expense_reports')
-          .select('mr_id, status')
-          .in('mr_id', mrIds)
-          .eq('report_date', today)
-        if (error) throw error
-        rows = (data ?? []) as Array<{ mr_id: string; status: string }>
-      }
-      for (const r of rows) {
-        const st = r.status === 'submitted' ? 'submitted' : 'draft'
-        const prev = byMr.get(r.mr_id)
-        if (prev === 'submitted' || st === 'submitted') byMr.set(r.mr_id, 'submitted')
-        else byMr.set(r.mr_id, 'draft')
-      }
-      return mrIds.map(id => ({ mrId: id, status: byMr.get(id) ?? 'none' }))
-    },
-  })
-
   const closeDrawer = () => {
     setAction(null);
-    setDoctorName('');
-    setDoctorSpec('');
-    setDoctorSubAreaId('');
-    setAreaName('');
-    setSubAreaName('');
-    setSubAreaAreaId('');
-    setAssignMrId('');
-    setAssignPickAreaId('');
-    setAssignSelectedSubAreas(new Set());
     setSelfPickAreaId('');
     setSelfSelectedSubAreas(new Set());
-    setNewMrName('');
-    setNewMrCode('');
-    setNewMrEmail('');
-    setNewMrSubAreas(new Set());
-    setDeleteMrId('');
-    setTransferToMrId('');
     setStrikeDate(todayInputDate());
     setStrikeReason('');
     setHolidayDate(todayInputDate());
     setHolidayReason('');
   };
-
-  const primaryActions: { key: QuickAction | 'nav'; label: string; icon: LucideIcon; nav?: string }[] = [
-    { key: 'create-mr', label: 'Create MR', icon: Plus },
-    { key: 'assign', label: 'Assign MR', icon: UserCheck },
-    { key: 'assign-self', label: 'Assign Self', icon: UserPlus },
-    { key: 'delete-mr', label: 'Delete MR', icon: UserMinus },
-  ]
-
-  const moreActions: { key: QuickAction; label: string; icon: LucideIcon }[] = [
-    { key: 'set-ptr', label: 'Brand rates', icon: IndianRupee },
-    { key: 'doctor', label: 'Add Doctor', icon: Stethoscope },
-    { key: 'area', label: 'New Territory', icon: MapPin },
-    { key: 'subarea', label: 'New Area', icon: MapPinned },
-  ]
 
   if (isPaused) {
     return (
@@ -386,13 +216,21 @@ export default function ManagerDashboard() {
               </p>
             </div>
           </div>
+          <Button
+            type="button"
+            className="w-full rounded-xl h-10 text-sm font-semibold mt-3"
+            onClick={() => navigate('/manager/team')}
+          >
+            <Users className="h-4 w-4 mr-2 inline-block align-middle" />
+            Manage team MRs
+          </Button>
         </div>
 
         {!mgrHasSubAreaAccess && !!user?.id && (
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm">
             <p className="font-semibold text-foreground">We are setting up the portal for you</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed; team management below stays open.
+              Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
             </p>
           </div>
         )}
@@ -401,7 +239,7 @@ export default function ManagerDashboard() {
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
             <p className="font-semibold text-foreground">Your own DCR is paused until your tour program is approved</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Complete and submit your tour program (managers are auto-approved). Team MR tools below remain available.
+              Complete and submit your tour program (managers are auto-approved). Open Team from the bottom nav to manage your MRs.
             </p>
             <Button size="sm" variant="outline" className="mt-2 h-8 text-xs rounded-lg" onClick={() => navigate('/manager/tour-program')}>
               Open tour program
@@ -507,29 +345,6 @@ export default function ManagerDashboard() {
           <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" color="amber" />
         </div>
 
-        {deferReady && user?.id && (
-          <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground">Team monthly support (this month)</p>
-              <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
-            </div>
-            <p className="text-xl font-bold text-primary tabular-nums">
-              Rs {(teamMonthlySupport?.total_inr ?? 0).toLocaleString('en-IN')}
-            </p>
-            {(teamMonthlySupport?.byMr ?? []).length > 0 && (
-              <div className="space-y-1 max-h-32 overflow-y-auto text-xs">
-                {(teamMonthlySupport?.byMr ?? []).map(row => (
-                  <div key={row.mr_id} className="flex justify-between gap-2">
-                    <span className="text-foreground truncate min-w-0">{row.full_name}</span>
-                    <span className="font-semibold text-primary tabular-nums shrink-0">
-                      Rs {row.total_inr.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Self Report CTA */}
         {!mgrTodayDcrDone && !mgrTodayIsSunday && (
@@ -603,414 +418,38 @@ export default function ManagerDashboard() {
               <div className="h-9 w-9 rounded-xl bg-teal-500/10 flex items-center justify-center"><Umbrella className="h-4 w-4 text-teal-600 dark:text-teal-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My leave</span>
             </button>
-            <button type="button" onClick={() => navigate('/manager/team/visit-frequency')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><BarChart3 className="h-4 w-4 text-primary" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Team visits</span>
+            <button type="button" onClick={() => navigate('/manager/team')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="h-4 w-4 text-primary" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Team hub</span>
+            </button>
+            <button type="button" onClick={() => setAction('assign-self')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><UserPlus className="h-4 w-4 text-primary" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign Self</span>
             </button>
             <button type="button" onClick={() => navigate('/manager/report/history')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><History className="h-4 w-4 text-primary" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My DCR history</span>
             </button>
-            {primaryActions.map(ab => (
-              <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-                <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><ab.icon className="h-4 w-4 text-primary" /></div>
-                <span className="text-[10px] font-semibold text-foreground text-center leading-tight">{ab.label}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="glass-card p-3.5 space-y-3 rounded-xl">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div>
-                <p className="text-sm font-semibold text-foreground">Team calls &amp; average</p>
-                <p className="text-[10px] text-muted-foreground">Submitted MR field DCRs only</p>
-              </div>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setTeamCallPreset(p)}
-                    className={cn(
-                      'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
-                      teamCallPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card text-muted-foreground',
-                    )}
-                  >
-                    {p === 'all' ? 'Till date' : p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-muted/40 px-3 py-2">
-                <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
-                <p className="text-lg font-bold text-foreground tabular-nums">{teamCallAnalytics?.totalCalls ?? 0}</p>
-              </div>
-              <div className="rounded-lg bg-muted/40 px-3 py-2">
-                <p className="text-[10px] text-muted-foreground font-medium">Avg / active day</p>
-                <p className="text-lg font-bold text-primary tabular-nums">
-                  {teamCallAnalytics && teamCallAnalytics.daysWithReports > 0 ? teamCallAnalytics.avgPerDay.toFixed(1) : '—'}
-                </p>
-              </div>
-            </div>
-            {teamCallAnalytics && teamCallAnalytics.bySpeciality.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Visits by speciality (team)</p>
-                <div className="h-[200px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={teamCallAnalytics.bySpeciality}
-                        dataKey="visits"
-                        nameKey="speciality"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={70}
-                        label={({ speciality, visits }) => `${speciality}: ${visits}`}
-                      >
-                        {teamCallAnalytics.bySpeciality.map((_, i) => (
-                          <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
-        {/* More actions — rarely used */}
-        <div className="flex gap-2">
-          {moreActions.map(ab => (
-            <button key={ab.key} type="button" onClick={() => setAction(ab.key)} className="flex-1 flex items-center justify-center gap-1.5 glass-subtle rounded-xl py-2 active:scale-95 transition-all">
-              <ab.icon className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-[10px] font-medium text-muted-foreground">{ab.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Today's MR — DCR & expense */}
-        <div className="space-y-3">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <p className="section-title">Today&apos;s MR — DCR &amp; expense</p>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground font-medium">
-              <span>
-                DCR: {todaysMrReports.filter(r => r.submitted).length}/{mrs.length}
-              </span>
-              <span>
-                Expense: {todaysMrExpenseRows.filter(r => r.status === 'submitted').length}/{mrs.length}
-              </span>
-            </div>
-          </div>
-          <div className="space-y-2 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
-            {mrs.map(mr => {
-              const s = todaysMrReports.find(r => r.mrId === mr.id)
-              const submitted = !!s?.submitted
-              const exp = todaysMrExpenseRows.find(r => r.mrId === mr.id)
-              const expDone = exp?.status === 'submitted'
-              const expDraft = exp?.status === 'draft'
-              const mrPaused = (mr as { is_paused?: boolean }).is_paused === true
-              const initials = mr.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
-              return (
-                <div
-                  key={mr.id}
-                  className={cn(
-                    'w-full text-left glass-card p-3.5 transition-all',
-                    submitted && expDone && 'ring-1 ring-emerald-500/20',
-                    mrPaused && 'ring-1 ring-destructive/20 opacity-80',
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    {mr.profile_photo_url ? (
-                      <img src={mr.profile_photo_url} alt={mr.full_name} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary/10 shrink-0" />
-                    ) : (
-                      <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/15 to-primary/5 flex items-center justify-center ring-2 ring-primary/10 shrink-0">
-                        <span className="text-[10px] font-bold text-primary">{initials}</span>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-foreground truncate">{mr.full_name}</p>
-                      <p className="text-[10px] text-muted-foreground font-medium">{mr.email ?? mr.employee_code}</p>
-                    </div>
-                    {mrPaused && (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-destructive shrink-0">
-                        <Lock className="h-3.5 w-3.5" /> Paused
-                      </span>
-                    )}
-                  </div>
-
-                  {!mrPaused && (
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div
-                        className={cn(
-                          'rounded-lg border px-2 py-2 text-center text-[11px] font-semibold',
-                          submitted
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                            : 'border-border bg-muted/30 text-muted-foreground',
-                        )}
-                      >
-                        DCR: {submitted ? 'Submitted' : 'Pending'}
-                      </div>
-                      <div
-                        className={cn(
-                          'rounded-lg border px-2 py-2 text-center text-[11px] font-semibold',
-                          expDone
-                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300'
-                            : expDraft
-                              ? 'border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200'
-                              : 'border-border bg-muted/30 text-muted-foreground',
-                        )}
-                      >
-                        Expense: {expDone ? 'Submitted' : expDraft ? 'Draft' : '—'}
-                      </div>
-                    </div>
-                  )}
-
-                  {submitted && !mrPaused && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="mt-2 w-full rounded-xl text-xs h-9"
-                      onClick={() =>
-                        navigate(
-                          `/manager/reports?mrId=${encodeURIComponent(mr.id)}&date=${encodeURIComponent(today)}&view=1`,
-                        )
-                      }
-                    >
-                      View DCR
-                    </Button>
-                  )}
-
-                  {mrPaused && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 w-full rounded-xl text-xs h-8"
-                      disabled={unpauseUser.isPending}
-                      onClick={() => {
-                        void unpauseUser
-                          .mutateAsync(mr.id)
-                          .then(() => toast.success(`${mr.full_name} unpaused`))
-                          .catch(e => toast.error(e instanceof Error ? e.message : 'Failed to unpause'))
-                      }}
-                    >
-                      <Play className="mr-1.5 h-3 w-3" />
-                      {unpauseUser.isPending ? 'Unpausing...' : 'Unpause Account'}
-                    </Button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
       </div>
 
       <Drawer open={action !== null} onOpenChange={v => { if (!v) closeDrawer(); }}>
         <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-2xl border bg-background p-0 gap-0">
           <DrawerHeader className="shrink-0 border-b border-border/60 px-4 pb-3 pt-3">
             <DrawerTitle className="text-[15px] font-bold tracking-tight">
-              {action === 'doctor' && 'Add Doctor'}
-              {action === 'area' && 'Add Territory'}
-              {action === 'subarea' && 'Add Area'}
-              {action === 'assign' && 'Assign Area to MR'}
               {action === 'assign-self' && 'Assign Area to Self'}
-              {action === 'create-mr' && 'Create New MR'}
-              {action === 'delete-mr' && 'Delete MR'}
-              {action === 'set-ptr' && 'Set brand rates (per unit)'}
               {action === 'strike' && 'Mark Strike Day'}
               {action === 'holiday' && 'Mark Holiday'}
             </DrawerTitle>
           </DrawerHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 space-y-4">
-            {action === 'doctor' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">Doctor Name</Label>
-                  <Input value={doctorName} onChange={e => setDoctorName(e.target.value)} className="touch-target rounded-lg" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Speciality</Label>
-                  <Input value={doctorSpec} onChange={e => setDoctorSpec(e.target.value)} className="touch-target rounded-lg" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Area</Label>
-                  <select value={doctorSubAreaId} onChange={e => setDoctorSubAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose Area</option>
-                    {allSubAreas.map(sa => (
-                      <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <Button
-                  type="button"
-                  disabled={addDoctor.isPending}
-                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() =>
-                    void addDoctor
-                      .mutateAsync({ sub_area_id: doctorSubAreaId, full_name: doctorName, speciality: doctorSpec })
-                      .then(() => {
-                        toast.success('Doctor added')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add doctor'))
-                  }
-                >
-                  {addDoctor.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </>
-            )}
-
-            {action === 'area' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">Territory Name</Label>
-                  <Input value={areaName} onChange={e => setAreaName(e.target.value)} className="touch-target rounded-lg" />
-                </div>
-                <Button
-                  type="button"
-                  disabled={addArea.isPending}
-                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() =>
-                    void addArea
-                      .mutateAsync(areaName)
-                      .then(() => {
-                        toast.success('Territory added')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add area'))
-                  }
-                >
-                  {addArea.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </>
-            )}
-
-            {action === 'subarea' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">Territory</Label>
-                  <select value={subAreaAreaId} onChange={e => setSubAreaAreaId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose Territory</option>
-                    {areas.map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Area Name</Label>
-                  <Input value={subAreaName} onChange={e => setSubAreaName(e.target.value)} className="touch-target rounded-lg" />
-                </div>
-                <Button
-                  type="button"
-                  disabled={addSubArea.isPending}
-                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() =>
-                    void addSubArea
-                      .mutateAsync({ areaId: subAreaAreaId, name: subAreaName })
-                      .then(() => {
-                        toast.success('Area added')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add area'))
-                  }
-                >
-                  {addSubArea.isPending ? 'Saving…' : 'Save'}
-                </Button>
-              </>
-            )}
-
-            {action === 'assign' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">MR</Label>
-                  <select value={assignMrId} onChange={e => setAssignMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose MR</option>
-                    {mrs.map(m => (
-                      <option key={m.id} value={m.id}>{m.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Area</Label>
-                  <select
-                    value={assignPickAreaId}
-                    onChange={e => setAssignPickAreaId(e.target.value)}
-                    className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
-                  >
-                    <option value="">All Territories</option>
-                    {areas.map(a => (
-                      <option key={a.id} value={a.id}>{a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label className="text-xs">Areas (select to assign or remove)</Label>
-                    {assignSubAreasFiltered.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={selectAllAssignFiltered}
-                        className="text-[10px] font-semibold text-primary shrink-0"
-                      >
-                        Select all
-                      </button>
-                    )}
-                  </div>
-                  <div className="max-h-52 overflow-y-auto space-y-2 rounded-lg border border-border p-2">
-                    {assignSubAreasFiltered.length === 0 ? (
-                      <p className="text-xs text-muted-foreground px-1">No areas in this territory.</p>
-                    ) : (
-                      assignSubAreasFiltered.map(sa => (
-                        <label key={sa.id} className="flex items-center gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={assignSelectedSubAreas.has(sa.id)}
-                            onChange={() => toggleAssignSubArea(sa.id)}
-                          />
-                          <span className="flex-1">{sa.areaName} — {sa.name}</span>
-                          {assignServerSet.has(sa.id) && (
-                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
-                              <Check className="h-3 w-3" />
-                              Assigned
-                            </span>
-                          )}
-                        </label>
-                      ))
-                    )}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  disabled={saveMrSubAreaAccess.isPending}
-                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() => {
-                    if (!assignMrId) {
-                      toast.error('Choose an MR')
-                      return
-                    }
-                    void saveMrSubAreaAccess
-                      .mutateAsync({ mrId: assignMrId, subAreaIds: [...assignSelectedSubAreas] })
-                      .then(() => {
-                        toast.success('Area assignments saved')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save assignments'))
-                  }}
-                >
-                  {saveMrSubAreaAccess.isPending ? 'Saving…' : 'Save assignments'}
-                </Button>
-              </>
-            )}
-
             {action === 'assign-self' && (
               <>
                 <div className="space-y-2">
-                  <Label className="text-xs">Area</Label>
+                  <Label className="text-xs">Territory filter</Label>
                   <select
                     value={selfPickAreaId}
                     onChange={e => setSelfPickAreaId(e.target.value)}
@@ -1081,146 +520,6 @@ export default function ManagerDashboard() {
               </>
             )}
 
-            {action === 'create-mr' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">MR Name</Label>
-                  <Input value={newMrName} onChange={e => setNewMrName(e.target.value)} className="touch-target rounded-lg" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Email</Label>
-                  <Input value={newMrEmail} onChange={e => setNewMrEmail(e.target.value)} type="email" className="touch-target rounded-lg" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Assign Areas</Label>
-                  <div className="max-h-56 overflow-y-auto space-y-2 rounded-md border p-2">
-                    {allSubAreas.map(sa => (
-                      <label key={sa.id} className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={newMrSubAreas.has(sa.id)}
-                          onChange={e => {
-                            setNewMrSubAreas(prev => {
-                              const next = new Set(prev)
-                              if (e.target.checked) next.add(sa.id)
-                              else next.delete(sa.id)
-                              return next
-                            })
-                          }}
-                        />
-                        <span>{sa.areaName} - {sa.name}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  disabled={createUser.isPending}
-                  className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-                  onClick={() => {
-                    if (!newMrName.trim() || !newMrEmail.trim() || !user?.id) {
-                      toast.error('Name and email are required')
-                      return
-                    }
-                    const autoCode = newMrEmail.trim().split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '')
-                    void createUser
-                      .mutateAsync({
-                        fullName: newMrName.trim(),
-                        employeeCode: autoCode,
-                        email: newMrEmail.trim(),
-                        role: 'mr',
-                        managerIds: [user.id],
-                        subAreaIds: [...newMrSubAreas],
-                      })
-                      .then(() => {
-                        toast.success('MR created. Default password: Maktree@123')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not create MR'))
-                  }}
-                >
-                  {createUser.isPending ? 'Creating…' : 'Create MR'}
-                </Button>
-              </>
-            )}
-
-            {action === 'delete-mr' && (
-              <>
-                <div className="space-y-2">
-                  <Label className="text-xs">MR to delete</Label>
-                  <select value={deleteMrId} onChange={e => setDeleteMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">Choose MR</option>
-                    {mrs.map(m => (
-                      <option key={m.id} value={m.id}>{m.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Transfer areas to (optional)</Label>
-                  <select value={transferToMrId} onChange={e => setTransferToMrId(e.target.value)} className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target">
-                    <option value="">No transfer</option>
-                    {mrs.filter(m => m.id !== deleteMrId).map(m => (
-                      <option key={m.id} value={m.id}>{m.full_name}</option>
-                    ))}
-                  </select>
-                </div>
-                <Button
-                  type="button"
-                  disabled={deleteMr.isPending}
-                  variant="destructive"
-                  className="w-full touch-target rounded-lg font-semibold"
-                  onClick={() => {
-                    if (!deleteMrId) {
-                      toast.error('Select MR to delete')
-                      return
-                    }
-                    setShowDeleteConfirm(true)
-                  }}
-                >
-                  {deleteMr.isPending ? 'Deleting…' : 'Delete MR'}
-                </Button>
-              </>
-            )}
-            {action === 'set-ptr' && (
-              <>
-                <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs text-foreground leading-relaxed">
-                  <p className="font-semibold text-foreground mb-1">Brand rates</p>
-                  <p className="text-muted-foreground">
-                    Enter the rupee rate per unit for each company brand. These values are used internally when MRs
-                    record monthly support on submitted DCRs so totals stay consistent. Keep them up to date.
-                  </p>
-                </div>
-                <div className="space-y-3">
-                  {allProducts.map(p => (
-                    <div key={p.id} className="flex items-center gap-3 rounded-xl bg-muted/50 p-3">
-                      <span className="flex-1 text-sm font-medium truncate">{p.name}</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs text-muted-foreground">Rs</span>
-                        <Input
-                          type="number"
-                          min={0}
-                          defaultValue={p.ptr || ''}
-                          onBlur={e => {
-                            const val = parseFloat(e.target.value) || 0;
-                            if (val !== (p.ptr ?? 0)) {
-                              updatePtr.mutate({ productId: p.id, ptr: val }, {
-                                onSuccess: () => toast.success(`Rate updated for ${p.name}`),
-                                onError: () => toast.error('Failed to update rate'),
-                              });
-                            }
-                          }}
-                          placeholder="0"
-                          className="w-24 rounded-lg text-sm h-9"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                  {allProducts.length === 0 && (
-                    <p className="text-sm text-muted-foreground text-center py-4">No products found</p>
-                  )}
-                </div>
-              </>
-            )}
             {action === 'strike' && (
               <>
                 {todayStrike && (
@@ -1321,30 +620,6 @@ export default function ManagerDashboard() {
         confirmLabel={markStrike.isPending ? 'Marking...' : 'Yes, Mark Strike'}
         destructive
         confirmDisabled={markStrike.isPending}
-      />
-
-      <ConfirmDialog
-        open={showDeleteConfirm}
-        onOpenChange={setShowDeleteConfirm}
-        title="Delete this MR?"
-        description={
-          transferToMrId
-            ? `This MR has ${deleteMrSubAreas.length} assigned areas. They will be transferred before deletion.`
-            : `This MR has ${deleteMrSubAreas.length} assigned areas. They will be removed on deletion.`
-        }
-        onConfirm={() => {
-          void deleteMr
-            .mutateAsync({ mrId: deleteMrId, transferToMrId: transferToMrId || undefined })
-            .then(() => {
-              toast.success('MR deleted successfully')
-              setShowDeleteConfirm(false)
-              closeDrawer()
-            })
-            .catch(e => toast.error(e instanceof Error ? e.message : 'Could not delete MR'))
-        }}
-        confirmLabel={deleteMr.isPending ? 'Deleting…' : 'Delete MR'}
-        destructive
-        confirmDisabled={deleteMr.isPending}
       />
 
       <BottomNav role="manager" />

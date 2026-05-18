@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import ReportStepFooter from '@/components/mr/ReportStepFooter'
+import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -22,9 +22,18 @@ interface Props {
   onChange: (d: Partial<ReportFormData>) => void
   onBack: () => void
   onClearDraft: () => void
+  hideFooter?: boolean
+  onDockedFooter?: (config: ReportStepFooterProps) => void
 }
 
-export default function ReportLeaveDcrStep({ data, onChange, onBack, onClearDraft }: Props) {
+export default function ReportLeaveDcrStep({
+  data,
+  onChange,
+  onBack,
+  onClearDraft,
+  hideFooter,
+  onDockedFooter,
+}: Props) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -97,10 +106,21 @@ export default function ReportLeaveDcrStep({ data, onChange, onBack, onClearDraf
     }
   }
 
+  useEffect(() => {
+    if (!hideFooter || !onDockedFooter) return
+    onDockedFooter({
+      onBack,
+      onNext: () => void handleSubmit(),
+      nextLabel: busy ? 'Submitting…' : 'Submit Leave DCR',
+      nextDisabled: busy,
+      showBack: true,
+    })
+  }, [hideFooter, onDockedFooter, onBack, busy, cat, remark, data.date])
+
   if (!user) return <LoadingSpinner />
 
   return (
-    <div className="space-y-5 animate-fade-in pb-36">
+    <div className="space-y-5 animate-fade-in">
       <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
         <p className="text-xs font-semibold text-primary">Leave DCR</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
@@ -141,12 +161,14 @@ export default function ReportLeaveDcrStep({ data, onChange, onBack, onClearDraf
         />
       </div>
 
-      <ReportStepFooter
-        onBack={onBack}
-        onNext={() => void handleSubmit()}
-        nextLabel={busy ? 'Submitting…' : 'Submit Leave DCR'}
-        nextDisabled={busy}
-      />
+      {!hideFooter && (
+        <ReportStepFooter
+          onBack={onBack}
+          onNext={() => void handleSubmit()}
+          nextLabel={busy ? 'Submitting…' : 'Submit Leave DCR'}
+          nextDisabled={busy}
+        />
+      )}
     </div>
   )
 }

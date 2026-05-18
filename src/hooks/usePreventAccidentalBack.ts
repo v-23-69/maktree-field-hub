@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 
 /**
- * Blocks browser back gestures / hardware back until `goBack()` is called
- * (e.g. from an explicit header Back button).
+ * Blocks browser / gesture back until `goBack()` is called (explicit header Back).
  */
 export function usePreventAccidentalBack(enabled = true) {
   const allowBackRef = useRef(false)
@@ -15,16 +14,32 @@ export function usePreventAccidentalBack(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
-    const guardState = { maktreeBackGuard: true as const }
-    window.history.pushState(guardState, '')
+    const guard = { maktreeBackGuard: true as const }
+    const pushGuard = () => {
+      window.history.pushState(guard, '', window.location.href)
+    }
+
+    pushGuard()
+    pushGuard()
 
     const onPopState = () => {
       if (allowBackRef.current) return
-      window.history.pushState(guardState, '')
+      pushGuard()
+    }
+
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      allowBackRef.current = false
+      pushGuard()
+      pushGuard()
     }
 
     window.addEventListener('popstate', onPopState)
-    return () => window.removeEventListener('popstate', onPopState)
+    window.addEventListener('pageshow', onPageShow)
+    return () => {
+      window.removeEventListener('popstate', onPopState)
+      window.removeEventListener('pageshow', onPageShow)
+    }
   }, [enabled])
 
   return { goBack }

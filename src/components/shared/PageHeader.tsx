@@ -22,12 +22,19 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
     .toUpperCase() ?? '';
 
   return (
-    <header className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-6 h-14 md:h-16">
+    <header
+      className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-6 shrink-0 border-b border-border/40"
+      style={{
+        paddingTop: 'max(0px, env(safe-area-inset-top))',
+        minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+      }}
+    >
       {showBack ? (
         <button
           type="button"
           onClick={() => (onBack ? onBack() : navigate(-1))}
-          className="flex items-center justify-center h-9 w-9 rounded-xl hover:bg-foreground/5 active:scale-90 transition-all"
+          className="flex items-center justify-center h-9 w-9 shrink-0 rounded-xl hover:bg-foreground/5 active:scale-90 transition-all"
+          aria-label="Go back"
         >
           <ArrowLeft className="h-5 w-5 text-foreground" />
         </button>

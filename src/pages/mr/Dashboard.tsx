@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate, formatInputDate, lastDayOfMonthYyyyMmDd, isSundayYmd, formatShortDateIst } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Download, Umbrella, BarChart3, PiggyBank } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
@@ -23,7 +23,8 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
 import { useWorkingWithReportOptions } from '@/hooks/useManagers';
-import { useAllowedReportDates, fetchSubmittedReportsWithVisitsForMrInDateRange, useMonthlySupportAggregateForMr } from '@/hooks/useReport';
+import { useAllowedReportDates } from '@/hooks/useReport';
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
@@ -35,13 +36,12 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
 import { useMrLeaves } from '@/hooks/useLeaves';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
-import { saveDcrReportsPdf } from '@/lib/dcrPdf';
-
 type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  usePreventAccidentalBack(true);
   const today = formatDisplayDate(todayInputDate());
   const userId = user?.id ?? '';
 
@@ -72,14 +72,6 @@ export default function MRDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
-
-  const [dcrExportFrom, setDcrExportFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 7);
-    return formatInputDate(d);
-  });
-  const [dcrExportTo, setDcrExportTo] = useState(() => todayInputDate());
-  const [dcrExportBusy, setDcrExportBusy] = useState(false);
 
   useDashboardLiveRefresh(!!userId)
 
@@ -130,11 +122,6 @@ export default function MRDashboard() {
 
   const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
   const { data: vfProgress } = useVisitFrequencyProgress(userId, todayInputDate(), deferReady);
-  const currentMonthYyyyMm = todayInputDate().slice(0, 7);
-  const { data: monthlySupportAgg } = useMonthlySupportAggregateForMr(
-    deferReady ? userId : '',
-    currentMonthYyyyMm,
-  );
   const [callPreset, setCallPreset] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('monthly');
   const { data: callAnalytics } = useCallsAndSpecialityAnalytics([userId], callPreset, todayInputDate(), deferReady);
 
@@ -228,52 +215,6 @@ export default function MRDashboard() {
     setStrikeReason('');
     setHolidayDate(todayInputDate());
     setHolidayReason('');
-  };
-
-  const runDcrPdfExport = async (kind: 'thisMonth' | 'last7' | 'today' | 'range') => {
-    if (!supabase || !userId) return;
-    let from = '';
-    let to = '';
-    const t = todayInputDate();
-    if (kind === 'thisMonth') {
-      const m = t.slice(0, 7);
-      from = `${m}-01`;
-      to = lastDayOfMonthYyyyMmDd(m);
-    } else if (kind === 'last7') {
-      const end = new Date();
-      const start = new Date();
-      start.setDate(end.getDate() - 6);
-      from = formatInputDate(start);
-      to = formatInputDate(end);
-    } else if (kind === 'today') {
-      from = t;
-      to = t;
-    } else {
-      from = dcrExportFrom;
-      to = dcrExportTo;
-    }
-    if (!from || !to || from > to) {
-      toast.error('Pick a valid date range.');
-      return;
-    }
-    setDcrExportBusy(true);
-    try {
-      const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(supabase, userId, from, to);
-      if (rows.length === 0) {
-        toast.error('No submitted DCRs in that range.');
-        return;
-      }
-      const name = user?.full_name?.replace(/\s+/g, '_') ?? 'DCR';
-      saveDcrReportsPdf(rows, {
-        fileName: `DCR_${name}_${from}_to_${to}.pdf`,
-        documentTitle: `Daily Call Reports — ${from} to ${to}`,
-      });
-      toast.success('PDF downloaded');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Download failed');
-    } finally {
-      setDcrExportBusy(false);
-    }
   };
 
   if (isPaused) {
@@ -729,29 +670,6 @@ export default function MRDashboard() {
           </div>
         </div>
 
-        {deferReady && userId && (
-          <div className="glass-card p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="section-title">Monthly support (this month)</p>
-              <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" />
-            </div>
-            <p className="text-2xl font-bold text-primary tabular-nums">
-              Rs {(monthlySupportAgg?.total_inr ?? 0).toLocaleString('en-IN')}
-            </p>
-            {(monthlySupportAgg?.byDoctor ?? []).length > 0 && (
-              <div className="space-y-1.5 max-h-40 overflow-y-auto">
-                {(monthlySupportAgg?.byDoctor ?? []).map(d => (
-                  <div key={d.doctor_id} className="flex items-center justify-between text-xs gap-2">
-                    <span className="text-foreground truncate min-w-0">{d.full_name}</span>
-                    <span className="font-semibold text-primary tabular-nums shrink-0">
-                      Rs {d.total_inr.toLocaleString('en-IN')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {/* Daily Checklist */}
         <div className="glass-card p-4 space-y-3">
@@ -797,78 +715,6 @@ export default function MRDashboard() {
           )}
         </div>
 
-        {/* DCR PDF — submitted reports only */}
-        {deferReady && userId && (
-          <div className="glass-card p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <p className="section-title">Download my DCR (PDF)</p>
-              <Download className="h-4 w-4 text-muted-foreground shrink-0" />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Only <span className="font-medium text-foreground">submitted</span> DCRs are included. Choose a preset or a custom date range.
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="rounded-xl text-xs"
-                disabled={dcrExportBusy}
-                onClick={() => void runDcrPdfExport('today')}
-              >
-                Today
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="rounded-xl text-xs"
-                disabled={dcrExportBusy}
-                onClick={() => void runDcrPdfExport('last7')}
-              >
-                Last 7 days
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="rounded-xl text-xs"
-                disabled={dcrExportBusy}
-                onClick={() => void runDcrPdfExport('thisMonth')}
-              >
-                This month
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground">From</p>
-                <Input
-                  type="date"
-                  value={dcrExportFrom}
-                  onChange={e => setDcrExportFrom(e.target.value)}
-                  className="h-9 text-xs rounded-lg"
-                />
-              </div>
-              <div className="space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground">To</p>
-                <Input
-                  type="date"
-                  value={dcrExportTo}
-                  onChange={e => setDcrExportTo(e.target.value)}
-                  className="h-9 text-xs rounded-lg"
-                />
-              </div>
-            </div>
-            <Button
-              type="button"
-              className="w-full rounded-xl font-semibold"
-              disabled={dcrExportBusy || !dcrExportFrom || !dcrExportTo}
-              onClick={() => void runDcrPdfExport('range')}
-            >
-              {dcrExportBusy ? 'Preparing…' : 'Download range (PDF)'}
-            </Button>
-          </div>
-        )}
 
         {/* Alerts */}
         {!alertsLoading && alerts.length > 0 && (

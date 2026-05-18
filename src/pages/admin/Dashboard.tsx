@@ -6,6 +6,7 @@ import StatCard from '@/components/shared/StatCard';
 import { Users, Stethoscope, MapPin, UserPlus, Plus, FileText, Clock, Lock, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAdminDashboardStats } from '@/hooks/useDashboardStats';
+import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { useUnpauseUser } from '@/hooks/useTourProgram';
 import { supabase } from '@/lib/supabase';
 import { formatDisplayDate } from '@/lib/dateUtils';
@@ -14,6 +15,7 @@ import { toast } from 'sonner';
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  usePreventAccidentalBack(true);
   const { data: stats } = useAdminDashboardStats();
   const { data: recentReports = [] } = useQuery({
     queryKey: ['admin-recent-reports'],

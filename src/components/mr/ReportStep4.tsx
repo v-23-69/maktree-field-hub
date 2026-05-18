@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import ReportStepFooter from '@/components/mr/ReportStepFooter';
+import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -34,12 +34,25 @@ interface Props {
   data: ReportFormData;
   onBack: () => void;
   onClearDraft: () => void;
+  hideFooter?: boolean;
+  onDockedFooter?: (config: ReportStepFooterProps) => void;
 }
 
-export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
+export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, onDockedFooter }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!hideFooter || !onDockedFooter) return;
+    onDockedFooter({
+      onBack,
+      onNext: () => setShowConfirm(true),
+      nextLabel: isSubmitting ? 'Submitting…' : 'Submit Report',
+      nextDisabled: isSubmitting,
+      showBack: true,
+    });
+  }, [hideFooter, onDockedFooter, onBack, isSubmitting]);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -201,7 +214,7 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
   }
 
   return (
-    <div className="space-y-5 animate-fade-in pb-36">
+    <div className="space-y-5 animate-fade-in">
       <h3 className="text-base font-semibold text-foreground">Review Your Report</h3>
 
       <div className="space-y-3">
@@ -384,12 +397,14 @@ export default function ReportStep4({ data, onBack, onClearDraft }: Props) {
         )}
       </div>
 
-      <ReportStepFooter
-        onBack={onBack}
-        onNext={() => setShowConfirm(true)}
-        nextLabel={isSubmitting ? 'Submitting…' : 'Submit Report'}
-        nextDisabled={isSubmitting}
-      />
+      {!hideFooter && (
+        <ReportStepFooter
+          onBack={onBack}
+          onNext={() => setShowConfirm(true)}
+          nextLabel={isSubmitting ? 'Submitting…' : 'Submit Report'}
+          nextDisabled={isSubmitting}
+        />
+      )}
 
       <ConfirmDialog
         open={showConfirm}

@@ -1,20 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { ReportFormData } from '@/pages/mr/NewReport'
 import { useAuth } from '@/hooks/useAuth'
 import { useMarkSundayDcr } from '@/hooks/useReport'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
+import { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter'
 
 interface Props {
   data: ReportFormData
   onBack: () => void
   onClearDraft: () => void
+  hideFooter?: boolean
+  onDockedFooter?: (config: ReportStepFooterProps) => void
 }
 
-export default function ReportSundayDcrStep({ data, onBack, onClearDraft }: Props) {
+export default function ReportSundayDcrStep({
+  data,
+  onBack,
+  onClearDraft,
+  hideFooter,
+  onDockedFooter,
+}: Props) {
   const { user } = useAuth()
   const navigate = useNavigate()
   const markSunday = useMarkSundayDcr()
@@ -40,10 +48,21 @@ export default function ReportSundayDcrStep({ data, onBack, onClearDraft }: Prop
     }
   }
 
+  useEffect(() => {
+    if (!hideFooter || !onDockedFooter) return
+    onDockedFooter({
+      onBack,
+      onNext: () => void handleSubmit(),
+      nextLabel: busy ? 'Submitting…' : 'Submit Sunday DCR',
+      nextDisabled: busy,
+      showBack: true,
+    })
+  }, [hideFooter, onDockedFooter, onBack, busy, data.date])
+
   if (!user) return <LoadingSpinner />
 
   return (
-    <div className="space-y-5 animate-fade-in pb-24">
+    <div className="space-y-5 animate-fade-in">
       <div className="rounded-xl border border-sky-500/30 bg-sky-500/5 p-3">
         <p className="text-xs font-semibold text-sky-900 dark:text-sky-100">Sunday DCR</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
@@ -54,15 +73,6 @@ export default function ReportSundayDcrStep({ data, onBack, onClearDraft }: Prop
       <div className="glass-card p-3 space-y-1">
         <p className="text-xs text-muted-foreground">Date</p>
         <p className="text-sm font-semibold text-foreground">{formatDisplayDate(data.date)}</p>
-      </div>
-
-      <div className="flex gap-3">
-        <Button type="button" variant="outline" className="flex-1 rounded-2xl" onClick={onBack} disabled={busy}>
-          Back
-        </Button>
-        <Button type="button" className="flex-1 rounded-2xl font-bold" onClick={() => void handleSubmit()} disabled={busy}>
-          {busy ? 'Submitting…' : 'Submit Sunday DCR'}
-        </Button>
       </div>
     </div>
   )
