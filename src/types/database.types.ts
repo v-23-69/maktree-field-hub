@@ -345,6 +345,26 @@ export interface MasterListCompletion {
   completion_pct: number
 }
 
+/** Active employee with birthday today (IST), from `get_employees_birthday_today`. */
+export interface EmployeeBirthdayToday {
+  user_id: string
+  full_name: string
+  role: string
+  designation: string | null
+  profile_photo_url: string | null
+}
+
+/** Birthday wish shown on the recipient's dashboard today. */
+export interface BirthdayWishRow {
+  id: string
+  message: string
+  created_at: string
+  sender_id: string
+  sender_name: string
+  sender_role: string
+  sender_photo_url: string | null
+}
+
 export interface UserProfile extends User {
   profile_photo_url: string | null
   dob: string | null

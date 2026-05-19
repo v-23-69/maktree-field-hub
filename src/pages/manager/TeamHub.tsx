@@ -15,7 +15,9 @@ import {
 } from '@/hooks/useManagerTeamHub'
 import { useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport'
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics'
-import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh'
+import { useDashboardRefresh } from '@/hooks/useDashboardRefresh'
+import { Input } from '@/components/ui/input'
+import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
@@ -32,8 +34,9 @@ export default function TeamHub() {
 
   const [manageAction, setManageAction] = useState<TeamManageAction>(null)
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly')
+  const [search, setSearch] = useState('')
 
-  useDashboardLiveRefresh(!!managerId)
+  const { refresh: refreshDashboard } = useDashboardRefresh(!!managerId)
 
   const { data: todayReports = [] } = useTeamMrsTodayReportStatus(mrIds, today)
   const { data: todayExpenses = [] } = useTeamMrsTodayExpenseStatus(mrIds, today)
@@ -51,6 +54,19 @@ export default function TeamHub() {
   const tpByMr = useMemo(() => new Map(monthTps.map(r => [r.mr_id, r])), [monthTps])
 
   const dcrDone = todayReports.filter(r => r.submitted).length
+
+  const sortedMrs = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const list = q
+      ? mrs.filter(m => (m.full_name ?? '').toLowerCase().includes(q))
+      : [...mrs]
+    return list.sort((a, b) => {
+      const aDone = reportByMr.get(a.id)?.submitted === true
+      const bDone = reportByMr.get(b.id)?.submitted === true
+      if (aDone !== bDone) return aDone ? 1 : -1
+      return (a.full_name ?? '').localeCompare(b.full_name ?? '', undefined, { sensitivity: 'base' })
+    })
+  }, [mrs, search, reportByMr])
 
   if (isLoading) {
     return (
@@ -71,10 +87,13 @@ export default function TeamHub() {
               <p className="text-sm font-semibold text-foreground">Team overview</p>
               <p className="text-[10px] text-muted-foreground">{mrs.length} medical representatives</p>
             </div>
-            <Button size="sm" className="rounded-xl h-9" onClick={() => setManageAction('create-mr')}>
-              <Plus className="h-4 w-4 mr-1" />
-              Manage
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <DashboardRefreshButton onRefresh={refreshDashboard} />
+              <Button size="sm" className="rounded-xl h-9" onClick={() => setManageAction('create-mr')}>
+                <Plus className="h-4 w-4 mr-1" />
+                Manage
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-muted/40 px-3 py-2">
@@ -201,12 +220,21 @@ export default function TeamHub() {
           ))}
         </div>
 
-        <p className="section-title">Your MRs</p>
-        {mrs.length === 0 ? (
-          <EmptyState message="No MRs on your team yet. Create one to get started." />
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <p className="section-title mb-0">Your MRs</p>
+          <p className="text-[10px] text-muted-foreground">Pending DCR first</p>
+        </div>
+        <Input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search MR by name…"
+          className="h-10 rounded-xl"
+        />
+        {sortedMrs.length === 0 ? (
+          <EmptyState message={mrs.length === 0 ? 'No MRs on your team yet. Create one to get started.' : 'No MRs match your search.'} />
         ) : (
           <div className="space-y-2">
-            {mrs.map(mr => {
+            {sortedMrs.map(mr => {
               const tr = reportByMr.get(mr.id)
               const ex = expenseByMr.get(mr.id)
               const tp = tpByMr.get(mr.id)

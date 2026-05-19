@@ -44,7 +44,10 @@ export default function AdminUsers() {
   const [email, setEmail] = useState('');
   const [editManagers, setEditManagers] = useState<Set<string>>(new Set());
   const [editSubAreas, setEditSubAreas] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState<'users' | 'complaints'>('users');
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'users' | 'complaints'>(
+    tabParam === 'complaints' ? 'complaints' : 'users',
+  );
   const [blockReasonByUserId, setBlockReasonByUserId] = useState<Record<string, string>>({});
   const [complaintNotes, setComplaintNotes] = useState<Record<string, string>>({});
   const [mrToDelete, setMrToDelete] = useState<User | null>(null);
@@ -72,6 +75,10 @@ export default function AdminUsers() {
       return u.role === filter.toLowerCase();
     });
   }, [allUsers, filter]);
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'complaints') setActiveTab('complaints');
+  }, [searchParams]);
 
   const resetCreateForm = () => {
     setFullName('');

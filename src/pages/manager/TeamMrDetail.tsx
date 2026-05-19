@@ -11,6 +11,7 @@ import TeamMrDcrTab from '@/components/manager/team/TeamMrDcrTab'
 import TeamMrMonthlySupportTab from '@/components/manager/team/TeamMrMonthlySupportTab'
 import TeamMrTerritoriesTab from '@/components/manager/team/TeamMrTerritoriesTab'
 import TeamMrAnalyticsTab from '@/components/manager/team/TeamMrAnalyticsTab'
+import TeamMrMasterTab from '@/components/manager/team/TeamMrMasterTab'
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
 import { useAuth } from '@/hooks/useAuth'
@@ -29,6 +30,7 @@ const TABS = [
   { id: 'dcr', label: 'DCR' },
   { id: 'support', label: 'MS' },
   { id: 'territories', label: 'Areas' },
+  { id: 'master', label: 'Doctors' },
   { id: 'analytics', label: 'Stats' },
 ] as const
 
@@ -120,12 +122,14 @@ export default function TeamMrDetail() {
             todayReport={todayReport}
             todayExpense={todayExpense}
             tpStatusLabel={tpRow?.status}
+            onOpenTab={id => setTab(id as TabId)}
           />
         )}
         {tab === 'tp' && <TeamMrTourTab mrId={mr.id} />}
         {tab === 'dcr' && <TeamMrDcrTab mrId={mr.id} mrName={mr.full_name ?? 'MR'} />}
         {tab === 'support' && <TeamMrMonthlySupportTab mrId={mr.id} />}
         {tab === 'territories' && <TeamMrTerritoriesTab mrId={mr.id} />}
+        {tab === 'master' && <TeamMrMasterTab mrId={mr.id} mrName={mr.full_name ?? 'MR'} />}
         {tab === 'analytics' && <TeamMrAnalyticsTab mrId={mr.id} />}
       </div>
 

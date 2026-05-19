@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check } from 'lucide-react';
+import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check, BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -16,7 +16,12 @@ import { useMrSubAreaAccess, useSaveMrSubAreaAccess } from '@/hooks/useAdminMrAc
 import { useMrSubAreas } from '@/hooks/useAreas';
 import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
-import { useManagerDashboardStats } from '@/hooks/useDashboardStats';
+import { useManagerDashboardStats, type ManagerStatsFilter } from '@/hooks/useDashboardStats';
+import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
+import TeamPendingDcrStrip from '@/components/manager/TeamPendingDcrStrip';
+import ManagerTodayStatusCard from '@/components/manager/ManagerTodayStatusCard';
+import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
+import StatCardSkeleton from '@/components/shared/StatCardSkeleton';
 import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
@@ -25,12 +30,12 @@ import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
 import { useAllowedReportDates } from '@/hooks/useReport';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
-import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount';
 import { useExpenseReport } from '@/hooks/useExpense';
+import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 
-const FILTERS = ['Today', 'This Week', 'This Month'] as const;
+const FILTERS = ['Today', 'This Week', 'This Month'] as const satisfies readonly ManagerStatsFilter[];
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
 
 export default function ManagerDashboard() {
@@ -52,7 +57,12 @@ export default function ManagerDashboard() {
 
   // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
-  const { data: stats } = useManagerDashboardStats(deferReady ? (user?.id ?? '') : '', deferReady ? mrIds : []);
+  const { data: stats, isLoading: statsLoading } = useManagerDashboardStats(
+    deferReady ? (user?.id ?? '') : '',
+    deferReady ? mrIds : [],
+    activeFilter,
+  );
+  const { refresh: refreshDashboard } = useDashboardRefresh(!!user?.id);
   const { data: areas = [] } = useAllAreas();
   const saveMrSubAreaAccess = useSaveMrSubAreaAccess();
 
@@ -93,8 +103,6 @@ export default function ManagerDashboard() {
   const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === mgrTodayDate)?.already_submitted === true;
   const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
   const pendingMgrRequests = useManagerPendingRequestsCount(user?.id ?? '');
-  useDashboardLiveRefresh(!!user?.id);
-
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
@@ -195,6 +203,8 @@ export default function ManagerDashboard() {
       <PageHeader title="Manager Dashboard" />
 
       <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
+        <DashboardBirthdaySlot />
+
         {/* Welcome hero */}
         <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
           <div className="flex items-center gap-3.5">
@@ -216,14 +226,17 @@ export default function ManagerDashboard() {
               </p>
             </div>
           </div>
-          <Button
-            type="button"
-            className="w-full rounded-xl h-10 text-sm font-semibold mt-3"
-            onClick={() => navigate('/manager/team')}
-          >
-            <Users className="h-4 w-4 mr-2 inline-block align-middle" />
-            Manage team MRs
-          </Button>
+          <div className="flex gap-2 mt-3">
+            <Button
+              type="button"
+              className="flex-1 rounded-xl h-10 text-sm font-semibold"
+              onClick={() => navigate('/manager/team')}
+            >
+              <Users className="h-4 w-4 mr-2 inline-block align-middle" />
+              Manage team MRs
+            </Button>
+            <DashboardRefreshButton onRefresh={refreshDashboard} />
+          </div>
         </div>
 
         {!mgrHasSubAreaAccess && !!user?.id && (
@@ -323,26 +336,75 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {/* Your today (self) */}
-        <div className="rounded-xl border border-border/60 bg-card/50 px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-          <span className="font-semibold text-foreground">Your today</span>
-          <span className={cn('tabular-nums', mgrTodayDcrDone ? 'text-emerald-600' : 'text-muted-foreground')}>
-            DCR:{' '}
-            {mgrTodayDcrDone ? 'Submitted' : mgrDcrBlocked ? 'Needs approved TP' : 'Pending'}
-          </span>
-          <span className={cn('tabular-nums', mgrTodayExpenseDone ? 'text-emerald-600' : 'text-muted-foreground')}>
-            Expense: {mgrTodayExpenseDone ? 'Submitted' : mgrTodayExpenseReport?.id ? 'Draft' : 'Not started'}
-          </span>
-          <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs ml-auto" onClick={() => navigate('/manager/expense')}>
-            Open expense
-          </Button>
+        {deferReady && user?.id && <TeamPendingDcrStrip managerId={user.id} />}
+
+        <ManagerTodayStatusCard
+          dcrDone={mgrTodayDcrDone}
+          dcrBlocked={mgrDcrBlocked}
+          expenseDone={mgrTodayExpenseDone}
+          expenseDraft={!!mgrTodayExpenseReport?.id && !mgrTodayExpenseDone}
+          todayIsSunday={mgrTodayIsSunday}
+        />
+
+        <div className="space-y-2">
+          <p className="section-title">Team stats (IST)</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {FILTERS.map(f => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setActiveFilter(f)}
+                className={cn(
+                  'text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-all',
+                  activeFilter === f
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-card text-muted-foreground border-border',
+                )}
+              >
+                {f}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground">Counts are for your team MRs only.</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
-          <StatCard icon={FileText} value={stats?.reportsToday ?? 0} label="Reports Today" color="emerald" />
-          <StatCard icon={Calendar} value={stats?.reportsThisMonth ?? 0} label="This Month" color="blue" />
-          <StatCard icon={Stethoscope} value={stats?.doctorsVisitedThisMonth ?? 0} label="Doctors Visited" color="amber" />
+          {statsLoading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard
+                icon={FileText}
+                value={stats?.reportCount ?? 0}
+                label={
+                  activeFilter === 'Today'
+                    ? 'Team reports today'
+                    : activeFilter === 'This Week'
+                      ? 'Team reports this week'
+                      : 'Team reports this month'
+                }
+                color="emerald"
+              />
+              <StatCard
+                icon={Stethoscope}
+                value={stats?.doctorCount ?? 0}
+                label={
+                  activeFilter === 'Today'
+                    ? 'Doctors visited today'
+                    : activeFilter === 'This Week'
+                      ? 'Doctors this week'
+                      : 'Doctors this month'
+                }
+                color="amber"
+              />
+              <StatCard icon={Calendar} value={stats?.reportCount ?? 0} label={`Period · ${activeFilter}`} color="blue" />
+            </>
+          )}
         </div>
 
 

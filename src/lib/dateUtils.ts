@@ -12,6 +12,15 @@ export function todayInputDate(): string {
   }).format(new Date())
 }
 
+/** True when `dob` (any year) falls on today's calendar month/day in IST. */
+export function isDobCelebrationToday(dob: string | null | undefined): boolean {
+  if (!dob) return false
+  const today = todayInputDate()
+  const normalized = dob.slice(0, 10)
+  if (normalized.length < 10 || today.length < 10) return false
+  return normalized.slice(5, 10) === today.slice(5, 10)
+}
+
 /** True if `yyyy-mm-dd` is a Sunday on the Gregorian calendar (same everywhere). */
 export function isSundayYmd(ymd: string): boolean {
   return calendarWeekdaySun0(ymd) === 0
@@ -78,4 +87,36 @@ export function formatShortDateIst(ymd: string): string {
 /** Format a Date for DB / input[type=date], e.g. "2025-06-23" — uses local calendar components of the given Date. */
 export function formatInputDate(date: Date): string {
   return format(date, 'yyyy-MM-dd')
+}
+
+/** Add calendar days to `yyyy-mm-dd` (Gregorian). */
+export function addDaysYmd(ymd: string, days: number): string {
+  const [y, m, d] = ymd.split('-').map(Number)
+  if (!y || !m || !d) return ymd
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  dt.setUTCDate(dt.getUTCDate() + days)
+  return format(dt, 'yyyy-MM-dd')
+}
+
+/** First day of current month in IST as `YYYY-MM-DD`. */
+export function startOfMonthIstYmd(): string {
+  return `${todayInputDate().slice(0, 7)}-01`
+}
+
+/** Monday-start week containing today (IST calendar date). */
+export function startOfWeekIstYmd(): string {
+  const today = todayInputDate()
+  const wd = calendarWeekdaySun0(today)
+  const daysFromMonday = (wd + 6) % 7
+  return addDaysYmd(today, -daysFromMonday)
+}
+
+/** Current clock in IST for dashboard headers, e.g. "7:42 pm IST". */
+export function formatIstTimeNow(): string {
+  return new Intl.DateTimeFormat('en-IN', {
+    timeZone: IST,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(new Date()) + ' IST'
 }

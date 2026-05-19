@@ -35,16 +35,7 @@ export function useManagerMrs(managerId: string) {
           .eq('manager_id', managerId)
         if (error) throw error
         const ids = [...new Set((maps ?? []).map(m => m.mr_id).filter(Boolean))]
-        if (ids.length === 0) {
-          const { data: fallbackMrs, error: fbErr } = await supabase
-            .from('users')
-            .select('*')
-            .eq('role', 'mr')
-            .eq('is_active', true)
-            .order('full_name')
-          if (fbErr) throw fbErr
-          return dedupeManagersMrs((fallbackMrs ?? []) as User[])
-        }
+        if (ids.length === 0) return []
         const { data: users, error: uErr } = await supabase
           .from('users')
           .select('*')

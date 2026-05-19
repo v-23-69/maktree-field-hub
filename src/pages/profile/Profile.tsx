@@ -176,7 +176,9 @@ export default function ProfilePage() {
               </button>
             </div>
             <Progress value={completion} className="h-1.5" />
-            <p className="text-[10px] text-muted-foreground">Missing: {missingFields.join(', ')}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Missing: {missingFields.join(', ')}. Add your birthday so teammates can celebrate with you on the day.
+            </p>
           </div>
         )}
 
@@ -260,7 +262,7 @@ export default function ProfilePage() {
             {([
               ['full_name', 'Full Name', 'text'],
               ['designation', 'Designation', 'text'],
-              ['dob', 'Date of Birth', 'date'],
+              ['dob', 'Birthday (Date of Birth)', 'date'],
               ['joining_date', 'Joining Date', 'date'],
               ['mobile', 'Mobile', 'tel'],
               ['aadhaar_number', 'Aadhaar Number', 'text'],

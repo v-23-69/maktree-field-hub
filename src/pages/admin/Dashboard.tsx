@@ -11,15 +11,21 @@ import { useUnpauseUser } from '@/hooks/useTourProgram';
 import { supabase } from '@/lib/supabase';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { toast } from 'sonner';
+import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
+import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
+import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
+import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   usePreventAccidentalBack(true);
+  const { refresh: refreshDashboard } = useDashboardRefresh(true);
   const { data: stats } = useAdminDashboardStats();
   const { data: recentReports = [] } = useQuery({
     queryKey: ['admin-recent-reports'],
     enabled: !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<{ id: string; text: string; time: string }[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
@@ -40,6 +46,7 @@ export default function AdminDashboard() {
   const { data: pausedUsers = [] } = useQuery({
     queryKey: ['admin-paused-users'],
     enabled: !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<Array<{ id: string; full_name: string; role: string; pause_reason: string | null }>> => {
       if (!supabase) return [];
       const { data, error } = await supabase
@@ -55,6 +62,7 @@ export default function AdminDashboard() {
   const { data: pendingComplaints = 0 } = useQuery({
     queryKey: ['admin-pending-complaints-count'],
     enabled: !!supabase && user?.role === 'admin',
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<number> => {
       if (!supabase) return 0
       const { count, error } = await supabase
@@ -72,6 +80,10 @@ export default function AdminDashboard() {
   return (
     <AdminLayout>
       <div className="space-y-5">
+        <DashboardBirthdaySlot />
+        <div className="flex justify-end">
+          <DashboardRefreshButton onRefresh={refreshDashboard} />
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => navigate('/admin/users?filter=mr')} className="text-left active:scale-[0.97] transition-transform">
             <StatCard icon={Users} value={stats?.totalMrs ?? 0} label="Total MRs" />
@@ -94,7 +106,7 @@ export default function AdminDashboard() {
               { label: 'Add User', icon: UserPlus, to: '/admin/users' },
               { label: 'Add Doctor', icon: Plus, to: '/admin/doctors' },
               { label: 'Add Territory', icon: MapPin, to: '/admin/areas' },
-              { label: `Pending Complaints (${pendingComplaints})`, icon: FileText, to: '/admin/users' },
+              { label: `Pending Complaints (${pendingComplaints})`, icon: FileText, to: '/admin/users?tab=complaints' },
             ].map(action => (
               <Button
                 key={action.label}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst, formatIstTimeNow } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
@@ -26,11 +26,16 @@ import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useAllowedReportDates } from '@/hooks/useReport';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
-import { useDashboardLiveRefresh } from '@/hooks/useDashboardLiveRefresh';
+import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
+import MrTodayStatusCard from '@/components/mr/MrTodayStatusCard';
+import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
+import DashboardCollapsibleSection from '@/components/shared/DashboardCollapsibleSection';
+import StatCardSkeleton from '@/components/shared/StatCardSkeleton';
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import type { AllowedReportDate } from '@/types/database.types';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
@@ -59,7 +64,8 @@ export default function MRDashboard() {
   const { data: completionRows = [], isLoading: completionLoading } = useMasterListByMr(deferReady ? userId : '');
   const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(userId);
   const { data: targetRows = [], isLoading: targetsLoading } = useMrTargets(deferReady ? userId : '');
-  const { data: stats } = useMrDashboardStats(deferReady ? userId : '');
+  const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferReady ? userId : '');
+  const { refresh: refreshDashboard } = useDashboardRefresh(!!userId);
   const { data: todayStrike } = useTodayStrike(deferReady ? userId : '');
   const markStrike = useMarkStrike();
   const { data: strikeCount = 0 } = useStrikeCount(deferReady ? userId : '');
@@ -73,7 +79,7 @@ export default function MRDashboard() {
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
 
-  useDashboardLiveRefresh(!!userId)
+  const monthKey = todayInputDate().slice(0, 7);
 
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
@@ -93,11 +99,11 @@ export default function MRDashboard() {
   });
 
   const { data: monthlySummary } = useQuery({
-    queryKey: ['dcr-monthly-summary', userId],
+    queryKey: ['dcr-monthly-summary', userId, monthKey],
     enabled: !!userId && !!supabase && deferReady,
     queryFn: async (): Promise<DcrMonthlySummary | null> => {
       if (!supabase) return null;
-      const month = `${todayInputDate().slice(0, 7)}-01`;
+      const month = `${monthKey}-01`;
       const { data, error } = await supabase
         .from('v_dcr_monthly_summary')
         .select('*')
@@ -181,16 +187,6 @@ export default function MRDashboard() {
     navigate('/mr/report/new', { state: { date: d.report_date, reportKind } })
   }
 
-  const checklist = [
-    {
-      label: todayIsSunday && !todayDcrDone ? 'Sunday DCR' : 'DCR Report',
-      done: dailyStatus?.dcr_done,
-      path: todayIsSunday && !todayDcrDone ? undefined : '/mr/report/new',
-      sundayDate: todayIsSunday && !todayDcrDone ? todayDate : undefined,
-    },
-    { label: 'Expense Report', done: dailyStatus?.expense_done, path: '/mr/expense' },
-  ];
-
   const isPaused = user?.is_paused === true;
   const tpApproved =
     !!tpStatus &&
@@ -198,6 +194,18 @@ export default function MRDashboard() {
   const hasSubAreaAccess =
     tpStatus?.has_sub_area_access === true ||
     (tpStatus?.has_sub_area_access === undefined && subAreas.length > 0);
+  const dcrBlocked = hasSubAreaAccess && !tpApproved && !isPaused;
+  const expenseDoneToday = dailyStatus?.expense_done === true;
+
+  const checklist = [
+    {
+      label: todayIsSunday && !todayDcrDone ? 'Sunday DCR' : 'DCR Report',
+      done: todayDcrDone,
+      path: todayIsSunday && !todayDcrDone ? undefined : '/mr/report/new',
+      sundayDate: todayIsSunday && !todayDcrDone ? todayDate : undefined,
+    },
+    { label: 'Expense Report', done: expenseDoneToday, path: '/mr/expense' },
+  ];
   const nextMonthDeadlineApproaching = tpStatus && !tpStatus.next_month_tp_exists && tpStatus.days_to_deadline <= 5 && tpStatus.days_to_deadline >= 0;
   const nextMonthOverdue = tpStatus?.is_overdue === true;
   const tpGateLoading = tpStatusLoading || (!!userId && subAreasLoading);
@@ -360,13 +368,15 @@ export default function MRDashboard() {
       <PageHeader title="Dashboard" />
 
       <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
+        <DashboardBirthdaySlot />
+
         {/* Welcome hero */}
         <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
-          <div className="flex items-center gap-3.5">
+          <div className="flex items-start gap-3.5">
             {user?.profile_photo_url ? (
-              <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow" />
+              <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow shrink-0" />
             ) : (
-              <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15">
+              <div className="h-12 w-12 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/15 shrink-0">
                 <span className="text-base font-extrabold text-primary">
                   {user?.full_name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                 </span>
@@ -376,13 +386,24 @@ export default function MRDashboard() {
               <h2 className="text-lg font-extrabold text-foreground tracking-tight truncate">
                 Hi, {user?.full_name?.split(' ')[0]}!
               </h2>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <p className="text-xs text-muted-foreground font-medium">{today}</p>
+                <span className="text-[10px] text-muted-foreground/80">· {formatIstTimeNow()}</span>
               </div>
             </div>
+            <DashboardRefreshButton onRefresh={refreshDashboard} className="shrink-0" />
           </div>
         </div>
+
+        {deferReady && hasSubAreaAccess && tpApproved && (
+          <MrTodayStatusCard
+            todayIsSunday={todayIsSunday}
+            dcrDone={todayDcrDone}
+            expenseDone={expenseDoneToday}
+            dcrBlocked={dcrBlocked}
+          />
+        )}
 
         {/* TP Deadline Alert */}
         {(nextMonthDeadlineApproaching || nextMonthOverdue) && (
@@ -588,7 +609,13 @@ export default function MRDashboard() {
               <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{holidayCount}</span>
             </div>
           </div>
+        </div>
 
+        <DashboardCollapsibleSection
+          title="Field analytics"
+          summary="Visit frequency, calls & speciality breakdown"
+          defaultOpen={false}
+        >
           <button
             type="button"
             onClick={() => navigate('/mr/visit-frequency')}
@@ -668,8 +695,7 @@ export default function MRDashboard() {
               </div>
             )}
           </div>
-        </div>
-
+        </DashboardCollapsibleSection>
 
         {/* Daily Checklist */}
         <div className="glass-card p-4 space-y-3">
@@ -740,8 +766,17 @@ export default function MRDashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={FileText} value={stats?.reportsThisMonth ?? 0} label="Reports This Month" color="primary" />
-          <StatCard icon={Stethoscope} value={stats?.doctorsThisWeek ?? 0} label="Doctors This Week" color="emerald" />
+          {statsLoading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            <>
+              <StatCard icon={FileText} value={stats?.reportsThisMonth ?? 0} label="Reports This Month (IST)" color="primary" />
+              <StatCard icon={Stethoscope} value={stats?.doctorsThisWeek ?? 0} label="Doctors This Week (IST)" color="emerald" />
+            </>
+          )}
         </div>
 
         {/* Doctor Coverage */}

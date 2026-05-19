@@ -1,43 +1,40 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import {
+  todayInputDate,
+  startOfMonthIstYmd,
+  startOfWeekIstYmd,
+} from '@/lib/dateUtils'
+import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 
-function toDateInput(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
-}
+export type ManagerStatsFilter = 'Today' | 'This Week' | 'This Month'
 
-function startOfMonthStr(): string {
-  const now = new Date()
-  return toDateInput(new Date(now.getFullYear(), now.getMonth(), 1))
-}
-
-function startOfWeekStr(): string {
-  const now = new Date()
-  const day = now.getDay()
-  const diff = (day + 6) % 7 // Monday start
-  const start = new Date(now)
-  start.setDate(now.getDate() - diff)
-  return toDateInput(start)
-}
-
-function todayStr(): string {
-  return toDateInput(new Date())
+function uniqueDoctorsFromReports(
+  rows: Array<{ report_visits?: Array<{ doctor_id?: string | null }> }>,
+): number {
+  const doctorSet = new Set<string>()
+  for (const r of rows) {
+    for (const v of r.report_visits ?? []) {
+      if (v?.doctor_id) doctorSet.add(v.doctor_id)
+    }
+  }
+  return doctorSet.size
 }
 
 export function useMrDashboardStats(mrId: string) {
+  const today = todayInputDate()
+  const startMonth = startOfMonthIstYmd()
+  const startWeek = startOfWeekIstYmd()
+
   return useQuery({
-    queryKey: ['mr-dashboard-stats', mrId],
+    queryKey: ['mr-dashboard-stats', mrId, today],
     enabled: !!mrId && !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<{
       reportsThisMonth: number
       doctorsThisWeek: number
     }> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const startMonth = startOfMonthStr()
-      const startWeek = startOfWeekStr()
-      const today = todayStr()
 
       const [reportsRes, reportsWeekRes] = await Promise.all([
         supabase
@@ -59,72 +56,66 @@ export function useMrDashboardStats(mrId: string) {
       if (reportsRes.error) throw reportsRes.error
       if (reportsWeekRes.error) throw reportsWeekRes.error
 
-      const doctorSet = new Set<string>()
-      for (const r of reportsWeekRes.data ?? []) {
-        for (const v of (r as any).report_visits ?? []) {
-          if (v?.doctor_id) doctorSet.add(v.doctor_id)
-        }
-      }
-
       return {
         reportsThisMonth: reportsRes.count ?? 0,
-        doctorsThisWeek: doctorSet.size,
+        doctorsThisWeek: uniqueDoctorsFromReports(reportsWeekRes.data ?? []),
       }
     },
   })
 }
 
-export function useManagerDashboardStats(managerId: string, mrIds: string[]) {
+export function useManagerDashboardStats(
+  managerId: string,
+  mrIds: string[],
+  filter: ManagerStatsFilter = 'Today',
+) {
+  const today = todayInputDate()
+  const startMonth = startOfMonthIstYmd()
+  const startWeek = startOfWeekIstYmd()
+
   return useQuery({
-    queryKey: ['manager-dashboard-stats', managerId, mrIds],
+    queryKey: ['manager-dashboard-stats', managerId, mrIds, filter, today],
     enabled: !!managerId && mrIds.length > 0 && !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<{
-      reportsToday: number
-      reportsThisMonth: number
-      doctorsVisitedThisMonth: number
+      reportCount: number
+      doctorCount: number
     }> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const startMonth = startOfMonthStr()
-      const today = todayStr()
 
-      const [todayRes, monthRes, visitsRes] = await Promise.all([
+      let rangeStart = today
+      let rangeEnd = today
+      if (filter === 'This Week') {
+        rangeStart = startWeek
+        rangeEnd = today
+      } else if (filter === 'This Month') {
+        rangeStart = startMonth
+        rangeEnd = today
+      }
+
+      const [countRes, visitsRes] = await Promise.all([
         supabase
           .from('daily_reports')
           .select('id', { count: 'exact', head: true })
           .in('mr_id', mrIds)
           .eq('status', 'submitted')
-          .eq('report_date', today),
-        supabase
-          .from('daily_reports')
-          .select('id', { count: 'exact', head: true })
-          .in('mr_id', mrIds)
-          .eq('status', 'submitted')
-          .gte('report_date', startMonth)
-          .lte('report_date', today),
+          .gte('report_date', rangeStart)
+          .lte('report_date', rangeEnd),
         supabase
           .from('daily_reports')
           .select('id, report_visits(doctor_id)')
           .in('mr_id', mrIds)
           .eq('status', 'submitted')
-          .gte('report_date', startMonth)
-          .lte('report_date', today),
+          .gte('report_date', rangeStart)
+          .lte('report_date', rangeEnd),
       ])
 
-      if (todayRes.error) throw todayRes.error
-      if (monthRes.error) throw monthRes.error
+      if (countRes.error) throw countRes.error
       if (visitsRes.error) throw visitsRes.error
 
-      const doctorSet = new Set<string>()
-      for (const r of visitsRes.data ?? []) {
-        for (const v of (r as any).report_visits ?? []) {
-          if (v?.doctor_id) doctorSet.add(v.doctor_id)
-        }
-      }
-
       return {
-        reportsToday: todayRes.count ?? 0,
-        reportsThisMonth: monthRes.count ?? 0,
-        doctorsVisitedThisMonth: doctorSet.size,
+        reportCount: countRes.count ?? 0,
+        doctorCount: uniqueDoctorsFromReports(visitsRes.data ?? []),
       }
     },
   })
@@ -134,6 +125,7 @@ export function useAdminDashboardStats() {
   return useQuery({
     queryKey: ['admin-dashboard-stats'],
     enabled: !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
     queryFn: async (): Promise<{
       totalMrs: number
       totalManagers: number
@@ -177,4 +169,3 @@ export function useAdminDashboardStats() {
     },
   })
 }
-

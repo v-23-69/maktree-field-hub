@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import InstallPrompt from "@/components/shared/InstallPrompt";
+import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
 
 const Login = lazy(() => import("@/pages/auth/Login"));
 const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
@@ -82,6 +83,7 @@ const App = () => (
         <Sonner />
         <AuthProvider>
           <HashRouter>
+          <EmployeeBirthdayProvider>
           <InstallPrompt />
           <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -133,6 +135,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </EmployeeBirthdayProvider>
           </HashRouter>
         </AuthProvider>
       </TooltipProvider>

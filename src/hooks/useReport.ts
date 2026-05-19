@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { monthDateRangeForSql, todayInputDate } from '@/lib/dateUtils'
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
+import { invalidateDashboardQueries } from '@/lib/invalidateDashboardQueries'
 import type {
   AllowedReportDate,
   Chemist,
@@ -476,12 +477,7 @@ export function useSubmitReport() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
-      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
-      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
-      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
-      queryClient.invalidateQueries({ queryKey: ['calls-speciality-analytics'] })
-      queryClient.invalidateQueries({ queryKey: ['monthly-support-aggregate'] })
-      queryClient.invalidateQueries({ queryKey: ['monthly-support-manager-team'] })
+      invalidateDashboardQueries(queryClient)
     },
   })
 }
@@ -815,9 +811,7 @@ export function useMarkSundayDcr() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
-      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
-      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
-      queryClient.invalidateQueries({ queryKey: ['visit-frequency-progress'] })
+      invalidateDashboardQueries(queryClient)
     },
   })
 }

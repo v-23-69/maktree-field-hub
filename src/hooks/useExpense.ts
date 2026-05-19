@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { invalidateDashboardQueries } from '@/lib/invalidateDashboardQueries'
 import type { ExpenseItem, ExpenseReport } from '@/types/database.types'
 
 async function syncExpenseReportTotalUsed(reportId: string): Promise<void> {
@@ -74,7 +75,7 @@ export function useGetOrCreateExpenseReport() {
     },
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['expense-report', vars.mrId, vars.date] })
-      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
+      invalidateDashboardQueries(queryClient)
     },
   })
 }
@@ -153,10 +154,7 @@ export function useSubmitExpenseReport() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expense-report'] })
-      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
-      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
-      queryClient.invalidateQueries({ queryKey: ['manager-expenses'] })
-      queryClient.invalidateQueries({ queryKey: ['manager-mr-today-expense-status'] })
+      invalidateDashboardQueries(queryClient)
     },
   })
 }

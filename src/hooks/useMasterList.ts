@@ -119,7 +119,6 @@ export function useAddDoctorToSubArea() {
           marriage_anniversary: p.marriage_anniversary ? p.marriage_anniversary : null,
           visit_frequency: p.visit_frequency,
           monthly_visit_target: Math.min(99, Math.max(1, Math.round(p.monthly_visit_target))),
-          doctor_code: '',
           is_active: true,
         })
         .select('id')
