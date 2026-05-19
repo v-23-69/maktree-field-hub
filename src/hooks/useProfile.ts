@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { hasProfileUpdates, sanitizeProfileUpdates } from '@/lib/profileUpdateUtils'
 import type { UserProfile } from '@/types/database.types'
 
 export function useProfile(userId?: string) {
@@ -18,9 +19,19 @@ export function useProfile(userId?: string) {
 export function useUpdateProfile() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: { userId: string; updates: Partial<UserProfile> }) => {
+    mutationFn: async (payload: {
+      userId: string
+      updates: Record<string, unknown>
+      allowAadhaar?: boolean
+    }) => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { error } = await supabase.from('users').update(payload.updates).eq('id', payload.userId)
+      const updates = sanitizeProfileUpdates(payload.updates, {
+        allowAadhaar: payload.allowAadhaar,
+      })
+      if (!hasProfileUpdates(updates)) {
+        throw new Error('No valid changes to save')
+      }
+      const { error } = await supabase.from('users').update(updates).eq('id', payload.userId)
       if (error) throw error
     },
     onSuccess: (_data, vars) => {

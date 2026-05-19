@@ -306,9 +306,14 @@ export default function ProfilePage() {
               disabled={updateProfile.isPending || Object.keys(form).length === 0}
               onClick={() =>
                 void updateProfile
-                  .mutateAsync({ userId: effectiveUserId!, updates: form })
+                  .mutateAsync({
+                    userId: effectiveUserId!,
+                    updates: form,
+                    allowAadhaar: editingAadhaar,
+                  })
                   .then(() => {
                     setForm({})
+                    setEditingAadhaar(false)
                     toast.success('Profile saved')
                   })
                   .catch(err => toast.error(err instanceof Error ? err.message : 'Save failed'))
