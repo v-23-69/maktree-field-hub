@@ -1,6 +1,7 @@
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { performAppBack } from '@/hooks/usePreventAccidentalBack';
 
 interface PageHeaderProps {
   title: string;
@@ -32,8 +33,8 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
       {showBack ? (
         <button
           type="button"
-          onClick={() => (onBack ? onBack() : navigate(-1))}
-          className="flex items-center justify-center h-9 w-9 shrink-0 rounded-xl hover:bg-foreground/5 active:scale-90 transition-all"
+          onClick={() => performAppBack(navigate, onBack)}
+          className="flex items-center justify-center h-10 w-10 shrink-0 rounded-xl hover:bg-foreground/5 active:scale-95 transition-transform touch-manipulation"
           aria-label="Go back"
         >
           <ArrowLeft className="h-5 w-5 text-foreground" />

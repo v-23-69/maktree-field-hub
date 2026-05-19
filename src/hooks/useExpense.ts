@@ -70,6 +70,16 @@ export function useGetOrCreateExpenseReport() {
         })
         .select('*')
         .single()
+      if (error?.code === '23505') {
+        const { data: retry, error: retryErr } = await supabase
+          .from('expense_reports')
+          .select('*')
+          .eq('mr_id', payload.mrId)
+          .eq('report_date', payload.date)
+          .maybeSingle()
+        if (retryErr) throw retryErr
+        if (retry) return retry as ExpenseReport
+      }
       if (error) throw error
       return data as ExpenseReport
     },

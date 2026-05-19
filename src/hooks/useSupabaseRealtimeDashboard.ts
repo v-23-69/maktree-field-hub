@@ -27,7 +27,7 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => {
         invalidateDashboardQueries(queryClient)
-      }, 400)
+      }, 200)
     }
 
     const channel = supabase.channel('maktree-dashboard-realtime')

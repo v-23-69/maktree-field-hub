@@ -1,10 +1,9 @@
-import { useAuth } from '@/hooks/useAuth';
+﻿import { useAuth } from '@/hooks/useAuth';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import StatCard from '@/components/shared/StatCard';
-import { Users, FileText, Stethoscope, Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check, BarChart3 } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -18,14 +17,12 @@ import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
 import { useManagerDashboardStats, type ManagerStatsFilter } from '@/hooks/useDashboardStats';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
-import TeamPendingDcrStrip from '@/components/manager/TeamPendingDcrStrip';
-import ManagerTodayStatusCard from '@/components/manager/ManagerTodayStatusCard';
-import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
-import StatCardSkeleton from '@/components/shared/StatCardSkeleton';
+import ManagerDashboardTodayPanel from '@/components/manager/ManagerDashboardTodayPanel';
+import ManagerTeamStatsCard from '@/components/manager/ManagerTeamStatsCard';
+import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
 import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
-import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useHolidays';
 import { useAllowedReportDates } from '@/hooks/useReport';
@@ -35,14 +32,13 @@ import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequest
 import { useExpenseReport } from '@/hooks/useExpense';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 
-const FILTERS = ['Today', 'This Week', 'This Month'] as const satisfies readonly ManagerStatsFilter[];
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   usePreventAccidentalBack(true);
-  const [activeFilter, setActiveFilter] = useState<typeof FILTERS[number]>('Today');
+  const [activeFilter, setActiveFilter] = useState<ManagerStatsFilter>('Today');
   const [action, setAction] = useState<QuickAction>(null);
 
   const [deferReady, setDeferReady] = useState(false);
@@ -53,8 +49,6 @@ export default function ManagerDashboard() {
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(user?.id ?? '');
   const { data: todayPlan } = useTodayTpPlan(user?.id ?? '');
   const { data: mgrSelfSubAreas = [] } = useMrSubAreas(user?.id ?? '');
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
-
   // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
   const { data: stats, isLoading: statsLoading } = useManagerDashboardStats(
@@ -62,21 +56,9 @@ export default function ManagerDashboard() {
     deferReady ? mrIds : [],
     activeFilter,
   );
-  const { refresh: refreshDashboard } = useDashboardRefresh(!!user?.id);
+  useDashboardRefresh(!!user?.id);
   const { data: areas = [] } = useAllAreas();
   const saveMrSubAreaAccess = useSaveMrSubAreaAccess();
-
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const o of workingWithOptions) map.set(o.id, o.full_name);
-    for (const mr of mrs) map.set(mr.id, mr.full_name);
-    return map;
-  }, [workingWithOptions, mrs]);
-
-  const workingWithNames = useMemo(() => {
-    if (!todayPlan?.working_with_ids?.length) return [];
-    return todayPlan.working_with_ids.map(id => nameById.get(id) ?? id.slice(0, 8));
-  }, [todayPlan, nameById]);
 
   const isPaused = user?.is_paused === true;
   const mgrTpApproved =
@@ -226,24 +208,13 @@ export default function ManagerDashboard() {
               </p>
             </div>
           </div>
-          <div className="flex gap-2 mt-3">
-            <Button
-              type="button"
-              className="flex-1 rounded-xl h-10 text-sm font-semibold"
-              onClick={() => navigate('/manager/team')}
-            >
-              <Users className="h-4 w-4 mr-2 inline-block align-middle" />
-              Manage team MRs
-            </Button>
-            <DashboardRefreshButton onRefresh={refreshDashboard} />
-          </div>
         </div>
 
         {!mgrHasSubAreaAccess && !!user?.id && (
           <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm">
             <p className="font-semibold text-foreground">We are setting up the portal for you</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
+              Assign at least one area to yourself (Quick Actions â†’ Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
             </p>
           </div>
         )}
@@ -294,144 +265,40 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {/* Today's Plan from TP */}
-        {todayPlan && todayPlan.sub_area_id && (
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-background border border-emerald-500/15 p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-foreground">Today's Plan</p>
-              <span className="text-[10px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full font-semibold">From TP</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Area</span>
-                <p className="text-sm font-semibold text-foreground">{todayPlan.sub_area_name}</p>
-                <p className="text-[11px] text-muted-foreground">{todayPlan.area_name}</p>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Working With</span>
-                {workingWithNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">{workingWithNames.map((name, i) => (
-                    <span key={i} className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">{name}</span>
-                  ))}</div>
-                ) : <p className="text-sm font-semibold text-foreground">Solo</p>}
-              </div>
-            </div>
-            {mgrTodayDcrDone ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-600/10 border border-emerald-600/20 px-4 py-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Today's DCR Submitted</p>
-              </div>
-            ) : mgrDcrBlocked ? (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-muted-foreground">
-                Complete your approved tour program before starting today&apos;s DCR.
-              </div>
-            ) : mgrTodayIsSunday ? null : (
-              <Button
-                onClick={() => navigate('/manager/report/new')}
-                className="w-full rounded-2xl h-11 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
-              >
-                <FilePlus className="mr-2 h-4 w-4" /> Start Today's DCR
-              </Button>
-            )}
-          </div>
+        {todayPlan?.sub_area_id && (
+          <TodayPlanFromTp
+            subAreaName={todayPlan.sub_area_name ?? ''}
+            areaName={todayPlan.area_name ?? ''}
+            dcrDone={mgrTodayDcrDone}
+            dcrBlocked={mgrDcrBlocked}
+            todayIsSunday={mgrTodayIsSunday}
+            onStartDcr={() => navigate('/manager/report/new')}
+          />
         )}
 
-        {deferReady && user?.id && <TeamPendingDcrStrip managerId={user.id} />}
 
-        <ManagerTodayStatusCard
-          dcrDone={mgrTodayDcrDone}
-          dcrBlocked={mgrDcrBlocked}
-          expenseDone={mgrTodayExpenseDone}
-          expenseDraft={!!mgrTodayExpenseReport?.id && !mgrTodayExpenseDone}
-          todayIsSunday={mgrTodayIsSunday}
-        />
-
-        <div className="space-y-2">
-          <p className="section-title">Team stats (IST)</p>
-          <div className="flex gap-1.5 flex-wrap">
-            {FILTERS.map(f => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setActiveFilter(f)}
-                className={cn(
-                  'text-[11px] font-semibold px-3 py-1.5 rounded-full border transition-all',
-                  activeFilter === f
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-card text-muted-foreground border-border',
-                )}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-          <p className="text-[10px] text-muted-foreground">Counts are for your team MRs only.</p>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard icon={Users} value={mrs.length} label="Total MRs" color="primary" />
-          {statsLoading ? (
-            <>
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-            </>
-          ) : (
-            <>
-              <StatCard
-                icon={FileText}
-                value={stats?.reportCount ?? 0}
-                label={
-                  activeFilter === 'Today'
-                    ? 'Team reports today'
-                    : activeFilter === 'This Week'
-                      ? 'Team reports this week'
-                      : 'Team reports this month'
-                }
-                color="emerald"
-              />
-              <StatCard
-                icon={Stethoscope}
-                value={stats?.doctorCount ?? 0}
-                label={
-                  activeFilter === 'Today'
-                    ? 'Doctors visited today'
-                    : activeFilter === 'This Week'
-                      ? 'Doctors this week'
-                      : 'Doctors this month'
-                }
-                color="amber"
-              />
-              <StatCard icon={Calendar} value={stats?.reportCount ?? 0} label={`Period · ${activeFilter}`} color="blue" />
-            </>
-          )}
-        </div>
-
-
-        {/* Self Report CTA */}
-        {!mgrTodayDcrDone && !mgrTodayIsSunday && (
-          mgrDcrBlocked ? (
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full touch-target rounded-2xl h-12 text-sm font-semibold"
-              onClick={() => toast.message('Complete your tour program', { description: 'Open Tour Plan, fill the month, and submit. Your TP is auto-approved as a manager.' })}
-            >
-              <Lock className="mr-2 h-5 w-5" />
-              DCR locked until tour program is ready
-            </Button>
-          ) : (
-            <Button
-              onClick={() => navigate('/manager/report/new')}
-              className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-12 text-sm font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
-            >
-              <FilePlus className="mr-2 h-5 w-5" />
-              Create Daily Report
-            </Button>
-          )
+        {deferReady && user?.id && (
+          <ManagerDashboardTodayPanel
+            managerId={user.id}
+            dcrDone={mgrTodayDcrDone}
+            dcrBlocked={mgrDcrBlocked}
+            expenseDone={mgrTodayExpenseDone}
+            expenseDraft={!!mgrTodayExpenseReport?.id && !mgrTodayExpenseDone}
+            todayIsSunday={mgrTodayIsSunday}
+          />
         )}
 
-        {/* Quick Actions — frequently used */}
+        {deferReady && mrIds.length > 0 && (
+          <ManagerTeamStatsCard
+            activeFilter={activeFilter}
+            onFilterChange={setActiveFilter}
+            reportCount={stats?.reportCount ?? 0}
+            doctorCount={stats?.doctorCount ?? 0}
+            loading={statsLoading}
+          />
+        )}
+
+        {/* Quick Actions â€” frequently used */}
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5">
@@ -543,7 +410,7 @@ export default function ManagerDashboard() {
                             checked={selfSelectedSubAreas.has(sa.id)}
                             onChange={() => toggleSelfSubArea(sa.id)}
                           />
-                          <span className="flex-1">{sa.areaName} — {sa.name}</span>
+                          <span className="flex-1">{sa.areaName} â€” {sa.name}</span>
                           {selfServerSet.has(sa.id) && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
                               <Check className="h-3 w-3" />
@@ -573,7 +440,7 @@ export default function ManagerDashboard() {
                       .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save assignments'))
                   }}
                 >
-                  {saveMrSubAreaAccess.isPending ? 'Saving…' : 'Save assignments'}
+                  {saveMrSubAreaAccess.isPending ? 'Savingâ€¦' : 'Save assignments'}
                 </Button>
               </>
             )}

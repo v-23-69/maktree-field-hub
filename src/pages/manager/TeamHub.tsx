@@ -17,7 +17,6 @@ import { useMonthlySupportAggregateForManagerTeam } from '@/hooks/useReport'
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics'
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh'
 import { Input } from '@/components/ui/input'
-import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
@@ -36,7 +35,7 @@ export default function TeamHub() {
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly')
   const [search, setSearch] = useState('')
 
-  const { refresh: refreshDashboard } = useDashboardRefresh(!!managerId)
+  useDashboardRefresh(!!managerId)
 
   const { data: todayReports = [] } = useTeamMrsTodayReportStatus(mrIds, today)
   const { data: todayExpenses = [] } = useTeamMrsTodayExpenseStatus(mrIds, today)
@@ -88,7 +87,6 @@ export default function TeamHub() {
               <p className="text-[10px] text-muted-foreground">{mrs.length} medical representatives</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <DashboardRefreshButton onRefresh={refreshDashboard} />
               <Button size="sm" className="rounded-xl h-9" onClick={() => setManageAction('create-mr')}>
                 <Plus className="h-4 w-4 mr-1" />
                 Manage

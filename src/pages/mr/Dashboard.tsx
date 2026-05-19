@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst, formatIstTimeNow } from '@/lib/dateUtils';
@@ -6,7 +6,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import StatCard from '@/components/shared/StatCard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -18,19 +17,17 @@ import { useMrTargets } from '@/hooks/useTargets';
 import { useMrDashboardStats } from '@/hooks/useDashboardStats';
 import { supabase } from '@/lib/supabase';
 import type { DoctorAlert } from '@/types/database.types';
-import type { DcrDailyStatus, DcrMonthlySummary } from '@/types/database.types';
+import type { DcrDailyStatus } from '@/types/database.types';
 import { useTodayStrike, useMarkStrike, useStrikeCount } from '@/hooks/useStrike';
 import { useMrHolidays, useMrHolidayCount, useMarkMrHoliday } from '@/hooks/useHolidays';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
-import { useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useAllowedReportDates } from '@/hooks/useReport';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
-import MrTodayStatusCard from '@/components/mr/MrTodayStatusCard';
-import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
+import MrDashboardTodayPanel from '@/components/mr/MrDashboardTodayPanel';
+import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
 import DashboardCollapsibleSection from '@/components/shared/DashboardCollapsibleSection';
-import StatCardSkeleton from '@/components/shared/StatCardSkeleton';
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import type { AllowedReportDate } from '@/types/database.types';
 import { toast } from 'sonner';
@@ -38,6 +35,7 @@ import { cn } from '@/lib/utils';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
 import { useMrLeaves } from '@/hooks/useLeaves';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
@@ -58,14 +56,12 @@ export default function MRDashboard() {
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(userId);
   const { data: todayPlan } = useTodayTpPlan(userId);
   const { data: allowedDates = [] } = useAllowedReportDates(userId);
-  const { data: workingWithOptions = [] } = useWorkingWithReportOptions(user?.id, user?.role);
-
   // Deferred queries (below the fold)
   const { data: completionRows = [], isLoading: completionLoading } = useMasterListByMr(deferReady ? userId : '');
   const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(userId);
   const { data: targetRows = [], isLoading: targetsLoading } = useMrTargets(deferReady ? userId : '');
   const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferReady ? userId : '');
-  const { refresh: refreshDashboard } = useDashboardRefresh(!!userId);
+  useDashboardRefresh(!!userId);
   const { data: todayStrike } = useTodayStrike(deferReady ? userId : '');
   const markStrike = useMarkStrike();
   const { data: strikeCount = 0 } = useStrikeCount(deferReady ? userId : '');
@@ -78,8 +74,6 @@ export default function MRDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
-
-  const monthKey = todayInputDate().slice(0, 7);
 
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
@@ -98,23 +92,6 @@ export default function MRDashboard() {
     },
   });
 
-  const { data: monthlySummary } = useQuery({
-    queryKey: ['dcr-monthly-summary', userId, monthKey],
-    enabled: !!userId && !!supabase && deferReady,
-    queryFn: async (): Promise<DcrMonthlySummary | null> => {
-      if (!supabase) return null;
-      const month = `${monthKey}-01`;
-      const { data, error } = await supabase
-        .from('v_dcr_monthly_summary')
-        .select('*')
-        .eq('mr_id', userId)
-        .eq('month', month)
-        .maybeSingle();
-      if (error) throw error;
-      return data as DcrMonthlySummary;
-    },
-  });
-
   const { data: alerts = [], isLoading: alertsLoading } = useQuery({
     queryKey: ['doctor-alerts', userId],
     enabled: !!userId && !!supabase && deferReady,
@@ -130,12 +107,6 @@ export default function MRDashboard() {
   const { data: vfProgress } = useVisitFrequencyProgress(userId, todayInputDate(), deferReady);
   const [callPreset, setCallPreset] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('monthly');
   const { data: callAnalytics } = useCallsAndSpecialityAnalytics([userId], callPreset, todayInputDate(), deferReady);
-
-  const nameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const o of workingWithOptions) map.set(o.id, o.full_name);
-    return map;
-  }, [workingWithOptions]);
 
   const areaProgress = useMemo(() => {
     const areaIdByName = new Map<string, string>();
@@ -197,25 +168,16 @@ export default function MRDashboard() {
   const dcrBlocked = hasSubAreaAccess && !tpApproved && !isPaused;
   const expenseDoneToday = dailyStatus?.expense_done === true;
 
-  const checklist = [
-    {
-      label: todayIsSunday && !todayDcrDone ? 'Sunday DCR' : 'DCR Report',
-      done: todayDcrDone,
-      path: todayIsSunday && !todayDcrDone ? undefined : '/mr/report/new',
-      sundayDate: todayIsSunday && !todayDcrDone ? todayDate : undefined,
-    },
-    { label: 'Expense Report', done: expenseDoneToday, path: '/mr/expense' },
-  ];
   const nextMonthDeadlineApproaching = tpStatus && !tpStatus.next_month_tp_exists && tpStatus.days_to_deadline <= 5 && tpStatus.days_to_deadline >= 0;
   const nextMonthOverdue = tpStatus?.is_overdue === true;
   const tpGateLoading = tpStatusLoading || (!!userId && subAreasLoading);
 
-  const workingWithNames = useMemo(() => {
-    if (!todayPlan?.working_with_ids?.length) return [];
-    return todayPlan.working_with_ids.map(id => nameById.get(id) ?? id.slice(0, 8));
-  }, [todayPlan, nameById]);
-
   const showSundayDcrCta = isSundayYmd(todayDate) && !todayDcrDone;
+  const pendingFieldDcrPast = pendingFieldDcrDays.filter(d => d.report_date !== todayDate);
+  const showMrStats =
+    deferReady && ((stats?.reportsThisMonth ?? 0) > 0 || (stats?.doctorsThisWeek ?? 0) > 0);
+  const showDoctorCoverage =
+    !completionLoading && areaProgress.some(a => a.total > 0);
 
   const closeDrawer = () => {
     setAction(null);
@@ -254,10 +216,12 @@ export default function MRDashboard() {
 
   if (tpGateLoading && userId) {
     return (
-      <div className="min-h-screen bg-background pb-24 flex flex-col items-center justify-center px-6">
+      <div className="min-h-screen bg-background pb-24 flex flex-col">
         <PageHeader title="Dashboard" />
-        <LoadingSpinner />
-        <p className="text-sm text-muted-foreground mt-4">Loading your workspace…</p>
+        <DashboardWelcomeSplash
+          fullName={user?.full_name}
+          profilePhotoUrl={user?.profile_photo_url}
+        />
         <BottomNav role="mr" />
       </div>
     );
@@ -389,20 +353,31 @@ export default function MRDashboard() {
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <p className="text-xs text-muted-foreground font-medium">{today}</p>
-                <span className="text-[10px] text-muted-foreground/80">· {formatIstTimeNow()}</span>
+                <span className="text-[10px] text-muted-foreground/80">Â· {formatIstTimeNow()}</span>
               </div>
             </div>
-            <DashboardRefreshButton onRefresh={refreshDashboard} className="shrink-0" />
           </div>
         </div>
 
         {deferReady && hasSubAreaAccess && tpApproved && (
-          <MrTodayStatusCard
-            todayIsSunday={todayIsSunday}
-            dcrDone={todayDcrDone}
-            expenseDone={expenseDoneToday}
-            dcrBlocked={dcrBlocked}
-          />
+          <>
+            {todayPlan?.sub_area_id && (
+              <TodayPlanFromTp
+                subAreaName={todayPlan.sub_area_name ?? ''}
+                areaName={todayPlan.area_name ?? ''}
+                dcrDone={todayDcrDone}
+                dcrBlocked={dcrBlocked}
+                todayIsSunday={todayIsSunday}
+                onStartDcr={() => navigate('/mr/report/new')}
+              />
+            )}
+            <MrDashboardTodayPanel
+              todayIsSunday={todayIsSunday}
+              dcrDone={todayDcrDone}
+              expenseDone={expenseDoneToday}
+              dcrBlocked={dcrBlocked}
+            />
+          </>
         )}
 
         {/* TP Deadline Alert */}
@@ -442,74 +417,12 @@ export default function MRDashboard() {
           </div>
         )}
 
-        {/* Today's Plan from TP */}
-        {todayPlan && todayPlan.sub_area_id && (
-          <div className="rounded-2xl bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-background border border-emerald-500/15 p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-bold text-foreground">Today's Plan</p>
-              <Badge variant="secondary" className="text-[10px] font-semibold">From Tour Program</Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Area</span>
-                </div>
-                <p className="text-sm font-semibold text-foreground">{todayPlan.sub_area_name}</p>
-                <p className="text-[11px] text-muted-foreground">{todayPlan.area_name}</p>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center gap-1.5">
-                  <Users className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Working With</span>
-                </div>
-                {workingWithNames.length > 0 ? (
-                  <div className="flex flex-wrap gap-1">
-                    {workingWithNames.map((name, i) => (
-                      <span key={i} className="text-xs font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">{name}</span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm font-semibold text-foreground">Solo</p>
-                )}
-              </div>
-            </div>
-            {todayDcrDone ? (
-              <div className="flex items-center gap-2 rounded-xl bg-emerald-600/10 border border-emerald-600/20 px-4 py-3">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Today's DCR Submitted</p>
-              </div>
-            ) : todayIsSunday ? null : (
-              <Button
-                onClick={() => navigate('/mr/report/new')}
-                className="w-full rounded-2xl h-12 text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/20"
-              >
-                <FilePlus className="mr-2 h-5 w-5" />
-                Start Today's DCR
-              </Button>
-            )}
-          </div>
-        )}
 
-        {/* Fallback CTA when no plan for today */}
-        {(!todayPlan || !todayPlan.sub_area_id) && !todayDcrDone && !todayIsSunday && (
-          <Button
-            onClick={() => navigate('/mr/report/new')}
-            className="w-full touch-target rounded-2xl bg-primary text-primary-foreground hover:bg-primary/90 h-14 text-[15px] font-bold shadow-lg shadow-primary/20 active:scale-[0.97] transition-all"
-          >
-            <FilePlus className="mr-2.5 h-5 w-5" />
-            Start Today's Report
-          </Button>
-        )}
-
-        {/* Pending DCR days */}
-        {pendingFieldDcrDays.length > 0 && !allDcrDone && (
+        {pendingFieldDcrPast.length > 0 && !allDcrDone && (
           <div className="glass-card p-4 space-y-3">
-            <p className="section-title">Pending DCR Reports</p>
+            <p className="section-title">Past pending DCR</p>
             <div className="space-y-1.5">
-              {pendingFieldDcrDays.map(d => {
-                const isToday = d.report_date === todayDate;
-                return (
+              {pendingFieldDcrPast.map(d => (
                   <button
                     key={d.report_date}
                     type="button"
@@ -519,15 +432,14 @@ export default function MRDashboard() {
                     <div className="flex items-center gap-2">
                       <Circle className="h-4 w-4 text-amber-500 shrink-0" />
                       <span className="text-sm font-medium text-foreground">
-                        {isToday ? 'Today' : formatShortDateIst(d.report_date)}
+                        {formatShortDateIst(d.report_date)}
                       </span>
                     </div>
                     <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
                       {d.day_type === 'leave' ? 'Leave DCR' : 'Pending'}
                     </Badge>
                   </button>
-                );
-              })}
+              ))}
             </div>
           </div>
         )}
@@ -568,7 +480,7 @@ export default function MRDashboard() {
                 <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100 leading-snug">
                   Leave approved
                   {leave.approver?.full_name ? ` by ${leave.approver.full_name}` : ''}
-                  {' — '}
+                  {' â€” '}
                   {formatDisplayDate(leave.leave_date)} ({leave.leave_category === 'sick' ? 'Sick' : 'Casual'})
                 </p>
               </div>
@@ -628,7 +540,7 @@ export default function MRDashboard() {
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground">Visit frequency</p>
                 <p className="text-xs text-muted-foreground truncate">
-                  {vfProgress ? `${vfProgress.totalDone} / ${vfProgress.totalTarget} progress this month` : 'Loading…'}
+                  {vfProgress ? `${vfProgress.totalDone} / ${vfProgress.totalTarget} progress this month` : 'Loadingâ€¦'}
                 </p>
               </div>
             </div>
@@ -664,7 +576,7 @@ export default function MRDashboard() {
                 <p className="text-lg font-bold text-primary tabular-nums">
                   {callAnalytics && callAnalytics.daysWithReports > 0
                     ? callAnalytics.avgPerDay.toFixed(1)
-                    : '—'}
+                    : 'â€”'}
                 </p>
               </div>
             </div>
@@ -697,50 +609,12 @@ export default function MRDashboard() {
           </div>
         </DashboardCollapsibleSection>
 
-        {/* Daily Checklist */}
-        <div className="glass-card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <p className="section-title">Daily Checklist</p>
-            {monthlySummary && (
-              <p className="text-[10px] text-muted-foreground font-medium">
-                {monthlySummary.dcr_submitted_days} days this month
-              </p>
-            )}
+        {dailyStatus?.is_working_day === false && (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+            <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+            <p className="text-sm text-muted-foreground">Today is a holiday â€” no field reports needed.</p>
           </div>
-          {todayIsSunday && !todayDcrDone ? (
-            <MarkSundayDcrButton reportDate={todayDate} className="w-full rounded-xl h-11" />
-          ) : dailyStatus?.is_working_day === false ? (
-            <div className="flex items-center gap-2 py-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              <p className="text-sm text-muted-foreground">Today is a holiday. No reports needed.</p>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              {checklist.map(item => (
-                <button
-                  key={item.label}
-                  className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-muted/40 active:scale-[0.98] transition-all"
-                  onClick={() => { if (item.path) navigate(item.path) }}
-                  disabled={!item.path}
-                >
-                  {item.done ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  ) : (
-                    <Circle className="h-5 w-5 text-muted-foreground/40 shrink-0" />
-                  )}
-                  <span className={cn(
-                    'text-sm font-medium flex-1 text-left',
-                    item.done ? 'text-muted-foreground line-through' : 'text-foreground'
-                  )}>
-                    {item.label}
-                  </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0" />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
+        )}
 
         {/* Alerts */}
         {!alertsLoading && alerts.length > 0 && (
@@ -764,23 +638,20 @@ export default function MRDashboard() {
           </div>
         )}
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {statsLoading ? (
-            <>
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-            </>
-          ) : (
-            <>
-              <StatCard icon={FileText} value={stats?.reportsThisMonth ?? 0} label="Reports This Month (IST)" color="primary" />
-              <StatCard icon={Stethoscope} value={stats?.doctorsThisWeek ?? 0} label="Doctors This Week (IST)" color="emerald" />
-            </>
-          )}
-        </div>
+        {showMrStats && (
+          <div className="rounded-2xl border border-border/80 bg-card/60 px-4 py-3 grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-xl font-bold tabular-nums text-foreground">{stats?.reportsThisMonth ?? 0}</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">DCRs this month</p>
+            </div>
+            <div>
+              <p className="text-xl font-bold tabular-nums text-foreground">{stats?.doctorsThisWeek ?? 0}</p>
+              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Doctors this week</p>
+            </div>
+          </div>
+        )}
 
-        {/* Doctor Coverage */}
-        {!completionLoading && areaProgress.length > 0 && (
+        {showDoctorCoverage && (
           <div className="space-y-3">
             <p className="section-title">Doctor Coverage</p>
             <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
@@ -812,7 +683,7 @@ export default function MRDashboard() {
               {activeTargets.map(t => (
                 <div key={t.target_id} className="glass-card p-4">
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <p className="text-sm font-semibold text-foreground truncate flex-1">{t.product_name}{t.sub_area ? ` — ${t.sub_area}` : ''}</p>
+                    <p className="text-sm font-semibold text-foreground truncate flex-1">{t.product_name}{t.sub_area ? ` â€” ${t.sub_area}` : ''}</p>
                     <Badge variant="secondary" className="text-[10px] font-bold shrink-0">{t.pct}%</Badge>
                   </div>
                   <div className="h-2 w-full rounded-full bg-muted overflow-hidden mb-2">

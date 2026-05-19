@@ -71,6 +71,7 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
   const { data: deleteMrSubAreas = [] } = useMrSubAreaAccess(deleteMrId);
   const { data: assignMrServerAccess = [] } = useMrSubAreaAccess(assignMrId);
   const assignServerSet = useMemo(() => new Set(assignMrServerAccess), [assignMrServerAccess]);
+  const assignMrServerKey = assignMrServerAccess.slice().sort().join(',');
 
   const allSubAreas = useMemo(
     () =>
@@ -107,7 +108,7 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
       return;
     }
     setAssignSelectedSubAreas(new Set(assignMrServerAccess));
-  }, [assignMrId, assignMrServerAccess]);
+  }, [assignMrId, assignMrServerKey]);
 
   const selectAllAssignFiltered = () => {
     setAssignSelectedSubAreas(prev => {

@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { todayInputDate } from '@/lib/dateUtils'
-import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
+import { DASHBOARD_QUERY_OPTIONS, LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type { Doctor } from '@/types/database.types'
 
 export type MrTodayReportStatus = { mrId: string; submitted: boolean; reportId: string | null }
@@ -11,7 +11,7 @@ export function useTeamMrsTodayReportStatus(mrIds: string[], today = todayInputD
   return useQuery({
     queryKey: ['manager-mr-today-report-status', mrIds, today],
     enabled: mrIds.length > 0 && !!supabase,
-    ...DASHBOARD_QUERY_OPTIONS,
+    ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<MrTodayReportStatus[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase

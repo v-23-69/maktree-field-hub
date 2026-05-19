@@ -12,7 +12,6 @@ import { supabase } from '@/lib/supabase';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { toast } from 'sonner';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
-import DashboardRefreshButton from '@/components/shared/DashboardRefreshButton';
 import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 
@@ -81,9 +80,6 @@ export default function AdminDashboard() {
     <AdminLayout>
       <div className="space-y-5">
         <DashboardBirthdaySlot />
-        <div className="flex justify-end">
-          <DashboardRefreshButton onRefresh={refreshDashboard} />
-        </div>
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => navigate('/admin/users?filter=mr')} className="text-left active:scale-[0.97] transition-transform">
             <StatCard icon={Users} value={stats?.totalMrs ?? 0} label="Total MRs" />

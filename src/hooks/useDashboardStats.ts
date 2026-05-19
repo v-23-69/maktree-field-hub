@@ -5,7 +5,7 @@ import {
   startOfMonthIstYmd,
   startOfWeekIstYmd,
 } from '@/lib/dateUtils'
-import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
+import { DASHBOARD_QUERY_OPTIONS, LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 
 export type ManagerStatsFilter = 'Today' | 'This Week' | 'This Month'
 
@@ -76,7 +76,7 @@ export function useManagerDashboardStats(
   return useQuery({
     queryKey: ['manager-dashboard-stats', managerId, mrIds, filter, today],
     enabled: !!managerId && mrIds.length > 0 && !!supabase,
-    ...DASHBOARD_QUERY_OPTIONS,
+    ...(filter === 'Today' ? LIVE_QUERY_OPTIONS : DASHBOARD_QUERY_OPTIONS),
     queryFn: async (): Promise<{
       reportCount: number
       doctorCount: number

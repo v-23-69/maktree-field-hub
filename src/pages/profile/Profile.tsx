@@ -176,9 +176,6 @@ export default function ProfilePage() {
               </button>
             </div>
             <Progress value={completion} className="h-1.5" />
-            <p className="text-[10px] text-muted-foreground">
-              Missing: {missingFields.join(', ')}. Add your birthday so teammates can celebrate with you on the day.
-            </p>
           </div>
         )}
 
