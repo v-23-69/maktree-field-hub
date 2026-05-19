@@ -1,136 +1,280 @@
 import { jsPDF } from 'jspdf'
+import autoTable from 'jspdf-autotable'
 import type { DailyReport, ReportVisit } from '@/types/database.types'
 import { formatDisplayDate } from '@/lib/dateUtils'
 
-function visitBlockText(v: ReportVisit): string {
-  const d = v.doctor
-  const territory =
-    (d?.sub_area as { area?: { name?: string } } | undefined)?.area?.name ?? '—'
-  const lines: string[] = [
-    `Doctor: ${d?.full_name ?? '—'}`,
-    `Speciality: ${d?.speciality ?? '—'}`,
-    `Territory: ${territory} | Area: ${d?.sub_area?.name ?? '—'}`,
-    `Chemist: ${v.chemist?.name ?? '—'}`,
-  ]
-  const products = (v.promoted_products ?? [])
+const MARGIN = 36
+const HEADER_FILL: [number, number, number] = [15, 118, 110]
+
+const VISIT_TABLE_HEAD = [
+  '#',
+  'Doctor',
+  'Speciality',
+  'Territory',
+  'Area',
+  'Chemist',
+  'Products promoted',
+  'Monthly support',
+  'Competitors',
+] as const
+
+type JsPdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number } }
+
+function territoryName(v: ReportVisit): string {
+  const area = (v.doctor?.sub_area as { area?: { name?: string } } | undefined)?.area?.name
+  return area?.trim() || '—'
+}
+
+function formatProducts(v: ReportVisit): string {
+  const names = (v.promoted_products ?? [])
     .map(p => p.product?.name)
     .filter(Boolean) as string[]
-  if (products.length) lines.push(`Products promoted: ${products.join(', ')}`)
-  const ms = (v.monthly_support_entries ?? []).map(m => {
+  return names.length ? names.join(', ') : '—'
+}
+
+function formatMonthlySupport(v: ReportVisit): string {
+  const lines = (v.monthly_support_entries ?? []).map(m => {
     const saved = Number((m as { amount_inr?: number | null }).amount_inr ?? 0)
     const ptr = (m.product as { ptr?: number } | undefined)?.ptr ?? 0
     const fallback = Math.round(ptr * (m.quantity || 0) * 100) / 100
     const rupee = saved > 0 ? saved : fallback
-    return `${m.product?.name ?? ''} (qty ${m.quantity ?? 0}${rupee > 0 ? `, Rs ${rupee}` : ''})`
+    const name = m.product?.name ?? 'Product'
+    return rupee > 0
+      ? `${name} (qty ${m.quantity ?? 0}, Rs ${rupee})`
+      : `${name} (qty ${m.quantity ?? 0})`
   })
-  if (ms.length) lines.push(`Monthly support: ${ms.join('; ')}`)
-  const comp = (v.competitor_entries ?? []).map(c => `${c.brand_name} (${c.quantity})`)
-  if (comp.length) lines.push(`Competitors: ${comp.join('; ')}`)
-  return lines.join('\n')
+  return lines.length ? lines.join('\n') : '—'
 }
 
-/** Save one or more submitted DCRs (each with visits) as a single PDF download. */
+function formatCompetitors(v: ReportVisit): string {
+  const lines = (v.competitor_entries ?? []).map(c => `${c.brand_name} (${c.quantity})`)
+  return lines.length ? lines.join('\n') : '—'
+}
+
+function visitToRow(index: number, v: ReportVisit): string[] {
+  return [
+    String(index),
+    v.doctor?.full_name ?? '—',
+    v.doctor?.speciality ?? '—',
+    territoryName(v),
+    v.doctor?.sub_area?.name ?? '—',
+    v.chemist?.name ?? '—',
+    formatProducts(v),
+    formatMonthlySupport(v),
+    formatCompetitors(v),
+  ]
+}
+
+function sortedVisits(visits: ReportVisit[]): ReportVisit[] {
+  return [...visits].sort((a, b) =>
+    (a.doctor?.full_name ?? '').localeCompare(b.doctor?.full_name ?? '', undefined, {
+      sensitivity: 'base',
+    }),
+  )
+}
+
+function getPageMetrics(doc: jsPDF) {
+  const pageW = doc.internal.pageSize.getWidth()
+  const pageH = doc.internal.pageSize.getHeight()
+  return { pageW, pageH, maxW: pageW - MARGIN * 2 }
+}
+
+function ensureSpace(doc: jsPDF, y: number, needed: number): number {
+  const { pageH } = getPageMetrics(doc)
+  if (y + needed <= pageH - MARGIN) return y
+  doc.addPage()
+  return MARGIN
+}
+
+function drawDocumentHeader(
+  doc: jsPDF,
+  y: number,
+  title: string,
+  mr?: { full_name?: string; employee_code?: string },
+): number {
+  const { maxW } = getPageMetrics(doc)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(14)
+  doc.setTextColor(20, 20, 20)
+  const titleLines = doc.splitTextToSize(title, maxW)
+  doc.text(titleLines, MARGIN, y)
+  y += (Array.isArray(titleLines) ? titleLines.length : 1) * 16 + 4
+
+  if (mr?.full_name) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(
+      `MR: ${mr.full_name}${mr.employee_code ? ` (${mr.employee_code})` : ''}`,
+      MARGIN,
+      y,
+    )
+    y += 14
+  }
+
+  doc.setDrawColor(200, 200, 200)
+  doc.setLineWidth(0.5)
+  doc.line(MARGIN, y, MARGIN + maxW, y)
+  return y + 12
+}
+
+function drawDayBanner(doc: jsPDF, y: number, lines: string[]): number {
+  let cursor = ensureSpace(doc, y, 28)
+  const { maxW } = getPageMetrics(doc)
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(10)
+  doc.setTextColor(30, 30, 30)
+  for (const line of lines) {
+    cursor = ensureSpace(doc, cursor, 14)
+    const wrapped = doc.splitTextToSize(line, maxW)
+    doc.text(wrapped, MARGIN, cursor)
+    cursor += (Array.isArray(wrapped) ? wrapped.length : 1) * 12
+  }
+  return cursor + 4
+}
+
+function drawVisitTable(doc: JsPdfWithAutoTable, y: number, body: string[][]): number {
+  if (body.length === 0) {
+    autoTable(doc, {
+      body: [['—', 'No doctor visits recorded for this day.', '', '', '', '', '', '', '', '']],
+      startY: y,
+      margin: { left: MARGIN, right: MARGIN },
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 4, font: 'helvetica', fontStyle: 'italic' },
+      columnStyles: { 0: { cellWidth: 22 }, 1: { cellWidth: 'auto' } },
+    })
+    return (doc.lastAutoTable?.finalY ?? y) + 14
+  }
+
+  autoTable(doc, {
+    head: [VISIT_TABLE_HEAD as unknown as string[]],
+    body,
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'grid',
+    styles: {
+      fontSize: 7,
+      cellPadding: 3,
+      overflow: 'linebreak',
+      valign: 'top',
+      lineColor: [210, 210, 210],
+      lineWidth: 0.4,
+    },
+    headStyles: {
+      fillColor: HEADER_FILL,
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 7.5,
+      halign: 'center',
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    columnStyles: {
+      0: { cellWidth: 22, halign: 'center' },
+      1: { cellWidth: 78 },
+      2: { cellWidth: 48 },
+      3: { cellWidth: 62 },
+      4: { cellWidth: 72 },
+      5: { cellWidth: 64 },
+      6: { cellWidth: 88 },
+      7: { cellWidth: 102 },
+      8: { cellWidth: 72 },
+    },
+    didDrawPage: data => {
+      if (data.pageNumber > 1) {
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(8)
+        doc.setTextColor(120, 120, 120)
+        doc.text(
+          `Page ${data.pageNumber}`,
+          doc.internal.pageSize.getWidth() - MARGIN,
+          doc.internal.pageSize.getHeight() - 16,
+          { align: 'right' },
+        )
+      }
+    },
+  })
+
+  return (doc.lastAutoTable?.finalY ?? y) + 16
+}
+
+function drawSummaryTable(doc: JsPdfWithAutoTable, y: number, body: string[][]): number {
+  autoTable(doc, {
+    head: [['Date', 'Type', 'Status', 'Details']],
+    body,
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN },
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 4, overflow: 'linebreak', valign: 'top' },
+    headStyles: {
+      fillColor: HEADER_FILL,
+      textColor: 255,
+      fontStyle: 'bold',
+    },
+    columnStyles: {
+      0: { cellWidth: 90 },
+      1: { cellWidth: 70 },
+      2: { cellWidth: 60 },
+      3: { cellWidth: 'auto' },
+    },
+  })
+  return (doc.lastAutoTable?.finalY ?? y) + 16
+}
+
+/** Save one or more submitted DCRs (each with visits) as a single tabular PDF download. */
 export function saveDcrReportsPdf(
   reports: Array<DailyReport & { visits: ReportVisit[] }>,
   options: { fileName: string; documentTitle: string },
 ): void {
   if (reports.length === 0) return
 
-  const doc = new jsPDF({ unit: 'pt', format: 'a4' })
-  const margin = 40
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const maxW = pageW - margin * 2
-  const bodyLine = 13
-  let y = margin
-
-  const ensureSpace = (h: number) => {
-    if (y + h > pageH - margin) {
-      doc.addPage()
-      y = margin
-    }
-  }
-
-  const writeLines = (text: string, fontSize: number, bold: boolean) => {
-    doc.setFont('helvetica', bold ? 'bold' : 'normal')
-    doc.setFontSize(fontSize)
-    const parts = doc.splitTextToSize(text, maxW)
-    const lines = Array.isArray(parts) ? parts : [parts]
-    for (const line of lines) {
-      ensureSpace(bodyLine)
-      doc.text(line, margin, y)
-      y += bodyLine
-    }
-  }
-
-  writeLines(options.documentTitle, 14, true)
-  y += 4
-
+  const doc = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'landscape' }) as JsPdfWithAutoTable
   const mr = reports[0].mr as { full_name?: string; employee_code?: string } | undefined
-  if (mr?.full_name) {
-    writeLines(
-      `MR: ${mr.full_name}${mr.employee_code ? ` (${mr.employee_code})` : ''}`,
-      10,
-      false,
-    )
-    y += 6
-  }
+
+  let y = MARGIN
+  y = drawDocumentHeader(doc, y, options.documentTitle, mr)
+
+  const summaryRows: string[][] = []
+  const fieldReports: Array<DailyReport & { visits: ReportVisit[] }> = []
 
   for (const report of reports) {
     const rk = (report.report_kind ?? 'field') as string
-    const isLeave = rk === 'leave'
-    const isSunday = rk === 'sunday'
-
-    if (isLeave) {
-      writeLines(`Leave DCR — ${formatDisplayDate(report.report_date)}`, 12, true)
-      writeLines(`Status: ${report.status}`, 10, false)
-      writeLines('Record type: approved leave day (no field doctor visits).', 9, false)
-      const cat = report.leave_dcr_category === 'sick' ? 'Sick leave' : 'Casual leave'
-      writeLines(`Leave category: ${cat}`, 10, false)
-      const remark = report.leave_dcr_remark?.trim()
-      if (remark) {
-        writeLines('Remark:', 10, true)
-        writeLines(remark, 9, false)
-      } else {
-        writeLines('Remark: —', 9, false)
+    if (rk === 'leave' || rk === 'sunday') {
+      const type = rk === 'leave' ? 'Leave DCR' : 'Sunday DCR'
+      let details =
+        rk === 'sunday'
+          ? 'Non-field Sunday; no doctor visits recorded.'
+          : 'Approved leave day; no field doctor visits.'
+      if (rk === 'leave') {
+        const cat = report.leave_dcr_category === 'sick' ? 'Sick leave' : 'Casual leave'
+        const remark = report.leave_dcr_remark?.trim()
+        details = `${cat}${remark ? ` — ${remark}` : ''}`
       }
-      y += 10
-      continue
+      summaryRows.push([
+        formatDisplayDate(report.report_date),
+        type,
+        report.status,
+        details,
+      ])
+    } else {
+      fieldReports.push(report)
     }
+  }
 
-    if (isSunday) {
-      writeLines(`Sunday DCR — ${formatDisplayDate(report.report_date)}`, 12, true)
-      writeLines(`Status: ${report.status}`, 10, false)
-      writeLines('Non-field Sunday; no doctor visits recorded.', 9, false)
-      y += 10
-      continue
-    }
+  if (summaryRows.length > 0) {
+    y = drawDayBanner(doc, y, ['Non-field days (leave / Sunday)'])
+    y = drawSummaryTable(doc, y, summaryRows)
+  }
 
-    writeLines(`DCR — ${formatDisplayDate(report.report_date)}`, 12, true)
+  for (const report of fieldReports) {
     const mgr = report.manager as { full_name?: string } | undefined
-    writeLines(
-      `Status: ${report.status}${mgr?.full_name ? ` | Working with: ${mgr.full_name}` : ''}`,
-      10,
-      false,
-    )
-    y += 4
-
-    const sorted = [...report.visits].sort((a, b) =>
-      (a.doctor?.full_name ?? '').localeCompare(b.doctor?.full_name ?? '', undefined, {
-        sensitivity: 'base',
-      }),
-    )
-
-    writeLines(`Doctor visits (${sorted.length})`, 11, true)
-    y += 2
-
-    sorted.forEach((v, idx) => {
-      writeLines(`Visit ${idx + 1}`, 10, true)
-      writeLines(visitBlockText(v), 9, false)
-      y += 6
-    })
-
-    y += 10
+    const visits = sortedVisits(report.visits)
+    const banner = [
+      `DCR — ${formatDisplayDate(report.report_date)}`,
+      `Status: ${report.status}${mgr?.full_name ? `  |  Working with: ${mgr.full_name}` : ''}  |  Visits: ${visits.length}`,
+    ]
+    y = ensureSpace(doc, y, 40)
+    y = drawDayBanner(doc, y, banner)
+    const body = visits.map((v, i) => visitToRow(i + 1, v))
+    y = drawVisitTable(doc, y, body)
   }
 
   const safe = options.fileName.replace(/[^\w.-]+/g, '_')
