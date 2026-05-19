@@ -480,10 +480,6 @@ export default function ManagerDashboard() {
               <div className="h-9 w-9 rounded-xl bg-teal-500/10 flex items-center justify-center"><Umbrella className="h-4 w-4 text-teal-600 dark:text-teal-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My leave</span>
             </button>
-            <button type="button" onClick={() => navigate('/manager/team')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><Users className="h-4 w-4 text-primary" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Team hub</span>
-            </button>
             <button type="button" onClick={() => setAction('assign-self')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><UserPlus className="h-4 w-4 text-primary" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign Self</span>
