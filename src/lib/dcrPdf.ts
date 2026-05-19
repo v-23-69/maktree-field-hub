@@ -2,6 +2,7 @@ import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import type { DailyReport, ReportVisit } from '@/types/database.types'
 import { formatDisplayDate } from '@/lib/dateUtils'
+import { doctorTerritoryLabels } from '@/lib/doctorTerritory'
 
 const MARGIN = 36
 const HEADER_FILL: [number, number, number] = [15, 118, 110]
@@ -20,9 +21,8 @@ const VISIT_TABLE_HEAD = [
 
 type JsPdfWithAutoTable = jsPDF & { lastAutoTable?: { finalY: number } }
 
-function territoryName(v: ReportVisit): string {
-  const area = (v.doctor?.sub_area as { area?: { name?: string } } | undefined)?.area?.name
-  return area?.trim() || '—'
+function territoryAndArea(v: ReportVisit) {
+  return doctorTerritoryLabels(v.doctor)
 }
 
 function formatProducts(v: ReportVisit): string {
@@ -34,14 +34,8 @@ function formatProducts(v: ReportVisit): string {
 
 function formatMonthlySupport(v: ReportVisit): string {
   const lines = (v.monthly_support_entries ?? []).map(m => {
-    const saved = Number((m as { amount_inr?: number | null }).amount_inr ?? 0)
-    const ptr = (m.product as { ptr?: number } | undefined)?.ptr ?? 0
-    const fallback = Math.round(ptr * (m.quantity || 0) * 100) / 100
-    const rupee = saved > 0 ? saved : fallback
     const name = m.product?.name ?? 'Product'
-    return rupee > 0
-      ? `${name} (qty ${m.quantity ?? 0}, Rs ${rupee})`
-      : `${name} (qty ${m.quantity ?? 0})`
+    return `${name} (qty ${m.quantity ?? 0})`
   })
   return lines.length ? lines.join('\n') : '—'
 }
@@ -52,12 +46,13 @@ function formatCompetitors(v: ReportVisit): string {
 }
 
 function visitToRow(index: number, v: ReportVisit): string[] {
+  const { territory, area } = territoryAndArea(v)
   return [
     String(index),
     v.doctor?.full_name ?? '—',
     v.doctor?.speciality ?? '—',
-    territoryName(v),
-    v.doctor?.sub_area?.name ?? '—',
+    territory,
+    area,
     v.chemist?.name ?? '—',
     formatProducts(v),
     formatMonthlySupport(v),

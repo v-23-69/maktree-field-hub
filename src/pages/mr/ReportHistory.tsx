@@ -112,9 +112,8 @@ export default function ReportHistory() {
                     {daySummary.visits.map(v => {
                       const d = v.doctor
                       const spec = d?.speciality?.trim() || '—'
-                      const territory = d?.sub_area?.area?.name && d?.sub_area?.name
-                        ? `${d.sub_area.area.name} / ${d.sub_area.name}`
-                        : d?.sub_area?.name ?? '—'
+                      const territory = d?.sub_area?.area?.name?.trim() || '—'
+                      const area = d?.sub_area?.name?.trim() || '—'
                       const promos = (v.promoted_products ?? [])
                         .map(p => p.product?.name)
                         .filter(Boolean) as string[]
@@ -131,7 +130,7 @@ export default function ReportHistory() {
                               <p className="text-[11px] text-muted-foreground mt-0.5">{spec}</p>
                               <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
                                 <Building2 className="h-3 w-3 shrink-0" />
-                                {territory}
+                                Territory: {territory} · Area: {area}
                               </p>
                             </div>
                           </div>
@@ -150,10 +149,7 @@ export default function ReportHistory() {
                                 {monthly.map(m => (
                                   <li key={m.id} className="flex justify-between gap-2">
                                     <span className="truncate min-w-0">{m.product?.name ?? 'Product'}</span>
-                                    <span className="shrink-0 tabular-nums font-medium">
-                                      Qty {m.quantity}
-                                      {m.amount_inr != null ? ` · Rs ${Number(m.amount_inr).toLocaleString('en-IN')}` : ''}
-                                    </span>
+                                    <span className="shrink-0 tabular-nums font-medium">Qty {m.quantity}</span>
                                   </li>
                                 ))}
                               </ul>

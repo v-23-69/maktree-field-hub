@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { saveDcrReportsPdf } from '@/lib/dcrPdf';
+import { doctorTerritoryLabels } from '@/lib/doctorTerritory';
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -179,7 +180,7 @@ export default function ReportDetail() {
                 <div className="space-y-2">
                   {sortedVisits.map(visit => {
                     const doc = visit.doctor;
-                    const subName = doc?.sub_area?.name ?? '—';
+                    const { territory, area } = doctorTerritoryLabels(doc);
                     const chemistName = visit.chemist?.name ?? '—';
                     const products =
                       (visit.promoted_products ?? [])
@@ -196,9 +197,12 @@ export default function ReportDetail() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <p className="text-sm font-semibold text-foreground truncate">{doc?.full_name ?? 'Doctor'}</p>
-                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{subName}</Badge>
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{area}</Badge>
                               </div>
-                              <p className="text-xs text-muted-foreground">{doc?.speciality ?? ''}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {doc?.speciality ?? ''}
+                                {territory !== '—' ? ` · ${territory}` : ''}
+                              </p>
                             </div>
                             <ChevronDown className={cn(
                               'h-4 w-4 text-muted-foreground shrink-0 transition-transform duration-200',

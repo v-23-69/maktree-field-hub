@@ -39,7 +39,7 @@ export async function loadReportVisits(
 
   const { data: doctors, error: docErr } = await client
     .from('doctors')
-    .select('*, sub_area:sub_areas(*)')
+    .select('*, sub_area:sub_areas(id, name, code, area_id, area:areas(id, name, code))')
     .in('id', doctorIds)
   if (docErr) throw docErr
 

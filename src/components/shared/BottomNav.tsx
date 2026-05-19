@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell, CalendarDays, Receipt } from 'lucide-react';
+import { Home, Clipboard, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Bell } from 'lucide-react';
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -18,8 +18,6 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { to: '/mr/dashboard', icon: Home, label: 'Home' },
     { to: '/mr/report/new', icon: Clipboard, label: 'DCR' },
     { to: '/mr/master-list', icon: List, label: 'Doctors' },
-    { to: '/mr/tour-program', icon: CalendarDays, label: 'Tour' },
-    { to: '/mr/expense', icon: Receipt, label: 'Expense' },
     { to: '/mr/report/history', icon: History, label: 'History' },
   ],
   manager: [
