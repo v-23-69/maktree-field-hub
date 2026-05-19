@@ -59,6 +59,13 @@ function str(v: unknown): string {
   return typeof v === 'string' ? v : v != null ? String(v) : ''
 }
 
+/** Month bounds for views that aggregate by calendar month (timestamptz column `month`). */
+function monthFilterBounds(fromDate: string, toDate: string) {
+  const fromMonth = `${fromDate.slice(0, 7)}-01T00:00:00.000Z`
+  const toMonth = `${toDate.slice(0, 7)}-01T00:00:00.000Z`
+  return { fromMonth, toMonth }
+}
+
 function pick(
   row: Record<string, unknown>,
   keys: string[],
@@ -94,6 +101,7 @@ export function useManagerAnalytics(
       }
 
       try {
+        const { fromMonth, toMonth } = monthFilterBounds(fromDate, toDate)
         const [msRes, compRes, visitRes, areaRes, loyaltyRes, intelRes] = await Promise.all([
           supabase
             .from('v_monthly_support_summary')
@@ -121,20 +129,26 @@ export function useManagerAnalytics(
             .lte('report_date', toDate),
           supabase
             .from('v_area_performance')
-            .select('*')
+            .select(
+              'mr_id, area_id, area, sub_area_id, sub_area, product_name, doctors_covered, total_quantity, month',
+            )
             .in('mr_id', mrIds)
-            .gte('report_date', fromDate)
-            .lte('report_date', toDate),
+            .gte('month', fromMonth)
+            .lte('month', toMonth),
           supabase
             .from('v_doctor_loyalty')
-            .select('*')
+            .select(
+              'mr_id, doctor_id, doctor_name, speciality, sub_area, area, product_name, months_written, total_quantity, last_written_date, first_written_date',
+            )
             .in('mr_id', mrIds),
           supabase
             .from('v_competitor_intelligence')
-            .select('*')
+            .select(
+              'mr_id, competitor_brand, sub_area, area, doctor_speciality, doctor_count, total_quantity, month',
+            )
             .in('mr_id', mrIds)
-            .gte('report_date', fromDate)
-            .lte('report_date', toDate),
+            .gte('month', fromMonth)
+            .lte('month', toMonth),
         ])
 
         if (msRes.error) throw msRes.error
