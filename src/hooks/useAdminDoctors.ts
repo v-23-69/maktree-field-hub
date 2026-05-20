@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { generateDoctorCode } from '@/lib/doctorCode'
 import { supabase } from '@/lib/supabase'
 import type { Doctor, SubArea, Area } from '@/types/database.types'
 
@@ -43,7 +44,7 @@ export function useAddDoctor() {
           sub_area_id: p.sub_area_id,
           full_name: p.full_name.trim(),
           speciality: p.speciality.trim() || null,
-          doctor_code: '',
+          doctor_code: generateDoctorCode(),
           is_active: true,
         })
         if (error) throw error

@@ -115,6 +115,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (session?.user) {
+          const { error: userErr } = await supabase.auth.getUser()
+          if (userErr) {
+            const um = [userErr.message, userErr.name].filter(Boolean).join(' ')
+            if (/refresh|invalid|token|not found|jwt|session|expired/i.test(um)) {
+              await supabase.auth.signOut({ scope: 'local' })
+              setUser(null)
+              setAuthReady(true)
+              setIsProfileLoading(false)
+              sessionStorage.removeItem(PROFILE_CACHE_KEY)
+              return
+            }
+          }
           void loadProfile(session.user.id, true)
         } else {
           setUser(null)

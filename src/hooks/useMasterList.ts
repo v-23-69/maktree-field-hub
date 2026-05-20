@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { generateDoctorCode } from '@/lib/doctorCode'
 import { supabase } from '@/lib/supabase'
 import type {
   Doctor,
@@ -46,6 +47,18 @@ function normalizeNullableString(v: string): string | null {
   return t ? t : null
 }
 
+function normalizeOptionalDateYmd(v: string): string | null {
+  const t = v.trim()
+  return t ? t : null
+}
+
+function formatDoctorInsertError(err: { code?: string; message?: string }): string {
+  if (err.code === '23505') {
+    return 'Could not save this doctor because of a duplicate record. Try again; if it keeps happening, contact support.'
+  }
+  return err.message || 'Could not add doctor'
+}
+
 export function useUpdateDoctorDetail() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -68,8 +81,8 @@ export function useUpdateDoctorDetail() {
         address: normalizeNullableString(p.address),
         city: normalizeNullableString(p.city),
         mobile: normalizeNullableString(p.mobile),
-        birthday: p.birthday ? p.birthday : null,
-        marriage_anniversary: p.marriage_anniversary ? p.marriage_anniversary : null,
+        birthday: normalizeOptionalDateYmd(p.birthday),
+        marriage_anniversary: normalizeOptionalDateYmd(p.marriage_anniversary),
         visit_frequency: p.visit_frequency,
         monthly_visit_target: Math.min(99, Math.max(1, Math.round(p.monthly_visit_target))),
         speciality: normalizeNullableString(p.speciality),
@@ -109,14 +122,15 @@ export function useAddDoctorToSubArea() {
         .from('doctors')
         .insert({
           sub_area_id: p.subAreaId,
+          doctor_code: generateDoctorCode(),
           full_name: p.fullName.trim(),
           speciality: normalizeNullableString(p.speciality),
           qualification: normalizeNullableString(p.qualification),
           address: normalizeNullableString(p.address),
           city: normalizeNullableString(p.city),
           mobile: normalizeNullableString(p.mobile),
-          birthday: p.birthday ? p.birthday : null,
-          marriage_anniversary: p.marriage_anniversary ? p.marriage_anniversary : null,
+          birthday: normalizeOptionalDateYmd(p.birthday),
+          marriage_anniversary: normalizeOptionalDateYmd(p.marriage_anniversary),
           visit_frequency: p.visit_frequency,
           monthly_visit_target: Math.min(99, Math.max(1, Math.round(p.monthly_visit_target))),
           is_active: true,
@@ -124,24 +138,15 @@ export function useAddDoctorToSubArea() {
         .select('id')
         .single()
 
-      if (insErr) throw insErr
+      if (insErr) throw new Error(formatDoctorInsertError(insErr))
+
       const id = (inserted as { id: string }).id
 
-      // Ensure MR already has access to the sub-area (should exist, but make it idempotent).
-      const { data: existingAccess, error: exErr } = await supabase
-        .from('mr_sub_area_access')
-        .select('id')
-        .eq('mr_id', p.mrId)
-        .eq('sub_area_id', p.subAreaId)
-        .maybeSingle()
-      if (exErr) throw exErr
-
-      if (!existingAccess?.id) {
-        const { error: aErr } = await supabase
-          .from('mr_sub_area_access')
-          .insert({ mr_id: p.mrId, sub_area_id: p.subAreaId })
-        if (aErr) throw aErr
-      }
+      const { error: aErr } = await supabase.rpc('assign_sub_area_to_mr', {
+        p_mr_id: p.mrId,
+        p_sub_area_id: p.subAreaId,
+      })
+      if (aErr) throw aErr
 
       return { id }
     },

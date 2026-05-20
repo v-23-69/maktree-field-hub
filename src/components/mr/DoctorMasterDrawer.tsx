@@ -248,7 +248,7 @@ export default function DoctorMasterDrawer({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Birthday
+                Birthday (optional)
               </Label>
               <Input
                 type="date"
@@ -259,7 +259,7 @@ export default function DoctorMasterDrawer({
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Marriage Anniversary
+                Marriage anniversary (optional)
               </Label>
               <Input
                 type="date"
@@ -269,6 +269,9 @@ export default function DoctorMasterDrawer({
               />
             </div>
           </div>
+          <p className="text-[11px] text-muted-foreground -mt-2">
+            You can add birthday and anniversary later when completing the doctor profile.
+          </p>
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
