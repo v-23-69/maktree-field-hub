@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
-import type { Doctor } from '@/types/database.types'
+import type { Chemist, Doctor } from '@/types/database.types'
+
+/** Stable empty list so useEffect deps do not change identity every render when query data is undefined. */
+const EMPTY_CHEMISTS: Chemist[] = []
 import {
   useDoctorDetail,
   useAddDoctorToSubArea,
@@ -85,9 +88,10 @@ export default function DoctorMasterDrawer({
   const [chemistRows, setChemistRows] = useState<ChemistFormRow[]>([])
   const lastChemistHydrateKey = useRef<string | null>(null)
 
-  const { data: linkedChemists = [], isFetching: chemistsFetching } = useChemistsByDoctor(
+  const { data: linkedChemistsData, isFetching: chemistsFetching } = useChemistsByDoctor(
     open && isEdit && doctorId ? doctorId : '',
   )
+  const linkedChemists = linkedChemistsData ?? EMPTY_CHEMISTS
 
   const canSave = useMemo(() => {
     if (!open) return false
@@ -242,6 +246,11 @@ export default function DoctorMasterDrawer({
           <DrawerTitle className="text-base break-words">
             {isEdit ? activeDoctor?.full_name ?? 'Doctor' : 'Add doctor'}
           </DrawerTitle>
+          <DrawerDescription className="sr-only">
+            {isEdit
+              ? 'Review or update this doctor profile, visit targets, and linked chemists.'
+              : 'Enter details to add a new doctor to this sub-area.'}
+          </DrawerDescription>
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
             {isEdit ? (
               <>
