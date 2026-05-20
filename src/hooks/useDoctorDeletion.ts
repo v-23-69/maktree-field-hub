@@ -65,6 +65,7 @@ export function useRequestDoctorDeletion() {
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['doctor-deletion-requests-mr', v.mr_id] })
       qc.invalidateQueries({ queryKey: ['doctor-deletion-requests-mgr'] })
+      qc.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }
@@ -102,7 +103,7 @@ export function useResolveDoctorDeletion() {
       qc.invalidateQueries({ queryKey: ['mr-doctors'] })
       qc.invalidateQueries({ queryKey: ['master-list-completion'] })
       qc.invalidateQueries({ queryKey: ['doctor-detail'] })
-      qc.invalidateQueries({ queryKey: ['manager-leaves'] })
+      qc.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }

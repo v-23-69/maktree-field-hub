@@ -1,16 +1,29 @@
 import { useMemo, useState } from 'react'
+import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerUnlockRequests, useResolveUnlockRequest } from '@/hooks/useUnlockRequests'
+import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
+import { useManagerDoctorDeletionRequests, useResolveDoctorDeletion } from '@/hooks/useDoctorDeletion'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { AlertTriangle, CalendarDays, CheckCircle2, KeyRound, Trash2, XCircle } from 'lucide-react'
+import {
+  AlertTriangle,
+  CalendarDays,
+  CalendarOff,
+  CheckCircle2,
+  KeyRound,
+  Trash2,
+  UserRoundX,
+  XCircle,
+} from 'lucide-react'
 import {
   useManagerPendingTourPrograms,
   useResolveTourProgram,
@@ -22,12 +35,14 @@ import { useManagerMrs } from '@/hooks/useManagerTeam'
 import { useAllAreas } from '@/hooks/useAreas'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
+import { formatDisplayDate } from '@/lib/dateUtils'
+import type { DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
 
-type RequestKind = 'unlock' | 'tour-program' | 'tp-deletion'
+type RequestKind = 'unlock' | 'tour-program' | 'tp-deletion' | 'leave' | 'doctor-removal'
 
 const KIND_META: Record<
   RequestKind,
-  { label: string; className: string; icon: typeof KeyRound }
+  { label: string; className: string; icon: LucideIcon }
 > = {
   unlock: {
     label: 'DCR unlock',
@@ -43,6 +58,16 @@ const KIND_META: Record<
     label: 'TP deletion',
     className: 'bg-amber-500/10 text-amber-900 border-amber-500/30 dark:text-amber-200',
     icon: Trash2,
+  },
+  leave: {
+    label: 'Leave',
+    className: 'bg-sky-500/10 text-sky-900 border-sky-500/30 dark:text-sky-200',
+    icon: CalendarOff,
+  },
+  'doctor-removal': {
+    label: 'Doctor removal',
+    className: 'bg-rose-500/10 text-rose-900 border-rose-500/30 dark:text-rose-200',
+    icon: UserRoundX,
   },
 }
 
@@ -79,6 +104,11 @@ export default function UnlockRequests() {
 
   const { data: tpDeletionReqs = [], isLoading: tpDelLoading } = useTpDeletionRequestsForManager()
   const resolveTpDeletion = useResolveTourProgramDeletionRequest()
+  const { data: leaves = [], isLoading: leavesLoading } = useManagerLeaves(managerId)
+  const { data: doctorRemovalReqs = [], isLoading: docDelListLoading } =
+    useManagerDoctorDeletionRequests(managerId)
+  const resolveLeave = useResolveLeave()
+  const resolveDoctorDeletion = useResolveDoctorDeletion()
   const { data: teamMrs = [] } = useManagerMrs(managerId)
   const mrNameById = useMemo(() => new Map(teamMrs.map(m => [m.id, m.full_name?.trim() || 'MR'] as const)), [teamMrs])
 
@@ -120,9 +150,22 @@ export default function UnlockRequests() {
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState('')
   const [tpDelNotes, setTpDelNotes] = useState<Record<string, string>>({})
+  const [leaveNoteById, setLeaveNoteById] = useState<Record<string, string>>({})
+  const [docRemovalNoteById, setDocRemovalNoteById] = useState<Record<string, string>>({})
 
-  const pendingActionCount = pending.length + pendingTp.length + tpDeletionReqs.length
-  const isLoading = unlockLoading || tpLoading || tpDelLoading
+  const pendingLeaves = useMemo(() => leaves.filter(l => l.status === 'pending'), [leaves])
+  const pendingDocRemovals = useMemo(
+    () => doctorRemovalReqs.filter(r => r.status === 'pending'),
+    [doctorRemovalReqs],
+  )
+
+  const pendingActionCount =
+    pending.length +
+    pendingTp.length +
+    tpDeletionReqs.length +
+    pendingLeaves.length +
+    pendingDocRemovals.length
+  const isLoading = unlockLoading || tpLoading || tpDelLoading || leavesLoading || docDelListLoading
 
   const statusBadge = (status: string) => {
     if (status === 'approved') {
@@ -470,6 +513,147 @@ export default function UnlockRequests() {
     </div>
   )
 
+  const renderLeaveCard = (leave: LeaveRequest) => (
+    <div key={`leave-${leave.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <KindBadge kind="leave" />
+        <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
+        <p className="text-xs text-muted-foreground">
+          {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')} ·{' '}
+          {(leave.leave_category ?? 'casual') === 'sick' ? 'Sick' : 'Casual'}
+        </p>
+        <p className="text-sm text-foreground">{leave.reason}</p>
+      </div>
+      <div>
+        <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider" htmlFor={`leave-note-${leave.id}`}>
+          Manager note
+        </label>
+        <Input
+          id={`leave-note-${leave.id}`}
+          className="mt-1 rounded-lg text-sm"
+          value={leaveNoteById[leave.id] ?? ''}
+          onChange={e => setLeaveNoteById(prev => ({ ...prev, [leave.id]: e.target.value }))}
+          placeholder="Optional note…"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-600/90"
+          disabled={resolveLeave.isPending}
+          onClick={() =>
+            void resolveLeave
+              .mutateAsync({
+                leaveId: leave.id,
+                status: 'approved',
+                managerNote: leaveNoteById[leave.id],
+                resolverUserId: managerId,
+              })
+              .then(() => toast.success('Leave approved'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Approve
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className="rounded-lg"
+          disabled={resolveLeave.isPending}
+          onClick={() =>
+            void resolveLeave
+              .mutateAsync({
+                leaveId: leave.id,
+                status: 'rejected',
+                managerNote: leaveNoteById[leave.id],
+                resolverUserId: managerId,
+              })
+              .then(() => toast.success('Leave rejected'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Reject
+        </Button>
+      </div>
+    </div>
+  )
+
+  const renderDoctorRemovalCard = (req: DoctorDeletionRequest) => (
+    <div key={`docdel-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <KindBadge kind="doctor-removal" />
+        <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-foreground">{req.mr?.full_name ?? 'MR'}</p>
+        <p className="text-xs text-muted-foreground">
+          Doctor: <span className="font-medium text-foreground">{req.doctor?.full_name ?? '—'}</span>
+          {req.doctor?.speciality ? ` · ${req.doctor.speciality}` : ''}
+        </p>
+        {req.reason ? <p className="text-sm text-foreground">{req.reason}</p> : null}
+      </div>
+      <div>
+        <label
+          className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider"
+          htmlFor={`docdel-note-${req.id}`}
+        >
+          Manager note
+        </label>
+        <Input
+          id={`docdel-note-${req.id}`}
+          className="mt-1 rounded-lg text-sm"
+          value={docRemovalNoteById[req.id] ?? ''}
+          onChange={e => setDocRemovalNoteById(prev => ({ ...prev, [req.id]: e.target.value }))}
+          placeholder="Optional note…"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-600/90"
+          disabled={resolveDoctorDeletion.isPending}
+          onClick={() =>
+            void resolveDoctorDeletion
+              .mutateAsync({
+                requestId: req.id,
+                status: 'approved',
+                managerNote: docRemovalNoteById[req.id],
+                resolverUserId: managerId,
+                doctorId: req.doctor_id,
+              })
+              .then(() => toast.success('Doctor deactivated'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Approve removal
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className="rounded-lg"
+          disabled={resolveDoctorDeletion.isPending}
+          onClick={() =>
+            void resolveDoctorDeletion
+              .mutateAsync({
+                requestId: req.id,
+                status: 'rejected',
+                managerNote: docRemovalNoteById[req.id],
+                resolverUserId: managerId,
+                doctorId: req.doctor_id,
+              })
+              .then(() => toast.success('Request rejected'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Reject
+        </Button>
+      </div>
+    </div>
+  )
+
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Requests" />
@@ -495,6 +679,8 @@ export default function UnlockRequests() {
                   {pending.map(req => renderUnlockCard(req))}
                   {pendingTp.map(tp => renderTourProgramCard(tp))}
                   {tpDeletionReqs.map(req => renderTpDeletionCard(req))}
+                  {pendingLeaves.map(leave => renderLeaveCard(leave))}
+                  {pendingDocRemovals.map(req => renderDoctorRemovalCard(req))}
                 </div>
               )}
             </div>

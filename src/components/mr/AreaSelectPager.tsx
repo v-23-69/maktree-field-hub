@@ -1,5 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { MasterListCompletion, SubArea } from '@/types/database.types'
 
@@ -33,7 +32,7 @@ function AreaCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        'rounded-xl border px-2.5 py-3 text-left transition-all touch-manipulation flex flex-col justify-between w-full self-start',
+        'rounded-xl border px-2.5 py-3 text-left transition-all flex flex-col justify-between w-full self-start touch-manipulation',
         CARD_HEIGHT,
         active
           ? 'border-primary bg-primary text-primary-foreground shadow-sm ring-2 ring-primary/20'
@@ -74,21 +73,52 @@ export default function AreaSelectPager({ subAreas, selectedId, completionBySubA
     return chunks
   }, [subAreas])
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const skipScrollSyncRef = useRef(false)
   const [pageIndex, setPageIndex] = useState(0)
   const pageCount = pages.length
+
+  const scrollToPage = useCallback(
+    (page: number, behavior: ScrollBehavior = 'smooth') => {
+      const el = scrollRef.current
+      if (!el || pageCount < 1) return
+      const clamped = Math.max(0, Math.min(pageCount - 1, page))
+      const w = el.clientWidth
+      if (w <= 0) return
+      skipScrollSyncRef.current = true
+      el.scrollTo({ left: clamped * w, behavior })
+      window.setTimeout(() => {
+        skipScrollSyncRef.current = false
+      }, behavior === 'instant' || behavior === 'auto' ? 50 : 350)
+    },
+    [pageCount],
+  )
 
   useEffect(() => {
     if (!selectedId || subAreas.length === 0) return
     const idx = subAreas.findIndex(sa => sa.id === selectedId)
-    if (idx >= 0) setPageIndex(Math.floor(idx / PER_PAGE))
-  }, [selectedId, subAreas])
+    if (idx < 0) return
+    const page = Math.floor(idx / PER_PAGE)
+    setPageIndex(page)
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollToPage(page, 'instant'))
+    })
+    return () => cancelAnimationFrame(id)
+  }, [selectedId, subAreas, scrollToPage])
 
   useEffect(() => {
     if (pageIndex > pageCount - 1) setPageIndex(Math.max(0, pageCount - 1))
   }, [pageCount, pageIndex])
 
-  const goPrev = () => setPageIndex(p => Math.max(0, p - 1))
-  const goNext = () => setPageIndex(p => Math.min(pageCount - 1, p + 1))
+  const onScroll = useCallback(() => {
+    if (skipScrollSyncRef.current) return
+    const el = scrollRef.current
+    if (!el || pageCount < 2) return
+    const w = el.clientWidth
+    if (w <= 0) return
+    const idx = Math.round(el.scrollLeft / w)
+    setPageIndex(Math.max(0, Math.min(pageCount - 1, idx)))
+  }, [pageCount])
 
   if (subAreas.length === 0) return null
 
@@ -103,80 +133,56 @@ export default function AreaSelectPager({ subAreas, selectedId, completionBySubA
         )}
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl">
-        <div
-          className="flex transition-transform duration-300 ease-out"
-          style={{ transform: `translateX(-${pageIndex * 100}%)` }}
-        >
-          {pages.map((pageAreas, pageKey) => (
-            <div
-              key={pageKey}
-              className="w-full shrink-0 grid grid-cols-2 gap-2 p-0.5 items-start content-start"
-            >
-              {Array.from({ length: PER_PAGE }, (_, slot) => {
-                const sa = pageAreas[slot]
-                if (!sa) {
-                  return <div key={`pad-${pageKey}-${slot}`} className={CARD_HEIGHT} aria-hidden />
-                }
-                return (
-                  <AreaCard
-                    key={sa.id}
-                    sa={sa}
-                    active={sa.id === selectedId}
-                    completion={completionBySubArea.get(sa.id)}
-                    onSelect={() => onSelect(sa.id)}
-                  />
-                )
-              })}
-            </div>
-          ))}
-        </div>
+      <div
+        ref={scrollRef}
+        onScroll={onScroll}
+        className={cn(
+          'flex overflow-x-auto scroll-smooth snap-x snap-mandatory rounded-2xl',
+          'touch-pan-x [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+        )}
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        {pages.map((pageAreas, pageKey) => (
+          <div
+            key={pageKey}
+            className="w-full min-w-full shrink-0 snap-center snap-always box-border grid grid-cols-2 gap-2 p-0.5 items-start content-start"
+          >
+            {Array.from({ length: PER_PAGE }, (_, slot) => {
+              const sa = pageAreas[slot]
+              if (!sa) {
+                return <div key={`pad-${pageKey}-${slot}`} className={CARD_HEIGHT} aria-hidden />
+              }
+              return (
+                <AreaCard
+                  key={sa.id}
+                  sa={sa}
+                  active={sa.id === selectedId}
+                  completion={completionBySubArea.get(sa.id)}
+                  onSelect={() => onSelect(sa.id)}
+                />
+              )
+            })}
+          </div>
+        ))}
       </div>
 
       {pageCount > 1 && (
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={goPrev}
-            disabled={pageIndex === 0}
-            className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card transition-all touch-manipulation',
-              pageIndex === 0 ? 'opacity-40 pointer-events-none' : 'hover:bg-muted active:scale-95',
-            )}
-            aria-label="Previous areas"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-
-          <div className="flex items-center justify-center gap-1.5 flex-1">
-            {pages.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => setPageIndex(i)}
-                className={cn(
-                  'h-1.5 rounded-full transition-all touch-manipulation',
-                  i === pageIndex ? 'w-5 bg-primary' : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
-                )}
-                aria-label={`Go to page ${i + 1}`}
-              />
-            ))}
-          </div>
-
-          <button
-            type="button"
-            onClick={goNext}
-            disabled={pageIndex >= pageCount - 1}
-            className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-card transition-all touch-manipulation',
-              pageIndex >= pageCount - 1
-                ? 'opacity-40 pointer-events-none'
-                : 'hover:bg-muted active:scale-95',
-            )}
-            aria-label="Next areas"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
+        <div className="flex items-center justify-center gap-1.5">
+          {pages.map((_, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                setPageIndex(i)
+                scrollToPage(i, 'smooth')
+              }}
+              className={cn(
+                'h-1.5 rounded-full transition-all touch-manipulation',
+                i === pageIndex ? 'w-5 bg-primary' : 'w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/50',
+              )}
+              aria-label={`Areas page ${i + 1}`}
+            />
+          ))}
         </div>
       )}
     </section>

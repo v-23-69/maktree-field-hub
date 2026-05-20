@@ -1,13 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
-import { CheckCircle2, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { Doctor } from '@/types/database.types'
-import { useDoctorDetail, useAddDoctorToSubArea, useUpdateDoctorDetail } from '@/hooks/useMasterList'
+import {
+  useDoctorDetail,
+  useAddDoctorToSubArea,
+  useUpdateDoctorDetail,
+  useSyncDoctorChemists,
+} from '@/hooks/useMasterList'
+import { useChemistsByDoctor } from '@/hooks/useDoctors'
 import { useManagersForMr } from '@/hooks/useManagers'
 import { useMyDoctorDeletionRequests, useRequestDoctorDeletion } from '@/hooks/useDoctorDeletion'
 
@@ -18,6 +24,14 @@ function visitFrequencyForSave(
 ): VisitCadence | null {
   if (v === 'weekly' || v === 'fortnightly' || v === 'monthly') return v
   return null
+}
+
+type ChemistFormRow = {
+  clientKey: string
+  chemistId?: string
+  name: string
+  ownerName: string
+  ownerContact: string
 }
 
 interface Props {
@@ -47,6 +61,7 @@ export default function DoctorMasterDrawer({
 
   const updateDoctor = useUpdateDoctorDetail()
   const addDoctor = useAddDoctorToSubArea()
+  const syncChemists = useSyncDoctorChemists()
   const { data: managers = [] } = useManagersForMr(mrId)
   const { data: myDeletionReqs = [] } = useMyDoctorDeletionRequests(mrId)
   const requestDeletion = useRequestDoctorDeletion()
@@ -67,6 +82,12 @@ export default function DoctorMasterDrawer({
   const [visitFrequency, setVisitFrequency] = useState<VisitCadence | ''>('')
   const [monthlyVisitTarget, setMonthlyVisitTarget] = useState(2)
   const [removalReason, setRemovalReason] = useState('')
+  const [chemistRows, setChemistRows] = useState<ChemistFormRow[]>([])
+  const lastChemistHydrateKey = useRef<string | null>(null)
+
+  const { data: linkedChemists = [], isFetching: chemistsFetching } = useChemistsByDoctor(
+    open && isEdit && doctorId ? doctorId : '',
+  )
 
   const canSave = useMemo(() => {
     if (!open) return false
@@ -94,6 +115,65 @@ export default function DoctorMasterDrawer({
     setRemovalReason('')
   }, [open, activeDoctor])
 
+  useEffect(() => {
+    if (!open) {
+      setChemistRows([])
+      lastChemistHydrateKey.current = null
+      return
+    }
+    if (!isEdit || !doctorId) {
+      setChemistRows([])
+      lastChemistHydrateKey.current = 'add'
+      return
+    }
+    if (chemistsFetching) return
+    const hydrateKey = `${doctorId}:${linkedChemists
+      .map(c => c.id)
+      .sort()
+      .join(',')}`
+    if (lastChemistHydrateKey.current === hydrateKey) return
+    lastChemistHydrateKey.current = hydrateKey
+    setChemistRows(
+      linkedChemists.map(c => ({
+        clientKey: c.id,
+        chemistId: c.id,
+        name: c.name,
+        ownerName: c.owner_name ?? '',
+        ownerContact: c.owner_contact ?? '',
+      })),
+    )
+  }, [open, isEdit, doctorId, chemistsFetching, linkedChemists])
+
+  useEffect(() => {
+    lastChemistHydrateKey.current = null
+  }, [doctorId])
+
+  const addChemistRow = () => {
+    setChemistRows(prev => [
+      ...prev,
+      { clientKey: crypto.randomUUID(), name: '', ownerName: '', ownerContact: '' },
+    ])
+  }
+
+  const removeChemistRow = (clientKey: string) => {
+    setChemistRows(prev => prev.filter(r => r.clientKey !== clientKey))
+  }
+
+  const patchChemistRow = (clientKey: string, patch: Partial<ChemistFormRow>) => {
+    setChemistRows(prev => prev.map(r => (r.clientKey === clientKey ? { ...r, ...patch } : r)))
+  }
+
+  const chemistPayload = useMemo(
+    () =>
+      chemistRows.map(r => ({
+        chemistId: r.chemistId,
+        name: r.name,
+        ownerName: r.ownerName,
+        ownerContact: r.ownerContact,
+      })),
+    [chemistRows],
+  )
+
   const handleSave = async () => {
     try {
       if (!open) return
@@ -110,6 +190,11 @@ export default function DoctorMasterDrawer({
           monthly_visit_target: monthlyVisitTarget,
           speciality,
         })
+        await syncChemists.mutateAsync({
+          doctorId,
+          subAreaId,
+          rows: chemistPayload,
+        })
         toast.success('Doctor details saved')
         onSaved()
         onClose()
@@ -121,7 +206,7 @@ export default function DoctorMasterDrawer({
         return
       }
 
-      await addDoctor.mutateAsync({
+      const { id } = await addDoctor.mutateAsync({
         mrId,
         subAreaId,
         fullName,
@@ -135,6 +220,11 @@ export default function DoctorMasterDrawer({
         visit_frequency: visitFrequencyForSave(visitFrequency),
         monthly_visit_target: monthlyVisitTarget,
       })
+      await syncChemists.mutateAsync({
+        doctorId: id,
+        subAreaId,
+        rows: chemistPayload,
+      })
       toast.success('New doctor added')
       onSaved()
       onClose()
@@ -143,19 +233,19 @@ export default function DoctorMasterDrawer({
     }
   }
 
-  const savePending = updateDoctor.isPending || addDoctor.isPending
+  const savePending = updateDoctor.isPending || addDoctor.isPending || syncChemists.isPending
 
   return (
     <Drawer open={open} onOpenChange={v => { if (!v) onClose() }}>
       <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[10px] border bg-background p-0 gap-0">
         <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2">
           <DrawerTitle className="text-base break-words">
-            {isEdit ? activeDoctor?.full_name ?? 'Doctor' : 'Add New Doctor'}
+            {isEdit ? activeDoctor?.full_name ?? 'Doctor' : 'Add doctor'}
           </DrawerTitle>
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
             {isEdit ? (
               <>
-                <span>Sr. No.: {activeDoctor?.doctor_code ?? '—'}</span>
+                <span>{activeDoctor?.doctor_code ?? '—'}</span>
                 {activeDoctor?.master_list_complete ? (
                   <span className="inline-flex items-center gap-1 text-emerald-700">
                     <CheckCircle2 className="h-3.5 w-3.5" />
@@ -169,7 +259,7 @@ export default function DoctorMasterDrawer({
                 )}
               </>
             ) : (
-              <span>Area: {subAreaName?.trim() || '—'}</span>
+              <span>{subAreaName?.trim() || '—'}</span>
             )}
           </div>
         </DrawerHeader>
@@ -177,7 +267,7 @@ export default function DoctorMasterDrawer({
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4 space-y-4">
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Doctor Name
+              Name
             </Label>
             <Input
               value={fullName}
@@ -212,7 +302,7 @@ export default function DoctorMasterDrawer({
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Address (complete address + area)
+              Address
             </Label>
             <Textarea
               value={address}
@@ -245,10 +335,86 @@ export default function DoctorMasterDrawer({
             </div>
           </div>
 
+          <div className="rounded-xl border border-border/80 bg-muted/20 p-3 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Chemists
+              </Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 gap-1 rounded-lg px-2.5 text-xs touch-manipulation"
+                onClick={addChemistRow}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add
+              </Button>
+            </div>
+            {isEdit && chemistsFetching && chemistRows.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">Loading…</p>
+            ) : chemistRows.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">Optional. Link one or more outlets to this doctor.</p>
+            ) : (
+              <div className="space-y-2.5">
+                {chemistRows.map((row, idx) => (
+                  <div
+                    key={row.clientKey}
+                    className="rounded-lg border border-border bg-card p-3 space-y-2.5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-wide pt-0.5">
+                        Chemist {idx + 1}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => removeChemistRow(row.clientKey)}
+                        className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive touch-manipulation"
+                        aria-label="Remove chemist"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] text-muted-foreground">Name</Label>
+                      <Input
+                        value={row.name}
+                        onChange={e => patchChemistRow(row.clientKey, { name: e.target.value })}
+                        placeholder="Chemist / outlet name"
+                        className="h-9 rounded-lg text-sm"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] text-muted-foreground">Owner (optional)</Label>
+                        <Input
+                          value={row.ownerName}
+                          onChange={e => patchChemistRow(row.clientKey, { ownerName: e.target.value })}
+                          placeholder="—"
+                          className="h-9 rounded-lg text-sm"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] text-muted-foreground">Contact (optional)</Label>
+                        <Input
+                          value={row.ownerContact}
+                          onChange={e => patchChemistRow(row.clientKey, { ownerContact: e.target.value })}
+                          placeholder="—"
+                          inputMode="tel"
+                          className="h-9 rounded-lg text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Birthday (optional)
+                Birthday
               </Label>
               <Input
                 type="date"
@@ -259,7 +425,7 @@ export default function DoctorMasterDrawer({
             </div>
             <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Marriage anniversary (optional)
+                Anniversary
               </Label>
               <Input
                 type="date"
@@ -269,17 +435,11 @@ export default function DoctorMasterDrawer({
               />
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground -mt-2">
-            You can add birthday and anniversary later when completing the doctor profile.
-          </p>
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Monthly visit target (DCR calls)
+              Visits / month
             </Label>
-            <p className="text-[11px] text-muted-foreground leading-snug">
-              How many field visits with this doctor count toward the monthly goal (resets each calendar month).
-            </p>
             <Input
               type="number"
               min={1}
@@ -292,7 +452,7 @@ export default function DoctorMasterDrawer({
 
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Visit cadence (optional)
+              Cadence
             </Label>
             <select
               value={visitFrequency}
@@ -304,7 +464,7 @@ export default function DoctorMasterDrawer({
               }}
               className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
             >
-              <option value="">Not set</option>
+              <option value="">—</option>
               <option value="weekly">Weekly</option>
               <option value="fortnightly">Fortnightly</option>
               <option value="monthly">Monthly</option>
@@ -314,19 +474,16 @@ export default function DoctorMasterDrawer({
           {isEdit && doctorId && (
             <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Remove doctor from your list
+                Request removal
               </Label>
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Sends a request to your manager. If they approve, this doctor is removed from active lists.
-              </p>
               {pendingRemoval ? (
-                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Awaiting manager approval.</p>
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Pending approval</p>
               ) : (
                 <>
                   <Textarea
                     value={removalReason}
                     onChange={e => setRemovalReason(e.target.value)}
-                    placeholder="Optional note for your manager"
+                    placeholder="Note (optional)"
                     className="touch-target rounded-lg min-h-[72px] text-sm"
                   />
                   <Button

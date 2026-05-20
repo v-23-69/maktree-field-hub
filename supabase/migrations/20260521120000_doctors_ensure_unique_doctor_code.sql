@@ -17,7 +17,7 @@ DROP TRIGGER IF EXISTS trg_doctors_ensure_doctor_code ON public.doctors;
 CREATE TRIGGER trg_doctors_ensure_doctor_code
   BEFORE INSERT OR UPDATE OF doctor_code ON public.doctors
   FOR EACH ROW
-  EXECUTE PROCEDURE public.fn_doctors_ensure_doctor_code();
+  EXECUTE FUNCTION public.fn_doctors_ensure_doctor_code();
 
 UPDATE public.doctors d
 SET doctor_code = 'MR' || upper(replace(gen_random_uuid()::text, '-', ''))

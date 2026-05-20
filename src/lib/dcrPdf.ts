@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { toast } from 'sonner'
 import type { DailyReport, ReportVisit } from '@/types/database.types'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import { doctorTerritoryLabels } from '@/lib/doctorTerritory'
@@ -274,4 +275,61 @@ export function saveDcrReportsPdf(
 
   const safe = options.fileName.replace(/[^\w.-]+/g, '_')
   doc.save(safe.endsWith('.pdf') ? safe : `${safe}.pdf`)
+}
+
+function raf2(): Promise<void> {
+  return new Promise(resolve => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+  })
+}
+
+/**
+ * Runs synchronous PDF generation while showing a Sonner toast with a climbing % (best-effort),
+ * then success or error on the same toast id.
+ */
+export async function withPdfGenerationProgress(
+  generatePdf: () => void,
+  options?: { initialToastId?: string | number; startedMessage?: string },
+): Promise<void> {
+  const started = options?.startedMessage ?? 'Download started — 0%'
+  const id =
+    options?.initialToastId ??
+    toast.loading(started, {
+      duration: 120_000,
+      className: 'gap-2',
+      description: 'Preparing your PDF…',
+    })
+  if (options?.initialToastId == null) {
+    await raf2()
+  }
+
+  let pct = options?.initialToastId != null ? 25 : 5
+  toast.loading(`Downloading… ${pct}%`, { id, duration: 120_000, description: 'Generating document…' })
+
+  const interval = window.setInterval(() => {
+    pct = Math.min(92, pct + 6)
+    toast.loading(`Downloading… ${pct}%`, { id, duration: 120_000, description: 'Generating document…' })
+  }, 110)
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      queueMicrotask(() => {
+        try {
+          generatePdf()
+          resolve()
+        } catch (e) {
+          reject(e)
+        }
+      })
+    })
+    window.clearInterval(interval)
+    toast.loading('Downloading… 100%', { id, duration: 4_000, description: 'Finishing…' })
+    await new Promise<void>(r => setTimeout(r, 220))
+    toast.success('PDF downloaded', { id })
+  } catch (e) {
+    window.clearInterval(interval)
+    const msg = e instanceof Error ? e.message : 'Download failed'
+    toast.error(msg, { id })
+    throw e
+  }
 }

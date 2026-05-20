@@ -82,6 +82,7 @@ export function useApplyLeave() {
     onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['mr-leaves', vars.mr_id] })
       queryClient.invalidateQueries({ queryKey: ['manager-leaves'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }
@@ -110,6 +111,7 @@ export function useResolveLeave() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-leaves'] })
       queryClient.invalidateQueries({ queryKey: ['mr-leaves'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }

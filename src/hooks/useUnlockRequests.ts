@@ -63,6 +63,7 @@ export function useResolveUnlockRequest() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-unlock-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }

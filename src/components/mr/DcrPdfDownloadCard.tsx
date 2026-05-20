@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { fetchSubmittedReportsWithVisitsForMrInDateRange } from '@/hooks/useReport'
-import { saveDcrReportsPdf } from '@/lib/dcrPdf'
+import { saveDcrReportsPdf, withPdfGenerationProgress } from '@/lib/dcrPdf'
 import { formatInputDate, lastDayOfMonthYyyyMmDd, todayInputDate } from '@/lib/dateUtils'
 
 type Preset = 'today' | 'last7' | 'thisMonth' | 'range'
@@ -51,20 +51,31 @@ export default function DcrPdfDownloadCard({ mrId, mrName }: Props) {
       return
     }
     setBusy(true)
+    const tid = toast.loading('Download started — 0%', {
+      duration: 120_000,
+      description: 'Fetching submitted DCRs…',
+    })
     try {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      })
       const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(supabase, mrId, fromDate, toDate)
       if (rows.length === 0) {
-        toast.error('No submitted DCRs in that range.')
+        toast.error('No submitted DCRs in that range.', { id: tid })
         return
       }
       const safeName = mrName?.replace(/\s+/g, '_') ?? 'DCR'
-      saveDcrReportsPdf(rows, {
-        fileName: `DCR_${safeName}_${fromDate}_to_${toDate}.pdf`,
-        documentTitle: `Daily Call Reports — ${fromDate} to ${toDate}`,
-      })
-      toast.success('PDF downloaded')
+      toast.loading('Downloading… 20%', { id: tid, duration: 120_000, description: 'Building PDF…' })
+      await withPdfGenerationProgress(
+        () =>
+          saveDcrReportsPdf(rows, {
+            fileName: `DCR_${safeName}_${fromDate}_to_${toDate}.pdf`,
+            documentTitle: `Daily Call Reports — ${fromDate} to ${toDate}`,
+          }),
+        { initialToastId: tid },
+      )
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Download failed')
+      toast.error(e instanceof Error ? e.message : 'Download failed', { id: tid })
     } finally {
       setBusy(false)
     }

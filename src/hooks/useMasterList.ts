@@ -158,3 +158,87 @@ export function useAddDoctorToSubArea() {
   })
 }
 
+export type DoctorChemistRowInput = {
+  chemistId?: string
+  name: string
+  ownerName: string
+  ownerContact: string
+}
+
+export function useSyncDoctorChemists() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: {
+      doctorId: string
+      subAreaId: string
+      rows: DoctorChemistRowInput[]
+    }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+
+      const { data: maps, error: mapErr } = await supabase
+        .from('chemist_doctor_map')
+        .select('chemist_id')
+        .eq('doctor_id', p.doctorId)
+      if (mapErr) throw mapErr
+      const previousIds = new Set((maps ?? []).map((m: { chemist_id: string }) => m.chemist_id))
+      const keptIds = new Set<string>()
+
+      const nonEmpty = p.rows.filter(r => r.name.trim().length > 0)
+
+      for (const row of nonEmpty) {
+        const name = row.name.trim()
+        const ownerName = normalizeNullableString(row.ownerName)
+        const ownerContact = normalizeNullableString(row.ownerContact)
+
+        if (row.chemistId) {
+          const { error: uErr } = await supabase
+            .from('chemists')
+            .update({
+              name,
+              owner_name: ownerName,
+              owner_contact: ownerContact,
+            })
+            .eq('id', row.chemistId)
+            .eq('sub_area_id', p.subAreaId)
+          if (uErr) throw uErr
+          keptIds.add(row.chemistId)
+        } else {
+          const { data: inserted, error: insErr } = await supabase
+            .from('chemists')
+            .insert({
+              sub_area_id: p.subAreaId,
+              name,
+              owner_name: ownerName,
+              owner_contact: ownerContact,
+              is_active: true,
+            })
+            .select('id')
+            .single()
+          if (insErr) throw insErr
+          const cid = (inserted as { id: string }).id
+          const { error: linkErr } = await supabase.from('chemist_doctor_map').insert({
+            chemist_id: cid,
+            doctor_id: p.doctorId,
+          })
+          if (linkErr) throw linkErr
+          keptIds.add(cid)
+        }
+      }
+
+      for (const cid of previousIds) {
+        if (keptIds.has(cid)) continue
+        const { error: delErr } = await supabase
+          .from('chemist_doctor_map')
+          .delete()
+          .eq('doctor_id', p.doctorId)
+          .eq('chemist_id', cid)
+        if (delErr) throw delErr
+      }
+    },
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['chemists-by-doctor', vars.doctorId] })
+      queryClient.invalidateQueries({ queryKey: ['chemists-by-subarea', vars.subAreaId] })
+    },
+  })
+}
+

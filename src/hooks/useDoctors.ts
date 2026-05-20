@@ -37,7 +37,16 @@ export function useDoctorsBySubAreas(subAreaIds: string[]) {
 
 type ChemistMapRow = {
   chemist_id: string
-  chemists: { id: string; name: string; sub_area_id: string } | null
+  chemists: {
+    id: string
+    name: string
+    sub_area_id: string
+    owner_name?: string | null
+    owner_contact?: string | null
+    address?: string | null
+    city?: string | null
+    mobile?: string | null
+  } | null
 }
 
 export function useChemistsByDoctor(doctorId: string) {
@@ -48,7 +57,7 @@ export function useChemistsByDoctor(doctorId: string) {
       try {
         const { data, error } = await supabase
           .from('chemist_doctor_map')
-          .select('chemist_id, chemists(id, name, sub_area_id)')
+          .select('chemist_id, chemists(id, name, sub_area_id, owner_name, owner_contact, address, city, mobile)')
           .eq('doctor_id', doctorId)
         if (error) {
           if (isForbidden(error)) return []
@@ -62,6 +71,11 @@ export function useChemistsByDoctor(doctorId: string) {
             id: c.id,
             sub_area_id: c.sub_area_id,
             name: c.name,
+            owner_name: c.owner_name ?? null,
+            owner_contact: c.owner_contact ?? null,
+            address: c.address ?? null,
+            city: c.city ?? null,
+            mobile: c.mobile ?? null,
             is_active: true,
             created_at: '',
           }))

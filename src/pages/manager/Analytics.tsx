@@ -8,6 +8,28 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+
+/** Recharts default tooltip uses low-contrast colors on card backgrounds — align with theme popover. */
+const analyticsTooltipContent = {
+  contentStyle: {
+    backgroundColor: 'hsl(var(--popover))',
+    color: 'hsl(var(--popover-foreground))',
+    border: '1px solid hsl(var(--border))',
+    borderRadius: 8,
+    fontSize: 12,
+    padding: '8px 12px',
+    boxShadow: '0 6px 20px rgb(0 0 0 / 0.14)',
+  },
+  labelStyle: {
+    color: 'hsl(var(--popover-foreground))',
+    fontWeight: 600,
+    marginBottom: 4,
+  },
+  itemStyle: { color: 'hsl(var(--popover-foreground))' },
+  wrapperStyle: { outline: 'none', zIndex: 50 },
+} as const
+
+const barTooltipCursor = { fill: 'hsl(var(--muted) / 0.35)' }
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics';
@@ -269,8 +291,8 @@ export default function ManagerAnalytics() {
                               <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
                             ))}
                           </Pie>
-                          <Tooltip />
-                          <Legend wrapperStyle={{ fontSize: 11 }} />
+                          <Tooltip {...analyticsTooltipContent} />
+                          <Legend wrapperStyle={{ fontSize: 11, color: 'hsl(var(--foreground))' }} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -314,7 +336,7 @@ export default function ManagerAnalytics() {
                         <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                         <XAxis type="number" tick={{ fontSize: 11 }} />
                         <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={75} />
-                        <Tooltip />
+                        <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
                         <Bar dataKey="count" fill="hsl(150, 62%, 26%)" radius={[0, 4, 4, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -332,7 +354,7 @@ export default function ManagerAnalytics() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
+                      <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
                       <Bar dataKey="visits" fill="hsl(37, 90%, 55%)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -377,7 +399,7 @@ export default function ManagerAnalytics() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                       <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
+                      <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
                       <Bar dataKey="amount" fill="hsl(210, 80%, 55%)" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -401,7 +423,7 @@ export default function ManagerAnalytics() {
                     <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                     <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis dataKey="area" type="category" tick={{ fontSize: 10 }} width={85} />
-                    <Tooltip />
+                    <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
                     <Bar dataKey="qty" fill="hsl(210, 90%, 45%)" radius={[0, 4, 4, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -473,7 +495,11 @@ export default function ManagerAnalytics() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="brand" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(value, _name, props: any) => [value, `${props.payload.area} (${props.payload.month || 'N/A'})`]} />
+                    <Tooltip
+                      {...analyticsTooltipContent}
+                      cursor={barTooltipCursor}
+                      formatter={(value, _name, props: any) => [value, `${props.payload.area} (${props.payload.month || 'N/A'})`]}
+                    />
                     <Bar dataKey="qty" fill="hsl(6, 80%, 58%)" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

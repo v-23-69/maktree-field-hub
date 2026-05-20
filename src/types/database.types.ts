@@ -81,6 +81,10 @@ export interface Chemist {
   address: string | null
   city: string | null
   mobile: string | null
+  /** Optional proprietor / owner name for this outlet. */
+  owner_name?: string | null
+  /** Optional owner contact number. */
+  owner_contact?: string | null
   is_active: boolean
   created_at: string
 }

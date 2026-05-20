@@ -17,7 +17,7 @@ import { formatDisplayDate } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { saveDcrReportsPdf } from '@/lib/dcrPdf';
+import { withPdfGenerationProgress, saveDcrReportsPdf } from '@/lib/dcrPdf';
 import { doctorTerritoryLabels } from '@/lib/doctorTerritory';
 
 export default function ReportDetail() {
@@ -49,9 +49,9 @@ export default function ReportDetail() {
 
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
-  const downloadThisReportPdf = () => {
+  const downloadThisReportPdf = async () => {
     if (!report) return;
-    if (report.mr_id !== user?.id) {
+    if (navRole !== 'manager' && report.mr_id !== user?.id) {
       toast.error('You can only download your own DCR here.');
       return;
     }
@@ -59,14 +59,25 @@ export default function ReportDetail() {
       toast.error('Submit this DCR before downloading as PDF.');
       return;
     }
-    const name = user?.full_name?.replace(/\s+/g, '_') ?? 'DCR';
+    const name =
+      navRole === 'manager'
+        ? ((report.mr as { full_name?: string } | undefined)?.full_name ?? user?.full_name ?? 'MR').replace(
+            /\s+/g,
+            '_',
+          )
+        : (user?.full_name?.replace(/\s+/g, '_') ?? 'DCR');
     const pdfSlug = isLeaveDetail ? 'Leave_DCR' : isSundayDetail ? 'Sunday_DCR' : 'DCR';
     const pdfTitle = isLeaveDetail ? 'Leave DCR' : isSundayDetail ? 'Sunday DCR' : 'Daily Call Report (DCR)';
-    saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
-      fileName: `${pdfSlug}_${name}_${report.report_date}.pdf`,
-      documentTitle: pdfTitle,
-    });
-    toast.success('PDF downloaded');
+    try {
+      await withPdfGenerationProgress(() => {
+        saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
+          fileName: `${pdfSlug}_${name}_${report.report_date}.pdf`,
+          documentTitle: pdfTitle,
+        });
+      });
+    } catch {
+      /* toast handled in withPdfGenerationProgress */
+    }
   };
 
   const dateLabel = report?.report_date ? formatDisplayDate(report.report_date) : '';
@@ -124,13 +135,13 @@ export default function ReportDetail() {
                   >
                     {report.status === 'submitted' ? 'Submitted' : 'Draft'}
                   </Badge>
-                  {report.status === 'submitted' && report.mr_id === user?.id && (
+                  {report.status === 'submitted' && (navRole === 'manager' || report.mr_id === user?.id) && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="rounded-lg touch-target"
-                      onClick={() => downloadThisReportPdf()}
+                      onClick={() => void downloadThisReportPdf()}
                     >
                       <Download className="h-4 w-4 mr-2 shrink-0" />
                       Download PDF

@@ -209,6 +209,7 @@ export function useResolveTourProgram() {
       queryClient.invalidateQueries({ queryKey: ['tour-program'] })
       queryClient.invalidateQueries({ queryKey: ['tp-status'] })
       queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }
@@ -301,6 +302,7 @@ export function useRequestTourProgramDeletion() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tp-deletion-requests-manager'] })
       queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }
@@ -328,6 +330,7 @@ export function useResolveTourProgramDeletionRequest() {
       queryClient.invalidateQueries({ queryKey: ['tp-status'] })
       queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
       queryClient.invalidateQueries({ queryKey: ['manager-pending-tour-programs'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }

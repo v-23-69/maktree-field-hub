@@ -23,7 +23,7 @@ import type { ReportVisit } from '@/types/database.types';
 import { Download, ChevronDown, Pill, MapPin, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate, lastDayOfMonthYyyyMmDd, monthDateRangeForSql } from '@/lib/dateUtils';
-import { saveDcrReportsPdf } from '@/lib/dcrPdf';
+import { saveDcrReportsPdf, withPdfGenerationProgress } from '@/lib/dcrPdf';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -304,7 +304,7 @@ export default function ManagerReports() {
     setOpenCards({});
   };
 
-  const downloadCurrentReportPdf = () => {
+  const downloadCurrentReportPdf = async () => {
     if (!report) {
       toast.error('Load a report first.');
       return;
@@ -313,11 +313,16 @@ export default function ManagerReports() {
     const rk = (report.report_kind ?? 'field') as string;
     const pdfSlug = rk === 'leave' ? 'Leave_DCR' : rk === 'sunday' ? 'Sunday_DCR' : 'DCR';
     const pdfTitle = rk === 'leave' ? 'Leave DCR' : rk === 'sunday' ? 'Sunday DCR' : 'Daily Call Report (DCR)';
-    saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
-      fileName: `${pdfSlug}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
-      documentTitle: pdfTitle,
-    });
-    toast.success('PDF downloaded');
+    try {
+      await withPdfGenerationProgress(() => {
+        saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
+          fileName: `${pdfSlug}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
+          documentTitle: pdfTitle,
+        });
+      });
+    } catch {
+      /* handled in withPdfGenerationProgress */
+    }
   };
 
   const downloadMonthPdf = async () => {
@@ -325,22 +330,33 @@ export default function ManagerReports() {
       toast.error('Select an MR first.');
       return;
     }
+    const tid = toast.loading('Download started — 0%', {
+      duration: 120_000,
+      description: 'Fetching DCRs for the month…',
+    });
     try {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
       const from = `${reportMonth}-01`;
       const to = lastDayOfMonthYyyyMmDd(reportMonth);
       const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(supabase, selectedMr, from, to);
       if (rows.length === 0) {
-        toast.error('No submitted DCRs for that month.');
+        toast.error('No submitted DCRs for that month.', { id: tid });
         return;
       }
       const mrName = mrUser?.full_name ?? 'MR';
-      saveDcrReportsPdf(rows, {
-        fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${reportMonth}.pdf`,
-        documentTitle: `Daily Call Reports — ${reportMonth}`,
-      });
-      toast.success('PDF downloaded');
+      toast.loading('Downloading… 22%', { id: tid, duration: 120_000, description: 'Building PDF…' });
+      await withPdfGenerationProgress(
+        () =>
+          saveDcrReportsPdf(rows, {
+            fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${reportMonth}.pdf`,
+            documentTitle: `Daily Call Reports — ${reportMonth}`,
+          }),
+        { initialToastId: tid },
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Download failed');
+      toast.error(e instanceof Error ? e.message : 'Download failed', { id: tid });
     }
   };
 
@@ -353,7 +369,14 @@ export default function ManagerReports() {
       toast.error('Choose a valid From and To date range.');
       return;
     }
+    const tid = toast.loading('Download started — 0%', {
+      duration: 120_000,
+      description: 'Fetching DCRs…',
+    });
     try {
+      await new Promise<void>(resolve => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
       const rows = await fetchSubmittedReportsWithVisitsForMrInDateRange(
         supabase,
         selectedMr,
@@ -361,17 +384,21 @@ export default function ManagerReports() {
         pdfRangeTo,
       );
       if (rows.length === 0) {
-        toast.error('No submitted DCRs in that range.');
+        toast.error('No submitted DCRs in that range.', { id: tid });
         return;
       }
       const mrName = mrUser?.full_name ?? 'MR';
-      saveDcrReportsPdf(rows, {
-        fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${pdfRangeFrom}_to_${pdfRangeTo}.pdf`,
-        documentTitle: `Daily Call Reports — ${pdfRangeFrom} to ${pdfRangeTo}`,
-      });
-      toast.success('PDF downloaded');
+      toast.loading('Downloading… 22%', { id: tid, duration: 120_000, description: 'Building PDF…' });
+      await withPdfGenerationProgress(
+        () =>
+          saveDcrReportsPdf(rows, {
+            fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${pdfRangeFrom}_to_${pdfRangeTo}.pdf`,
+            documentTitle: `Daily Call Reports — ${pdfRangeFrom} to ${pdfRangeTo}`,
+          }),
+        { initialToastId: tid },
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Download failed');
+      toast.error(e instanceof Error ? e.message : 'Download failed', { id: tid });
     }
   };
 
