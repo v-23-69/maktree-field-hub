@@ -19,7 +19,7 @@ import { useDashboardRefresh } from '@/hooks/useDashboardRefresh'
 import { Input } from '@/components/ui/input'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart'
 import TeamHubManageDrawer, { type TeamManageAction } from '@/components/manager/team/TeamHubManageDrawer'
 
 type TeamHubLocationState = { openManage?: TeamManageAction }
@@ -156,26 +156,13 @@ export default function TeamHub() {
             </div>
           </div>
           {teamCallAnalytics && teamCallAnalytics.bySpeciality.length > 0 && (
-            <div className="h-[180px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={teamCallAnalytics.bySpeciality}
-                    dataKey="visits"
-                    nameKey="speciality"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={65}
-                  >
-                    {teamCallAnalytics.bySpeciality.map((_, i) => (
-                      <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899'][i % 5]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
+            <LazySpecialityPieChart
+              data={teamCallAnalytics.bySpeciality}
+              heightPx={180}
+              outerRadius={65}
+              legendFontSize={10}
+              colors={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899']}
+            />
           )}
         </div>
 

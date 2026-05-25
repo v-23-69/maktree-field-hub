@@ -1,4 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  EXPENSE_ITEM_COLUMNS,
+  EXPENSE_MONTHLY_SUMMARY_COLUMNS,
+  EXPENSE_REPORT_COLUMNS,
+} from '@/lib/queryColumns'
 import { supabase } from '@/lib/supabase'
 import { invalidateDashboardQueries } from '@/lib/invalidateDashboardQueries'
 import type { ExpenseItem, ExpenseReport } from '@/types/database.types'
@@ -31,7 +36,7 @@ export function useExpenseReport(mrId: string, date: string) {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('expense_reports')
-        .select('*')
+        .select(EXPENSE_REPORT_COLUMNS)
         .eq('mr_id', mrId)
         .eq('report_date', date)
         .maybeSingle()
@@ -52,7 +57,7 @@ export function useGetOrCreateExpenseReport() {
       if (!supabase) throw new Error('Supabase not configured')
       const { data: existing, error: existingErr } = await supabase
         .from('expense_reports')
-        .select('*')
+        .select(EXPENSE_REPORT_COLUMNS)
         .eq('mr_id', payload.mrId)
         .eq('report_date', payload.date)
         .maybeSingle()
@@ -68,12 +73,12 @@ export function useGetOrCreateExpenseReport() {
           total_used: 0,
           status: 'draft',
         })
-        .select('*')
+        .select(EXPENSE_REPORT_COLUMNS)
         .single()
       if (error?.code === '23505') {
         const { data: retry, error: retryErr } = await supabase
           .from('expense_reports')
-          .select('*')
+          .select(EXPENSE_REPORT_COLUMNS)
           .eq('mr_id', payload.mrId)
           .eq('report_date', payload.date)
           .maybeSingle()
@@ -98,7 +103,7 @@ export function useExpenseItems(reportId?: string) {
       if (!supabase || !reportId) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('expense_items')
-        .select('*')
+        .select(EXPENSE_ITEM_COLUMNS)
         .eq('expense_report_id', reportId)
         .order('created_at')
       if (error) {
@@ -177,7 +182,7 @@ export function useExpenseSummary(mrId: string, month: string) {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('v_expense_monthly_summary')
-        .select('*')
+        .select(EXPENSE_MONTHLY_SUMMARY_COLUMNS)
         .eq('mr_id', mrId)
         .eq('month', month)
         .maybeSingle()

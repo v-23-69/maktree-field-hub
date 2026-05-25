@@ -23,7 +23,7 @@ import type { ReportVisit } from '@/types/database.types';
 import { Download, ChevronDown, Pill, MapPin, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate, lastDayOfMonthYyyyMmDd, monthDateRangeForSql } from '@/lib/dateUtils';
-import { saveDcrReportsPdf, withPdfGenerationProgress } from '@/lib/dcrPdf';
+import { withPdfGenerationProgress } from '@/lib/dcrPdfAsync';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -314,8 +314,8 @@ export default function ManagerReports() {
     const pdfSlug = rk === 'leave' ? 'Leave_DCR' : rk === 'sunday' ? 'Sunday_DCR' : 'DCR';
     const pdfTitle = rk === 'leave' ? 'Leave DCR' : rk === 'sunday' ? 'Sunday DCR' : 'Daily Call Report (DCR)';
     try {
-      await withPdfGenerationProgress(() => {
-        saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
+      await withPdfGenerationProgress(pdf => {
+        pdf.saveDcrReportsPdf([{ ...report, visits: filteredVisits }], {
           fileName: `${pdfSlug}_${mrName.replace(/\s+/g, '_')}_${selectedDate}.pdf`,
           documentTitle: pdfTitle,
         });
@@ -348,8 +348,8 @@ export default function ManagerReports() {
       const mrName = mrUser?.full_name ?? 'MR';
       toast.loading('Downloading… 22%', { id: tid, duration: 120_000, description: 'Building PDF…' });
       await withPdfGenerationProgress(
-        () =>
-          saveDcrReportsPdf(rows, {
+        pdf =>
+          pdf.saveDcrReportsPdf(rows, {
             fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${reportMonth}.pdf`,
             documentTitle: `Daily Call Reports — ${reportMonth}`,
           }),
@@ -390,8 +390,8 @@ export default function ManagerReports() {
       const mrName = mrUser?.full_name ?? 'MR';
       toast.loading('Downloading… 22%', { id: tid, duration: 120_000, description: 'Building PDF…' });
       await withPdfGenerationProgress(
-        () =>
-          saveDcrReportsPdf(rows, {
+        pdf =>
+          pdf.saveDcrReportsPdf(rows, {
             fileName: `DCR_${mrName.replace(/\s+/g, '_')}_${pdfRangeFrom}_to_${pdfRangeTo}.pdf`,
             documentTitle: `Daily Call Reports — ${pdfRangeFrom} to ${pdfRangeTo}`,
           }),

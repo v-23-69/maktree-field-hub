@@ -1,12 +1,10 @@
 import { useMemo, useState } from 'react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
+import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics'
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
-
-const COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6']
 
 interface Props {
   mrId: string
@@ -74,19 +72,12 @@ export default function TeamMrAnalyticsTab({ mrId }: Props) {
           {calls && calls.bySpeciality.length > 0 && (
             <div className="glass-card p-3">
               <p className="text-xs font-semibold mb-2">Visits by speciality</p>
-              <div className="h-[200px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={calls.bySpeciality} dataKey="visits" nameKey="speciality" cx="50%" cy="50%" outerRadius={70}>
-                      {calls.bySpeciality.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend wrapperStyle={{ fontSize: 10 }} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
+              <LazySpecialityPieChart
+                data={calls.bySpeciality}
+                heightPx={200}
+                outerRadius={70}
+                legendFontSize={10}
+              />
             </div>
           )}
 

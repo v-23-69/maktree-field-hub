@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -6,6 +6,23 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
+import type { UserRole } from "@/types/database.types";
+
+function AppRoute({
+  scope,
+  allowedRoles,
+  children,
+}: {
+  scope: string;
+  allowedRoles?: UserRole[];
+  children: ReactNode;
+}) {
+  return (
+    <ProtectedRoute allowedRoles={allowedRoles} scope={scope}>
+      {children}
+    </ProtectedRoute>
+  );
+}
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import InstallPrompt from "@/components/shared/InstallPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
@@ -92,49 +109,49 @@ const App = () => (
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
             <Route path="/blocked-complaint" element={<BlockedComplaint />} />
-            <Route path="/profile" element={<ProtectedRoute allowedRoles={['mr', 'manager', 'admin']}><ProfilePage /></ProtectedRoute>} />
-            <Route path="/profile/:userId" element={<ProtectedRoute allowedRoles={['manager', 'admin']}><ProfilePage /></ProtectedRoute>} />
+            <Route path="/profile" element={<AppRoute scope="profile" allowedRoles={['mr', 'manager', 'admin']}><ProfilePage /></AppRoute>} />
+            <Route path="/profile/:userId" element={<AppRoute scope="profile-view" allowedRoles={['manager', 'admin']}><ProfilePage /></AppRoute>} />
 
             {/* MR Routes */}
-            <Route path="/mr/dashboard" element={<ProtectedRoute allowedRoles={['mr']}><MRDashboard /></ProtectedRoute>} />
-            <Route path="/mr/report/new" element={<ProtectedRoute allowedRoles={['mr']}><NewReport /></ProtectedRoute>} />
-            <Route path="/mr/master-list" element={<ProtectedRoute allowedRoles={['mr']}><MasterList /></ProtectedRoute>} />
-            <Route path="/mr/visit-frequency" element={<ProtectedRoute allowedRoles={['mr']}><MRVisitFrequency /></ProtectedRoute>} />
-            <Route path="/mr/leave" element={<ProtectedRoute allowedRoles={['mr']}><MRLeave /></ProtectedRoute>} />
-            <Route path="/mr/expense" element={<ProtectedRoute allowedRoles={['mr']}><MRExpense /></ProtectedRoute>} />
-            <Route path="/mr/tour-program" element={<ProtectedRoute allowedRoles={['mr']}><MRTourProgram /></ProtectedRoute>} />
-            <Route path="/mr/report/history" element={<ProtectedRoute allowedRoles={['mr']}><ReportHistory /></ProtectedRoute>} />
-            <Route path="/mr/report/:id" element={<ProtectedRoute allowedRoles={['mr']}><ReportDetail /></ProtectedRoute>} />
+            <Route path="/mr/dashboard" element={<AppRoute scope="mr-dashboard" allowedRoles={['mr']}><MRDashboard /></AppRoute>} />
+            <Route path="/mr/report/new" element={<AppRoute scope="mr-report-new" allowedRoles={['mr']}><NewReport /></AppRoute>} />
+            <Route path="/mr/master-list" element={<AppRoute scope="mr-master-list" allowedRoles={['mr']}><MasterList /></AppRoute>} />
+            <Route path="/mr/visit-frequency" element={<AppRoute scope="mr-visit-frequency" allowedRoles={['mr']}><MRVisitFrequency /></AppRoute>} />
+            <Route path="/mr/leave" element={<AppRoute scope="mr-leave" allowedRoles={['mr']}><MRLeave /></AppRoute>} />
+            <Route path="/mr/expense" element={<AppRoute scope="mr-expense" allowedRoles={['mr']}><MRExpense /></AppRoute>} />
+            <Route path="/mr/tour-program" element={<AppRoute scope="mr-tour-program" allowedRoles={['mr']}><MRTourProgram /></AppRoute>} />
+            <Route path="/mr/report/history" element={<AppRoute scope="mr-report-history" allowedRoles={['mr']}><ReportHistory /></AppRoute>} />
+            <Route path="/mr/report/:id" element={<AppRoute scope="mr-report-detail" allowedRoles={['mr']}><ReportDetail /></AppRoute>} />
 
             {/* Manager Routes */}
-            <Route path="/manager/dashboard" element={<ProtectedRoute allowedRoles={['manager']}><ManagerDashboard /></ProtectedRoute>} />
-            <Route path="/manager/reports" element={<ProtectedRoute allowedRoles={['manager']}><ManagerReports /></ProtectedRoute>} />
-            <Route path="/manager/requests" element={<ProtectedRoute allowedRoles={['manager']}><UnlockRequests /></ProtectedRoute>} />
-            <Route path="/manager/targets" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTargets /></ProtectedRoute>} />
-            <Route path="/manager/analytics" element={<ProtectedRoute allowedRoles={['manager']}><ManagerAnalytics /></ProtectedRoute>} />
-            <Route path="/manager/leaves" element={<ProtectedRoute allowedRoles={['manager']}><ManagerLeaves /></ProtectedRoute>} />
-            <Route path="/manager/my-leave" element={<ProtectedRoute allowedRoles={['manager']}><ManagerSelfLeave /></ProtectedRoute>} />
-            <Route path="/manager/team/visit-frequency" element={<ProtectedRoute allowedRoles={['manager']}><TeamVisitFrequency /></ProtectedRoute>} />
-            <Route path="/manager/holidays" element={<ProtectedRoute allowedRoles={['manager']}><ManagerHolidays /></ProtectedRoute>} />
-            <Route path="/manager/territories" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTerritories /></ProtectedRoute>} />
-            <Route path="/manager/vacant-areas/:areaId" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTerritoryAreas /></ProtectedRoute>} />
-            <Route path="/manager/team" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTeamHub /></ProtectedRoute>} />
-            <Route path="/manager/team/:mrId" element={<ProtectedRoute allowedRoles={['manager']}><ManagerTeamMrDetail /></ProtectedRoute>} />
-            <Route path="/manager/report/history" element={<ProtectedRoute allowedRoles={['manager']}><ReportHistory /></ProtectedRoute>} />
-            <Route path="/manager/report/new" element={<ProtectedRoute allowedRoles={['manager']}><NewReport /></ProtectedRoute>} />
-            <Route path="/manager/dcr-import/:importId" element={<ProtectedRoute allowedRoles={['manager']}><ManagerDcrImport /></ProtectedRoute>} />
-            <Route path="/manager/report/:id" element={<ProtectedRoute allowedRoles={['manager']}><ReportDetail /></ProtectedRoute>} />
-            <Route path="/manager/expense" element={<ProtectedRoute allowedRoles={['manager']}><MRExpense /></ProtectedRoute>} />
-            <Route path="/manager/tour-program" element={<ProtectedRoute allowedRoles={['manager']}><MRTourProgram /></ProtectedRoute>} />
+            <Route path="/manager/dashboard" element={<AppRoute scope="manager-dashboard" allowedRoles={['manager']}><ManagerDashboard /></AppRoute>} />
+            <Route path="/manager/reports" element={<AppRoute scope="manager-reports" allowedRoles={['manager']}><ManagerReports /></AppRoute>} />
+            <Route path="/manager/requests" element={<AppRoute scope="manager-requests" allowedRoles={['manager']}><UnlockRequests /></AppRoute>} />
+            <Route path="/manager/targets" element={<AppRoute scope="manager-targets" allowedRoles={['manager']}><ManagerTargets /></AppRoute>} />
+            <Route path="/manager/analytics" element={<AppRoute scope="manager-analytics" allowedRoles={['manager']}><ManagerAnalytics /></AppRoute>} />
+            <Route path="/manager/leaves" element={<AppRoute scope="manager-leaves" allowedRoles={['manager']}><ManagerLeaves /></AppRoute>} />
+            <Route path="/manager/my-leave" element={<AppRoute scope="manager-my-leave" allowedRoles={['manager']}><ManagerSelfLeave /></AppRoute>} />
+            <Route path="/manager/team/visit-frequency" element={<AppRoute scope="manager-team-visit-frequency" allowedRoles={['manager']}><TeamVisitFrequency /></AppRoute>} />
+            <Route path="/manager/holidays" element={<AppRoute scope="manager-holidays" allowedRoles={['manager']}><ManagerHolidays /></AppRoute>} />
+            <Route path="/manager/territories" element={<AppRoute scope="manager-territories" allowedRoles={['manager']}><ManagerTerritories /></AppRoute>} />
+            <Route path="/manager/vacant-areas/:areaId" element={<AppRoute scope="manager-vacant-areas" allowedRoles={['manager']}><ManagerTerritoryAreas /></AppRoute>} />
+            <Route path="/manager/team" element={<AppRoute scope="manager-team" allowedRoles={['manager']}><ManagerTeamHub /></AppRoute>} />
+            <Route path="/manager/team/:mrId" element={<AppRoute scope="manager-team-mr" allowedRoles={['manager']}><ManagerTeamMrDetail /></AppRoute>} />
+            <Route path="/manager/report/history" element={<AppRoute scope="manager-report-history" allowedRoles={['manager']}><ReportHistory /></AppRoute>} />
+            <Route path="/manager/report/new" element={<AppRoute scope="manager-report-new" allowedRoles={['manager']}><NewReport /></AppRoute>} />
+            <Route path="/manager/dcr-import/:importId" element={<AppRoute scope="manager-dcr-import" allowedRoles={['manager']}><ManagerDcrImport /></AppRoute>} />
+            <Route path="/manager/report/:id" element={<AppRoute scope="manager-report-detail" allowedRoles={['manager']}><ReportDetail /></AppRoute>} />
+            <Route path="/manager/expense" element={<AppRoute scope="manager-expense" allowedRoles={['manager']}><MRExpense /></AppRoute>} />
+            <Route path="/manager/tour-program" element={<AppRoute scope="manager-tour-program" allowedRoles={['manager']}><MRTourProgram /></AppRoute>} />
 
             {/* Admin Routes */}
-            <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
-            <Route path="/admin/users" element={<ProtectedRoute allowedRoles={['admin']}><AdminUsers /></ProtectedRoute>} />
-            <Route path="/admin/doctors" element={<ProtectedRoute allowedRoles={['admin']}><AdminDoctors /></ProtectedRoute>} />
-            <Route path="/admin/areas" element={<ProtectedRoute allowedRoles={['admin']}><AdminAreas /></ProtectedRoute>} />
-            <Route path="/admin/mr-access" element={<ProtectedRoute allowedRoles={['admin']}><AdminMRAccess /></ProtectedRoute>} />
-            <Route path="/admin/targets" element={<ProtectedRoute allowedRoles={['admin']}><AdminTargets /></ProtectedRoute>} />
-            <Route path="/admin/holidays" element={<ProtectedRoute allowedRoles={['admin']}><AdminHolidays /></ProtectedRoute>} />
+            <Route path="/admin/dashboard" element={<AppRoute scope="admin-dashboard" allowedRoles={['admin']}><AdminDashboard /></AppRoute>} />
+            <Route path="/admin/users" element={<AppRoute scope="admin-users" allowedRoles={['admin']}><AdminUsers /></AppRoute>} />
+            <Route path="/admin/doctors" element={<AppRoute scope="admin-doctors" allowedRoles={['admin']}><AdminDoctors /></AppRoute>} />
+            <Route path="/admin/areas" element={<AppRoute scope="admin-areas" allowedRoles={['admin']}><AdminAreas /></AppRoute>} />
+            <Route path="/admin/mr-access" element={<AppRoute scope="admin-mr-access" allowedRoles={['admin']}><AdminMRAccess /></AppRoute>} />
+            <Route path="/admin/targets" element={<AppRoute scope="admin-targets" allowedRoles={['admin']}><AdminTargets /></AppRoute>} />
+            <Route path="/admin/holidays" element={<AppRoute scope="admin-holidays" allowedRoles={['admin']}><AdminHolidays /></AppRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

@@ -1,26 +1,33 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import EmptyState from '@/components/shared/EmptyState';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import VirtualizedScrollList from '@/components/shared/VirtualizedScrollList';
 import {
-  useAdminDoctorsList,
   useAddDoctor,
   useUpdateDoctor,
   useDeactivateDoctor,
   type DoctorWithArea,
 } from '@/hooks/useAdminDoctors';
+import {
+  useAdminDoctorsPaginated,
+  ADMIN_DOCTORS_PAGE_SIZE,
+} from '@/hooks/useAdminDoctorsPaginated';
 import { useAllAreas } from '@/hooks/useAreas';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Plus, Edit, ToggleRight } from 'lucide-react';
+import { Plus, Edit, ToggleRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export default function AdminDoctors() {
   const [areaFilter, setAreaFilter] = useState('');
   const [subAreaFilter, setSubAreaFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [searchDebounced, setSearchDebounced] = useState('');
+  const [page, setPage] = useState(0);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDoc, setEditDoc] = useState<DoctorWithArea | null>(null);
   const [newDocArea, setNewDocArea] = useState('');
@@ -30,24 +37,46 @@ export default function AdminDoctors() {
   const [editName, setEditName] = useState('');
   const [editSpec, setEditSpec] = useState('');
 
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [areaFilter, subAreaFilter, searchDebounced]);
+
   const { data: allAreas = [] } = useAllAreas();
-  const { data: doctors = [], isLoading, isError, refetch } = useAdminDoctorsList();
-  const addDoctor = useAddDoctor();
-  const updateDoctor = useUpdateDoctor();
-  const deactivateDoctor = useDeactivateDoctor();
+  const subAreaIdsForArea = useMemo(
+    () =>
+      areaFilter
+        ? allAreas.flatMap(a => a.sub_areas).filter(sa => sa.area_id === areaFilter).map(sa => sa.id)
+        : [],
+    [allAreas, areaFilter],
+  );
 
   const filteredSubAreas = useMemo(
     () => allAreas.flatMap(a => a.sub_areas).filter(sa => !areaFilter || sa.area_id === areaFilter),
     [allAreas, areaFilter],
   );
 
-  const filteredDoctors = useMemo(() => {
-    return doctors.filter(d => {
-      if (subAreaFilter) return d.sub_area_id === subAreaFilter;
-      if (areaFilter) return filteredSubAreas.some(sa => sa.id === d.sub_area_id);
-      return true;
-    });
-  }, [doctors, subAreaFilter, areaFilter, filteredSubAreas]);
+  const { data: pageResult, isLoading, isError, refetch, isFetching } = useAdminDoctorsPaginated({
+    areaId: areaFilter,
+    subAreaId: subAreaFilter,
+    search: searchDebounced,
+    page,
+    subAreaIdsForArea,
+  });
+
+  const doctors = pageResult?.rows ?? [];
+  const totalCount = pageResult?.totalCount ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / ADMIN_DOCTORS_PAGE_SIZE));
+  const rangeStart = totalCount === 0 ? 0 : page * ADMIN_DOCTORS_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(totalCount, (page + 1) * ADMIN_DOCTORS_PAGE_SIZE);
+
+  const addDoctor = useAddDoctor();
+  const updateDoctor = useUpdateDoctor();
+  const deactivateDoctor = useDeactivateDoctor();
 
   const openAdd = () => {
     setNewDocArea('');
@@ -130,7 +159,45 @@ export default function AdminDoctors() {
           </select>
         </div>
 
-        <div className="flex justify-end">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search name, speciality, code…"
+            className="pl-9 h-10 rounded-lg"
+          />
+        </div>
+
+        <div className="flex justify-between items-center gap-2 flex-wrap">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            {totalCount === 0
+              ? 'No doctors'
+              : `Showing ${rangeStart}–${rangeEnd} of ${totalCount}`}
+            {isFetching && !isLoading ? ' · Updating…' : ''}
+          </p>
+          <div className="flex gap-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-lg"
+              disabled={page <= 0 || isLoading}
+              onClick={() => setPage(p => Math.max(0, p - 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="rounded-lg"
+              disabled={page >= pageCount - 1 || isLoading}
+              onClick={() => setPage(p => p + 1)}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <Button size="sm" className="rounded-lg bg-primary text-primary-foreground hover:bg-primary/90" type="button" onClick={openAdd}>
             <Plus className="h-4 w-4 mr-1" /> Add Doctor
           </Button>
@@ -138,28 +205,29 @@ export default function AdminDoctors() {
 
         {isLoading && <LoadingSpinner />}
         {isError && <EmptyState message="Could not load doctors." />}
-        {!isLoading && !isError && filteredDoctors.length === 0 && (
+        {!isLoading && !isError && doctors.length === 0 && (
           <EmptyState
             message={
-              areaFilter || subAreaFilter
-                ? 'No doctors found'
+              areaFilter || subAreaFilter || searchDebounced
+                ? 'No doctors match filters'
                 : 'No doctors found. Add a doctor to get started.'
             }
           />
         )}
-        {!isLoading && !isError && filteredDoctors.length > 0 && (
-          <div className="space-y-2 overflow-x-auto min-w-0">
-            {filteredDoctors.map((doc, i) => {
+        {!isLoading && !isError && doctors.length > 0 && (
+          <VirtualizedScrollList
+            items={doctors}
+            getKey={doc => doc.id}
+            estimateSize={76}
+            renderItem={(doc, i) => {
               const saName = doc.sub_area?.name ?? '';
               const arName = doc.sub_area?.area?.name ?? '';
               return (
                 <div
-                  key={doc.id}
                   className={cn(
-                    'flex items-center gap-3 rounded-xl p-4 shadow-sm animate-fade-in',
-                    i % 2 === 0 ? 'bg-card' : 'bg-card/80'
+                    'flex items-center gap-3 rounded-xl p-4 shadow-sm',
+                    i % 2 === 0 ? 'bg-card' : 'bg-card/80',
                   )}
-                  style={{ animationDelay: `${i * 60}ms` }}
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-foreground text-sm">{doc.full_name}</p>
@@ -168,91 +236,93 @@ export default function AdminDoctors() {
                       {arName && ` · ${arName}`}{saName && ` / ${saName}`}
                     </p>
                   </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button type="button" className="p-1.5 text-muted-foreground" onClick={() => openEdit(doc)}>
+                  <div className="flex gap-1 shrink-0">
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9" onClick={() => openEdit(doc)}>
                       <Edit className="h-4 w-4" />
-                    </button>
-                    <button type="button" className="p-1.5 text-primary" onClick={() => void handleDeactivate(doc)}>
-                      <ToggleRight className="h-5 w-5" />
-                    </button>
+                    </Button>
+                    <Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-destructive" onClick={() => void handleDeactivate(doc)}>
+                      <ToggleRight className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               );
-            })}
-          </div>
+            }}
+          />
         )}
+
+        {/* dialogs unchanged below */}
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogContent className="rounded-2xl max-w-md">
+            <DialogHeader>
+              <DialogTitle>Add Doctor</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div>
+                <Label>Territory</Label>
+                <select
+                  value={newDocArea}
+                  onChange={e => { setNewDocArea(e.target.value); setNewSubAreaId(''); }}
+                  className="mt-1 w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">Select territory</option>
+                  {allAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label>Area</Label>
+                <select
+                  value={newSubAreaId}
+                  onChange={e => setNewSubAreaId(e.target.value)}
+                  className="mt-1 w-full h-10 rounded-lg border border-input bg-background px-3 text-sm"
+                  disabled={!newDocArea}
+                >
+                  <option value="">Select area</option>
+                  {allAreas
+                    .find(a => a.id === newDocArea)
+                    ?.sub_areas.map(sa => (
+                      <option key={sa.id} value={sa.id}>{sa.name}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <Label>Doctor name</Label>
+                <Input value={newName} onChange={e => setNewName(e.target.value)} className="mt-1 rounded-lg" />
+              </div>
+              <div>
+                <Label>Speciality</Label>
+                <Input value={newSpec} onChange={e => setNewSpec(e.target.value)} className="mt-1 rounded-lg" />
+              </div>
+              <Button type="button" className="w-full rounded-xl" onClick={() => void handleAdd()} disabled={addDoctor.isPending}>
+                {addDoctor.isPending ? 'Saving…' : 'Add Doctor'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={!!editDoc} onOpenChange={open => !open && setEditDoc(null)}>
+          <DialogContent className="rounded-2xl max-w-md">
+            <DialogHeader>
+              <DialogTitle>Edit Doctor</DialogTitle>
+            </DialogHeader>
+            {editDoc && (
+              <div className="space-y-3">
+                <p className="text-xs text-muted-foreground">{editDoc.doctor_code}</p>
+                <div>
+                  <Label>Name</Label>
+                  <Input value={editName} onChange={e => setEditName(e.target.value)} className="mt-1 rounded-lg" />
+                </div>
+                <div>
+                  <Label>Speciality</Label>
+                  <Input value={editSpec} onChange={e => setEditSpec(e.target.value)} className="mt-1 rounded-lg" />
+                </div>
+                <Button type="button" className="w-full rounded-xl" onClick={() => void handleEditSave()} disabled={updateDoctor.isPending}>
+                  {updateDoctor.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
       </div>
-
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-[360px] rounded-xl backdrop-blur-sm">
-          <DialogHeader>
-            <DialogTitle>Add Doctor</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Doctor Name</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Dr. Full Name" className="rounded-lg" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Speciality</Label>
-              <Input value={newSpec} onChange={e => setNewSpec(e.target.value)} placeholder="General Physician" className="rounded-lg" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Territory</Label>
-              <select
-                value={newDocArea}
-                onChange={e => { setNewDocArea(e.target.value); setNewSubAreaId(''); }}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Select territory</option>
-                {allAreas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Area</Label>
-              <select
-                value={newSubAreaId}
-                onChange={e => setNewSubAreaId(e.target.value)}
-                className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
-              >
-                <option value="">Select area</option>
-                {allAreas.find(a => a.id === newDocArea)?.sub_areas.map(sa => (
-                  <option key={sa.id} value={sa.id}>{sa.name}</option>
-                ))}
-              </select>
-            </div>
-            <Button
-              type="button"
-              disabled={addDoctor.isPending}
-              onClick={() => void handleAdd()}
-              className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
-            >
-              {addDoctor.isPending ? 'Adding…' : 'Add Doctor'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!editDoc} onOpenChange={open => { if (!open) setEditDoc(null); }}>
-        <DialogContent className="max-w-[360px] rounded-xl">
-          <DialogHeader>
-            <DialogTitle>Edit Doctor</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs">Doctor Name</Label>
-              <Input value={editName} onChange={e => setEditName(e.target.value)} className="rounded-lg" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Speciality</Label>
-              <Input value={editSpec} onChange={e => setEditSpec(e.target.value)} className="rounded-lg" />
-            </div>
-            <Button type="button" className="w-full" disabled={updateDoctor.isPending} onClick={() => void handleEditSave()}>
-              {updateDoctor.isPending ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </AdminLayout>
   );
 }

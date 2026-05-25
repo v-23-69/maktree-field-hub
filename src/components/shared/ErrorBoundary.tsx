@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { reportError } from '@/lib/observability'
 
 interface Props {
   children: ReactNode
@@ -21,7 +22,10 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('ErrorBoundary:', error, info.componentStack)
+    void reportError(error, { scope: 'root' })
+    if (import.meta.env.DEV) {
+      console.error('ErrorBoundary:', error, info.componentStack)
+    }
   }
 
   render() {
