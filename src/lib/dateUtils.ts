@@ -67,6 +67,22 @@ export function formatDisplayDate(date: string): string {
   }
 }
 
+/** Month label from `YYYY-MM`, e.g. "May 2026". */
+export function formatMonthYear(monthYyyyMm: string): string {
+  try {
+    const [y, m] = monthYyyyMm.split('-').map(Number)
+    if (!y || !m) return monthYyyyMm
+    const utcNoon = Date.UTC(y, m - 1, 1, 12, 0, 0)
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: IST,
+      month: 'long',
+      year: 'numeric',
+    }).format(new Date(utcNoon))
+  } catch {
+    return monthYyyyMm
+  }
+}
+
 /** Short label for a calendar date in IST (weekday + day + month). */
 export function formatShortDateIst(ymd: string): string {
   try {

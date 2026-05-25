@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Users, Plus, ChevronRight, Lock, PiggyBank } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -22,9 +22,12 @@ import { cn } from '@/lib/utils'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import TeamHubManageDrawer, { type TeamManageAction } from '@/components/manager/team/TeamHubManageDrawer'
 
+type TeamHubLocationState = { openManage?: TeamManageAction }
+
 export default function TeamHub() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const managerId = user?.id ?? ''
   const { data: mrs = [], isLoading } = useManagerMrs(managerId)
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs])
@@ -34,6 +37,14 @@ export default function TeamHub() {
   const [manageAction, setManageAction] = useState<TeamManageAction>(null)
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly')
   const [search, setSearch] = useState('')
+
+  useEffect(() => {
+    const state = location.state as TeamHubLocationState | null
+    if (state?.openManage) {
+      setManageAction(state.openManage)
+      navigate(location.pathname, { replace: true, state: {} })
+    }
+  }, [location.pathname, location.state, navigate])
 
   useDashboardRefresh(!!managerId)
 

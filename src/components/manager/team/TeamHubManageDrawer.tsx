@@ -13,6 +13,7 @@ import { useCreateUser, useDeleteMrUser } from '@/hooks/useAdminUsers';
 import { useAllAreas } from '@/hooks/useAreas';
 import { useProducts, useUpdateProductPtr } from '@/hooks/useProducts';
 import type { User } from '@/types/database.types';
+import { employeeCodeFromEmail } from '@/lib/employeeCode';
 
 export type TeamManageAction =
   | 'doctor'
@@ -337,6 +338,12 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
                 <div className="space-y-2">
                   <Label className="text-xs">Email</Label>
                   <Input value={newMrEmail} onChange={e => setNewMrEmail(e.target.value)} type="email" className="touch-target rounded-lg" />
+                  {newMrEmail.trim() && (
+                    <p className="text-[11px] text-muted-foreground">
+                      Login code: <span className="font-semibold text-foreground">{employeeCodeFromEmail(newMrEmail)}</span>
+                      {' · '}Password: Maktree@123
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label className="text-xs">Assign Areas</Label>
@@ -369,7 +376,7 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
                       toast.error('Name and email are required');
                       return;
                     }
-                    const autoCode = newMrEmail.trim().split('@')[0].toUpperCase().replace(/[^A-Z0-9]/g, '');
+                    const autoCode = employeeCodeFromEmail(newMrEmail);
                     void createUser
                       .mutateAsync({
                         fullName: newMrName.trim(),

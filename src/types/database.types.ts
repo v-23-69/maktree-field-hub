@@ -124,6 +124,19 @@ export interface DailyReport {
   manager?: User
 }
 
+/** Pending manager import when MR submitted DCR with working-with manager(s). */
+export interface DcrManagerImport {
+  id: string
+  mr_report_id: string
+  manager_id: string
+  mr_id: string
+  report_date: string
+  status: 'pending' | 'completed' | 'dismissed'
+  manager_report_id: string | null
+  created_at: string
+  completed_at: string | null
+}
+
 export interface ReportVisit {
   id: string
   report_id: string

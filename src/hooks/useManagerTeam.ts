@@ -25,7 +25,25 @@ export function useManagerMrs(managerId: string) {
         // Preferred path: security-definer RPC, robust against RLS joins.
         const rpcRes = await supabase.rpc('list_mrs_for_manager')
         if (!rpcRes.error) {
-          return dedupeManagersMrs((rpcRes.data ?? []) as User[])
+          const rows = dedupeManagersMrs((rpcRes.data ?? []) as User[])
+          const ids = rows.map(r => r.id).filter(Boolean)
+          if (ids.length === 0) return rows
+          const { data: extras, error: exErr } = await supabase
+            .from('users')
+            .select('id, profile_photo_url, is_paused, pause_reason')
+            .in('id', ids)
+          if (exErr) return rows
+          const byId = new Map((extras ?? []).map(u => [u.id as string, u]))
+          return rows.map(r => {
+            const x = byId.get(r.id)
+            if (!x) return r
+            return {
+              ...r,
+              profile_photo_url: x.profile_photo_url ?? r.profile_photo_url,
+              is_paused: x.is_paused ?? r.is_paused,
+              pause_reason: x.pause_reason ?? r.pause_reason,
+            }
+          })
         }
 
         // Fallback path for environments where migration isn't applied yet.

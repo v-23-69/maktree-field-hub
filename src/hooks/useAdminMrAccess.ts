@@ -55,6 +55,9 @@ export function useSaveMrSubAreaAccess() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mr-access'] })
       queryClient.invalidateQueries({ queryKey: ['mr-sub-areas'] })
+      queryClient.invalidateQueries({ queryKey: ['territory-vacancy-snapshot'] })
+      queryClient.invalidateQueries({ queryKey: ['territory-assignment-details'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-sub-area-assignees'] })
     },
   })
 }

@@ -4,7 +4,7 @@ import { useMrSubAreasGrouped } from '@/hooks/useAreas'
 import { useTeamMrMasterData } from '@/hooks/useManagerTeamHub'
 import { useMonthlySupportAggregateForMr } from '@/hooks/useReport'
 import { useTpStatus } from '@/hooks/useTourProgram'
-import { todayInputDate, formatDisplayDate } from '@/lib/dateUtils'
+import { todayInputDate, formatMonthYear } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 import type { User } from '@/types/database.types'
 import type { MrTodayExpenseStatus, MrTodayReportStatus } from '@/hooks/useManagerTeamHub'
@@ -83,24 +83,36 @@ export default function TeamMrOverviewTab({ mr, todayReport, todayExpense, tpSta
         </button>
       </div>
 
-      <div className="glass-card p-4 space-y-2">
-        <p className="text-sm font-semibold text-foreground">
-          Monthly support ({formatDisplayDate(`${month}-01`)})
-        </p>
-        <p className="text-xl font-bold text-primary tabular-nums">
-          Rs {(msAgg?.total_inr ?? 0).toLocaleString('en-IN')}
-        </p>
-        {(msAgg?.byDoctor ?? []).length > 0 && (
-          <div className="max-h-36 overflow-y-auto space-y-1 text-xs">
-            {(msAgg?.byDoctor ?? []).slice(0, 8).map(d => (
-              <div key={d.doctor_id} className="flex justify-between gap-2">
-                <span className="truncate">{d.doctor_name}</span>
-                <span className="font-semibold text-primary tabular-nums shrink-0">
-                  Rs {d.total_inr.toLocaleString('en-IN')}
+      <div className="glass-card p-4 space-y-3">
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="text-sm font-semibold text-foreground">Monthly support</p>
+          <p className="text-[11px] text-muted-foreground">{formatMonthYear(month)}</p>
+        </div>
+        <div className="rounded-xl bg-primary/8 border border-primary/15 px-3 py-2.5">
+          <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Total</p>
+          <p className="text-xl font-bold text-primary tabular-nums mt-0.5">
+            Rs {(msAgg?.total_inr ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        {(msAgg?.byDoctor ?? []).length > 0 ? (
+          <div className="space-y-1.5 max-h-40 overflow-y-auto">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-0.5">
+              By doctor
+            </p>
+            {(msAgg?.byDoctor ?? []).map(d => (
+              <div
+                key={d.doctor_id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/80 px-3 py-2"
+              >
+                <span className="text-sm font-medium text-foreground truncate min-w-0">{d.full_name}</span>
+                <span className="text-sm font-bold text-primary tabular-nums shrink-0">
+                  Rs {d.total_inr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             ))}
           </div>
+        ) : (
+          <p className="text-xs text-muted-foreground text-center py-2">No monthly support recorded this month.</p>
         )}
       </div>
 

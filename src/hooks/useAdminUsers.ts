@@ -69,6 +69,12 @@ export function useCreateUser() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       queryClient.invalidateQueries({ queryKey: ['manager-mrs'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-dashboard-stats'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-assignments'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-access'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-sub-areas'] })
+      queryClient.invalidateQueries({ queryKey: ['territory-vacancy-snapshot'] })
+      queryClient.invalidateQueries({ queryKey: ['territory-assignment-details'] })
     },
   })
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMonthlySupportAggregateForMr } from '@/hooks/useReport'
-import { todayInputDate, formatDisplayDate } from '@/lib/dateUtils'
+import { todayInputDate, formatMonthYear } from '@/lib/dateUtils'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 
 interface Props {
@@ -27,10 +27,10 @@ export default function TeamMrMonthlySupportTab({ mrId }: Props) {
         <LoadingSpinner />
       ) : (
         <>
-          <div className="glass-card p-4">
-            <p className="text-xs text-muted-foreground">Total recorded ({formatDisplayDate(`${month}-01`)})</p>
-            <p className="text-2xl font-bold text-primary tabular-nums mt-1">
-              Rs {(agg?.total_inr ?? 0).toLocaleString('en-IN')}
+          <div className="glass-card p-4 space-y-1">
+            <p className="text-xs text-muted-foreground">Total · {formatMonthYear(month)}</p>
+            <p className="text-2xl font-bold text-primary tabular-nums">
+              Rs {(agg?.total_inr ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
           {(agg?.byDoctor ?? []).length === 0 ? (
@@ -38,10 +38,13 @@ export default function TeamMrMonthlySupportTab({ mrId }: Props) {
           ) : (
             <div className="space-y-2 max-h-[55vh] overflow-y-auto">
               {(agg?.byDoctor ?? []).map(d => (
-                <div key={d.doctor_id} className="rounded-xl border border-border/60 bg-card px-3 py-2.5 flex justify-between gap-2">
-                  <span className="text-sm font-medium truncate">{d.doctor_name}</span>
+                <div
+                  key={d.doctor_id}
+                  className="rounded-xl border border-border/60 bg-card px-3 py-3 flex items-center justify-between gap-3"
+                >
+                  <span className="text-sm font-medium text-foreground truncate min-w-0">{d.full_name}</span>
                   <span className="text-sm font-bold text-primary tabular-nums shrink-0">
-                    Rs {d.total_inr.toLocaleString('en-IN')}
+                    Rs {d.total_inr.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               ))}

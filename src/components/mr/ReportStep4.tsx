@@ -194,6 +194,7 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
       await queryClient.invalidateQueries({ queryKey: ['mr-reports'] });
       await queryClient.invalidateQueries({ queryKey: ['daily-report'] });
       await queryClient.invalidateQueries({ queryKey: ['mr-sub-areas', user.id] });
+      await queryClient.invalidateQueries({ queryKey: ['pending-dcr-imports'] });
 
       toast.success('Report submitted successfully!');
       onClearDraft();

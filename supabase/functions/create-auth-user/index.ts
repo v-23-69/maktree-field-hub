@@ -25,12 +25,13 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabaseClient.auth.getUser()
     if (!user) throw new Error('Not authenticated')
 
-    const { data: profile } = await supabaseClient
+    const { data: profile, error: profileErr } = await supabaseClient
       .from('users')
-      .select('role')
+      .select('id, role')
       .eq('auth_user_id', user.id)
       .single()
 
+    if (profileErr) throw profileErr
     if (!profile || !['admin', 'manager'].includes(profile.role)) {
       throw new Error('Only admins or managers can manage users')
     }
@@ -139,6 +140,16 @@ Deno.serve(async (req) => {
 
     const normalizedEmail = String(email).trim().toLowerCase()
 
+    const { data: existingEmailUser, error: emailExErr } = await supabaseAdmin
+      .from('users')
+      .select('id, is_active')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
+    if (emailExErr) throw emailExErr
+    if (existingEmailUser?.is_active) {
+      throw new Error('An active user with this email already exists')
+    }
+
     // Create auth user
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: normalizedEmail,
@@ -192,7 +203,14 @@ Deno.serve(async (req) => {
     if (role === 'mr' && userId) {
       const managerIds = Array.isArray(manager_ids) ? manager_ids : []
       const subAreaIds = Array.isArray(sub_area_ids) ? sub_area_ids : []
-      const effectiveManagerIds = profile.role === 'manager' ? [profile.id] : managerIds
+      const effectiveManagerIds =
+        profile.role === 'manager'
+          ? [profile.id]
+          : managerIds.filter((id: string) => typeof id === 'string' && id.length > 0)
+
+      if (profile.role === 'manager' && !profile.id) {
+        throw new Error('Manager profile id missing')
+      }
 
       if (effectiveManagerIds.length > 0) {
         const { error: mmErr } = await supabaseAdmin

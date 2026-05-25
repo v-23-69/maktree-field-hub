@@ -9,6 +9,41 @@ import { DASHBOARD_QUERY_OPTIONS, LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOpti
 
 export type ManagerStatsFilter = 'Today' | 'This Week' | 'This Month'
 
+export type ManagerActivityReportRow = {
+  id: string
+  report_date: string
+  mr_id: string
+  person_name: string
+  is_manager: boolean
+  visit_count: number
+}
+
+export type ManagerActivityPersonDoctors = {
+  user_id: string
+  full_name: string
+  is_manager: boolean
+  doctor_count: number
+  doctors: { id: string; full_name: string; speciality: string | null }[]
+}
+
+export type ManagerTeamActivityData = {
+  reportCount: number
+  doctorCount: number
+  mrDoctorCount: number
+  selfDoctorCount: number
+  reports: ManagerActivityReportRow[]
+  doctorsByPerson: ManagerActivityPersonDoctors[]
+}
+
+function statsDateRange(filter: ManagerStatsFilter) {
+  const today = todayInputDate()
+  let rangeStart = today
+  const rangeEnd = today
+  if (filter === 'This Week') rangeStart = startOfWeekIstYmd()
+  else if (filter === 'This Month') rangeStart = startOfMonthIstYmd()
+  return { rangeStart, rangeEnd }
+}
+
 function uniqueDoctorsFromReports(
   rows: Array<{ report_visits?: Array<{ doctor_id?: string | null }> }>,
 ): number {
@@ -19,6 +54,98 @@ function uniqueDoctorsFromReports(
     }
   }
   return doctorSet.size
+}
+
+type ReportVisitRow = {
+  doctor_id?: string | null
+  doctor?: { id: string; full_name: string; speciality: string | null } | null
+}
+
+type ActivityReportDbRow = {
+  id: string
+  mr_id: string
+  report_date: string
+  mr?: { id: string; full_name: string | null; role?: string } | null
+  report_visits?: ReportVisitRow[] | null
+}
+
+function buildTeamActivityData(
+  rows: ActivityReportDbRow[],
+  managerId: string,
+  managerName: string,
+  mrs: { id: string; full_name: string | null }[],
+): ManagerTeamActivityData {
+  const reports: ManagerActivityReportRow[] = rows.map(r => {
+    const isManager = r.mr_id === managerId
+    const person_name = isManager
+      ? managerName
+      : (r.mr?.full_name ?? mrs.find(m => m.id === r.mr_id)?.full_name ?? 'MR')
+    return {
+      id: r.id,
+      report_date: r.report_date,
+      mr_id: r.mr_id,
+      person_name,
+      is_manager: isManager,
+      visit_count: (r.report_visits ?? []).filter(v => v?.doctor_id).length,
+    }
+  })
+
+  const totalDoctorIds = new Set<string>()
+  const mrDoctorIds = new Set<string>()
+  const selfDoctorIds = new Set<string>()
+  const doctorsByUser = new Map<
+    string,
+    { full_name: string; is_manager: boolean; doctors: Map<string, { id: string; full_name: string; speciality: string | null }> }
+  >()
+
+  const ensurePerson = (userId: string, fullName: string, isManager: boolean) => {
+    if (!doctorsByUser.has(userId)) {
+      doctorsByUser.set(userId, { full_name: fullName, is_manager: isManager, doctors: new Map() })
+    }
+    return doctorsByUser.get(userId)!
+  }
+
+  for (const r of rows) {
+    const isManager = r.mr_id === managerId
+    const personName = isManager
+      ? managerName
+      : (r.mr?.full_name ?? mrs.find(m => m.id === r.mr_id)?.full_name ?? 'MR')
+    const bucket = ensurePerson(r.mr_id, personName, isManager)
+
+    for (const v of r.report_visits ?? []) {
+      const docId = v?.doctor_id
+      if (!docId) continue
+      totalDoctorIds.add(docId)
+      if (isManager) selfDoctorIds.add(docId)
+      else mrDoctorIds.add(docId)
+      const doc = v.doctor
+      if (doc) bucket.doctors.set(docId, doc)
+    }
+  }
+
+  const doctorsByPerson: ManagerActivityPersonDoctors[] = [...doctorsByUser.entries()]
+    .map(([user_id, v]) => ({
+      user_id,
+      full_name: v.full_name,
+      is_manager: v.is_manager,
+      doctor_count: v.doctors.size,
+      doctors: [...v.doctors.values()].sort((a, b) =>
+        a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' }),
+      ),
+    }))
+    .sort((a, b) => {
+      if (a.is_manager !== b.is_manager) return a.is_manager ? -1 : 1
+      return a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' })
+    })
+
+  return {
+    reportCount: reports.length,
+    doctorCount: totalDoctorIds.size,
+    mrDoctorCount: mrDoctorIds.size,
+    selfDoctorCount: selfDoctorIds.size,
+    reports: reports.sort((a, b) => b.report_date.localeCompare(a.report_date)),
+    doctorsByPerson,
+  }
 }
 
 export function useMrDashboardStats(mrId: string) {
@@ -66,57 +193,50 @@ export function useMrDashboardStats(mrId: string) {
 
 export function useManagerDashboardStats(
   managerId: string,
-  mrIds: string[],
+  teamMemberIds: string[],
   filter: ManagerStatsFilter = 'Today',
+  managerName = 'Manager',
+  mrs: { id: string; full_name: string | null }[] = [],
 ) {
   const today = todayInputDate()
-  const startMonth = startOfMonthIstYmd()
-  const startWeek = startOfWeekIstYmd()
 
   return useQuery({
-    queryKey: ['manager-dashboard-stats', managerId, mrIds, filter, today],
-    enabled: !!managerId && mrIds.length > 0 && !!supabase,
+    queryKey: ['manager-dashboard-stats', managerId, teamMemberIds, filter, today],
+    enabled: !!managerId && teamMemberIds.length > 0 && !!supabase,
     ...(filter === 'Today' ? LIVE_QUERY_OPTIONS : DASHBOARD_QUERY_OPTIONS),
-    queryFn: async (): Promise<{
-      reportCount: number
-      doctorCount: number
-    }> => {
+    queryFn: async (): Promise<ManagerTeamActivityData> => {
       if (!supabase) throw new Error('Supabase not configured')
 
-      let rangeStart = today
-      let rangeEnd = today
-      if (filter === 'This Week') {
-        rangeStart = startWeek
-        rangeEnd = today
-      } else if (filter === 'This Month') {
-        rangeStart = startMonth
-        rangeEnd = today
-      }
+      const { rangeStart, rangeEnd } = statsDateRange(filter)
 
-      const [countRes, visitsRes] = await Promise.all([
-        supabase
-          .from('daily_reports')
-          .select('id', { count: 'exact', head: true })
-          .in('mr_id', mrIds)
-          .eq('status', 'submitted')
-          .gte('report_date', rangeStart)
-          .lte('report_date', rangeEnd),
-        supabase
-          .from('daily_reports')
-          .select('id, report_visits(doctor_id)')
-          .in('mr_id', mrIds)
-          .eq('status', 'submitted')
-          .gte('report_date', rangeStart)
-          .lte('report_date', rangeEnd),
-      ])
+      const { data, error } = await supabase
+        .from('daily_reports')
+        .select(
+          `
+          id,
+          mr_id,
+          report_date,
+          mr:users!daily_reports_mr_id_fkey(id, full_name, role),
+          report_visits(
+            doctor_id,
+            doctor:doctors(id, full_name, speciality)
+          )
+        `,
+        )
+        .in('mr_id', teamMemberIds)
+        .eq('status', 'submitted')
+        .gte('report_date', rangeStart)
+        .lte('report_date', rangeEnd)
+        .order('report_date', { ascending: false })
 
-      if (countRes.error) throw countRes.error
-      if (visitsRes.error) throw visitsRes.error
+      if (error) throw error
 
-      return {
-        reportCount: countRes.count ?? 0,
-        doctorCount: uniqueDoctorsFromReports(visitsRes.data ?? []),
-      }
+      return buildTeamActivityData(
+        (data ?? []) as ActivityReportDbRow[],
+        managerId,
+        managerName,
+        mrs,
+      )
     },
   })
 }

@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Bell, Check } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Users, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -18,6 +18,8 @@ import { toast } from 'sonner';
 import { useManagerDashboardStats, type ManagerStatsFilter } from '@/hooks/useDashboardStats';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
 import ManagerDashboardTodayPanel from '@/components/manager/ManagerDashboardTodayPanel';
+import ManagerDcrImportStrip from '@/components/manager/ManagerDcrImportStrip';
+import ManagerVacantAreasStrip from '@/components/manager/ManagerVacantAreasStrip';
 import ManagerTeamStatsCard from '@/components/manager/ManagerTeamStatsCard';
 import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
 import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
@@ -28,7 +30,6 @@ import { useMrHolidayCount, useMarkMrHoliday, useMrHolidays } from '@/hooks/useH
 import { useAllowedReportDates } from '@/hooks/useReport';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
-import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount';
 import { useExpenseReport } from '@/hooks/useExpense';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
 
@@ -51,10 +52,17 @@ export default function ManagerDashboard() {
   const { data: mgrSelfSubAreas = [] } = useMrSubAreas(user?.id ?? '');
   // Deferred queries
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
-  const { data: stats, isLoading: statsLoading } = useManagerDashboardStats(
+  const teamMemberIds = useMemo(() => {
+    const id = user?.id ?? '';
+    if (!id) return mrIds;
+    return mrIds.includes(id) ? mrIds : [id, ...mrIds];
+  }, [mrs, user?.id, mrIds]);
+  const { data: teamActivity, isLoading: statsLoading } = useManagerDashboardStats(
     deferReady ? (user?.id ?? '') : '',
-    deferReady ? mrIds : [],
+    deferReady ? teamMemberIds : [],
     activeFilter,
+    user?.full_name ?? 'Manager',
+    mrs,
   );
   useDashboardRefresh(!!user?.id);
   const { data: areas = [] } = useAllAreas();
@@ -84,7 +92,6 @@ export default function ManagerDashboard() {
   const mgrTodayIsSunday = isSundayYmd(mgrTodayDate);
   const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === mgrTodayDate)?.already_submitted === true;
   const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
-  const pendingMgrRequests = useManagerPendingRequestsCount(user?.id ?? '');
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
@@ -278,6 +285,10 @@ export default function ManagerDashboard() {
 
 
         {deferReady && user?.id && (
+          <ManagerDcrImportStrip managerId={user.id} />
+        )}
+
+        {deferReady && user?.id && (
           <ManagerDashboardTodayPanel
             managerId={user.id}
             dcrDone={mgrTodayDcrDone}
@@ -288,28 +299,31 @@ export default function ManagerDashboard() {
           />
         )}
 
-        {deferReady && mrIds.length > 0 && (
+        {deferReady && teamMemberIds.length > 0 && (
           <ManagerTeamStatsCard
             activeFilter={activeFilter}
             onFilterChange={setActiveFilter}
-            reportCount={stats?.reportCount ?? 0}
-            doctorCount={stats?.doctorCount ?? 0}
+            activity={teamActivity}
             loading={statsLoading}
+            mrCount={mrs.length}
           />
+        )}
+
+        {deferReady && user?.id && (
+          <ManagerVacantAreasStrip managerId={user.id} />
         )}
 
         {/* Quick Actions â€” frequently used */}
         <div className="space-y-3">
           <p className="section-title">Quick Actions</p>
           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5">
-            <button type="button" onClick={() => navigate('/manager/requests')} className="relative flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center"><Bell className="h-4 w-4 text-rose-600 dark:text-rose-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Requests</span>
-              {pendingMgrRequests > 0 && (
-                <span className="absolute top-1.5 right-2 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-white text-[9px] font-bold flex items-center justify-center">
-                  {pendingMgrRequests > 99 ? '99+' : pendingMgrRequests}
-                </span>
-              )}
+            <button
+              type="button"
+              onClick={() => navigate('/manager/team', { state: { openManage: 'create-mr' } })}
+              className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all"
+            >
+              <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center"><Users className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Add MR</span>
             </button>
             <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
@@ -318,6 +332,10 @@ export default function ManagerDashboard() {
             <button type="button" onClick={() => navigate('/manager/territories')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center"><MapPinned className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Territories</span>
+            </button>
+            <button type="button" onClick={() => navigate('/manager/territories')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
+              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center"><Users className="h-4 w-4 text-violet-600 dark:text-violet-400" /></div>
+              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign MR</span>
             </button>
             <button type="button" onClick={() => navigate('/manager/expense')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>

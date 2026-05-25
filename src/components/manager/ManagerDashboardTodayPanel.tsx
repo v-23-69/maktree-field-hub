@@ -1,9 +1,11 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, FileText, Receipt, X } from 'lucide-react'
+import { FileText, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import StoryRingAvatar from '@/components/shared/StoryRingAvatar'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
 import { useTeamMrsTodayReportStatus } from '@/hooks/useManagerTeamHub'
+import { usePendingDcrImports } from '@/hooks/useDcrImport'
 import { formatShortDateIst, todayInputDate } from '@/lib/dateUtils'
 
 type Props = {
@@ -13,15 +15,6 @@ type Props = {
   expenseDone: boolean
   expenseDraft: boolean
   todayIsSunday: boolean
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .map(p => p[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
 }
 
 export default function ManagerDashboardTodayPanel({
@@ -37,6 +30,9 @@ export default function ManagerDashboardTodayPanel({
   const { data: mrs = [] } = useManagerMrs(managerId)
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs])
   const { data: todayReports = [] } = useTeamMrsTodayReportStatus(mrIds, today)
+  const { data: pendingImports = [] } = usePendingDcrImports(managerId)
+
+  const todayImport = pendingImports.find(p => p.report_date === today)
 
   const statusByMrId = useMemo(() => new Map(todayReports.map(r => [r.mrId, r.submitted])), [todayReports])
 
@@ -52,7 +48,14 @@ export default function ManagerDashboardTodayPanel({
           <button
             type="button"
             disabled={dcrBlocked || (todayIsSunday && dcrDone)}
-            onClick={() => !dcrBlocked && navigate('/manager/report/new')}
+            onClick={() => {
+              if (dcrBlocked) return
+              if (todayImport) {
+                navigate(`/manager/dcr-import/${todayImport.import_id}`)
+                return
+              }
+              navigate('/manager/report/new')
+            }}
             className={cn(
               'group flex items-center gap-2.5 rounded-xl px-3 py-3 text-left transition-all',
               dcrDone
@@ -72,7 +75,7 @@ export default function ManagerDashboardTodayPanel({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-semibold text-foreground">
-                {todayIsSunday ? 'Sunday DCR' : 'Daily report'}
+                {todayIsSunday ? 'Sunday DCR' : todayImport ? 'Import DCR' : 'Daily report'}
               </span>
               <span
                 className={cn(
@@ -80,7 +83,13 @@ export default function ManagerDashboardTodayPanel({
                   dcrDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
                 )}
               >
-                {dcrDone ? 'Submitted' : dcrBlocked ? 'Locked' : 'Tap to start'}
+                {dcrDone
+                  ? 'Submitted'
+                  : dcrBlocked
+                    ? 'Locked'
+                    : todayImport
+                      ? `From ${todayImport.mr_name.split(' ')[0]}`
+                      : 'Tap to start'}
               </span>
             </span>
           </button>
@@ -121,34 +130,18 @@ export default function ManagerDashboardTodayPanel({
       {mrs.length > 0 && (
         <div className="px-4 py-3">
           <p className="text-[10px] font-medium text-muted-foreground mb-2">Team DCR today</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-4">
             {mrs.map(mr => {
               const submitted = statusByMrId.get(mr.id) === true
               return (
-                <button
+                <StoryRingAvatar
                   key={mr.id}
-                  type="button"
+                  name={mr.full_name ?? 'MR'}
+                  photoUrl={mr.profile_photo_url}
+                  status={submitted ? 'active' : 'inactive'}
+                  size="md"
                   onClick={() => navigate(`/manager/team/${mr.id}`)}
-                  className="flex flex-col items-center gap-1 min-w-[52px] active:scale-95 transition-transform"
-                  title={`${mr.full_name} — ${submitted ? 'DCR submitted' : 'DCR pending'}`}
-                >
-                  <span className="relative">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-foreground">
-                      {initials(mr.full_name)}
-                    </span>
-                    <span
-                      className={cn(
-                        'absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-card',
-                        submitted ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white',
-                      )}
-                    >
-                      {submitted ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : <X className="h-2.5 w-2.5" strokeWidth={3} />}
-                    </span>
-                  </span>
-                  <span className="text-[10px] font-medium text-foreground truncate max-w-[56px]">
-                    {mr.full_name.split(' ')[0]}
-                  </span>
-                </button>
+                />
               )
             })}
           </div>
