@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { TARGET_ACHIEVEMENT_COLUMNS, TARGET_COLUMNS } from '@/lib/queryColumns'
 import { supabase } from '@/lib/supabase'
 import type { Target, TargetAchievement } from '@/types/database.types'
 
@@ -14,7 +15,7 @@ export function useMrTargets(mrId: string) {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('v_target_achievement')
-        .select('*')
+        .select(TARGET_ACHIEVEMENT_COLUMNS)
         .eq('mr_id', mrId)
         .order('end_date', { ascending: true })
       if (error) throw error
@@ -66,7 +67,7 @@ export function useAllTargets() {
 
       const { data: targets, error: tErr } = await supabase
         .from('targets')
-        .select('*')
+        .select(TARGET_COLUMNS)
         .order('created_at', { ascending: false })
       if (tErr) throw tErr
 

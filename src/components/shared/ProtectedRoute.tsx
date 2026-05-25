@@ -3,13 +3,17 @@ import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/types/database.types';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
+import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
+import { getRoleDashboard } from '@/hooks/useAuth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   allowedRoles?: UserRole[];
+  /** When set, wraps children in a route-level error boundary (Sentry-safe). */
+  scope?: string;
 }
 
-export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
+export default function ProtectedRoute({ children, allowedRoles, scope }: ProtectedRouteProps) {
   const { user, isAuthenticated, authReady, isProfileLoading } = useAuth();
 
   if (!authReady) return <LoadingSpinner />;
@@ -30,5 +34,12 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
     return <Navigate to={`/${user.role}/dashboard`} replace />;
   }
 
-  return <>{children}</>;
+  if (!scope) return <>{children}</>;
+
+  const fallbackPath = allowedRoles?.[0] ? getRoleDashboard(allowedRoles[0]) : undefined;
+  return (
+    <RouteErrorBoundary scope={scope} fallbackPath={fallbackPath}>
+      {children}
+    </RouteErrorBoundary>
+  );
 }

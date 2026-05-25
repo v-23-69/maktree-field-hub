@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { generateDoctorCode } from '@/lib/doctorCode'
+import { DOCTOR_DETAIL_COLUMNS } from '@/lib/doctorQueryColumns'
 import { supabase } from '@/lib/supabase'
 import type {
   Doctor,
@@ -13,7 +14,9 @@ export function useMasterListByMr(mrId: string) {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
         .from('v_master_list_completion')
-        .select('*')
+        .select(
+          'mr_id, mr_name, area, sub_area, sub_area_id, total_doctors, complete_doctors, incomplete_doctors, completion_pct',
+        )
         .eq('mr_id', mrId)
         .order('area')
         .order('sub_area')
@@ -32,7 +35,7 @@ export function useDoctorDetail(doctorId: string | null) {
       if (!doctorId) return null
       const { data, error } = await supabase
         .from('doctors')
-        .select('*')
+        .select(DOCTOR_DETAIL_COLUMNS)
         .eq('id', doctorId)
         .maybeSingle()
       if (error) throw error

@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 import { fetchSubmittedReportsWithVisitsForMrInDateRange } from '@/hooks/useReport'
-import { saveDcrReportsPdf, withPdfGenerationProgress } from '@/lib/dcrPdf'
+import { withPdfGenerationProgress } from '@/lib/dcrPdfAsync'
 import { formatInputDate, lastDayOfMonthYyyyMmDd, todayInputDate } from '@/lib/dateUtils'
 
 type Preset = 'today' | 'last7' | 'thisMonth' | 'range'
@@ -67,8 +67,8 @@ export default function DcrPdfDownloadCard({ mrId, mrName }: Props) {
       const safeName = mrName?.replace(/\s+/g, '_') ?? 'DCR'
       toast.loading('Downloading… 20%', { id: tid, duration: 120_000, description: 'Building PDF…' })
       await withPdfGenerationProgress(
-        () =>
-          saveDcrReportsPdf(rows, {
+        pdf =>
+          pdf.saveDcrReportsPdf(rows, {
             fileName: `DCR_${safeName}_${fromDate}_to_${toDate}.pdf`,
             documentTitle: `Daily Call Reports — ${fromDate} to ${toDate}`,
           }),

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { invalidateDashboardQueries } from '@/lib/invalidateDashboardQueries'
+import { invalidateDashboardQueriesForTables } from '@/lib/invalidateDashboardQueries'
 
 const WATCH_TABLES = [
   'daily_reports',
@@ -13,8 +13,10 @@ const WATCH_TABLES = [
   'birthday_wishes',
 ] as const
 
+const REALTIME_DEBOUNCE_MS = 350
+
 /**
- * Supabase Realtime (free tier): invalidate dashboard queries when team data changes.
+ * Supabase Realtime: invalidate only query caches related to changed tables (debounced).
  */
 export function useSupabaseRealtimeDashboard(enabled: boolean) {
   const queryClient = useQueryClient()
@@ -22,12 +24,20 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
   useEffect(() => {
     if (!enabled || !supabase) return
 
+    const pendingTables = new Set<string>()
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
-    const scheduleInvalidate = () => {
+
+    const flushInvalidation = () => {
+      if (pendingTables.size === 0) return
+      const tables = [...pendingTables]
+      pendingTables.clear()
+      invalidateDashboardQueriesForTables(queryClient, tables)
+    }
+
+    const scheduleInvalidate = (table: string) => {
+      pendingTables.add(table)
       if (debounceTimer) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => {
-        invalidateDashboardQueries(queryClient)
-      }, 200)
+      debounceTimer = setTimeout(flushInvalidation, REALTIME_DEBOUNCE_MS)
     }
 
     const channel = supabase.channel('maktree-dashboard-realtime')
@@ -36,7 +46,7 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
       channel.on(
         'postgres_changes',
         { event: '*', schema: 'public', table },
-        scheduleInvalidate,
+        () => scheduleInvalidate(table),
       )
     }
 
@@ -44,6 +54,7 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer)
+      pendingTables.clear()
       void supabase.removeChannel(channel)
     }
   }, [enabled, queryClient])

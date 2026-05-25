@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { generateDoctorCode } from '@/lib/doctorCode'
+import { DOCTOR_LIST_WITH_SUBAREA } from '@/lib/doctorQueryColumns'
 import { supabase } from '@/lib/supabase'
 import type { Doctor, SubArea, Area } from '@/types/database.types'
 
@@ -15,7 +16,7 @@ export function useAdminDoctorsList() {
       try {
         const { data, error } = await supabase
           .from('doctors')
-          .select('*, sub_area:sub_areas(*, area:areas(*))')
+          .select(DOCTOR_LIST_WITH_SUBAREA)
           .eq('is_active', true)
           .order('full_name')
         if (error) throw error

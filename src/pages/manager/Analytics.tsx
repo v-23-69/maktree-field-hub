@@ -7,29 +7,12 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
-
-/** Recharts default tooltip uses low-contrast colors on card backgrounds — align with theme popover. */
-const analyticsTooltipContent = {
-  contentStyle: {
-    backgroundColor: 'hsl(var(--popover))',
-    color: 'hsl(var(--popover-foreground))',
-    border: '1px solid hsl(var(--border))',
-    borderRadius: 8,
-    fontSize: 12,
-    padding: '8px 12px',
-    boxShadow: '0 6px 20px rgb(0 0 0 / 0.14)',
-  },
-  labelStyle: {
-    color: 'hsl(var(--popover-foreground))',
-    fontWeight: 600,
-    marginBottom: 4,
-  },
-  itemStyle: { color: 'hsl(var(--popover-foreground))' },
-  wrapperStyle: { outline: 'none', zIndex: 50 },
-} as const
-
-const barTooltipCursor = { fill: 'hsl(var(--muted) / 0.35)' }
+import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart';
+import {
+  LazyManagerAnalyticsAreaChart,
+  LazyManagerAnalyticsIntelChart,
+  LazyManagerAnalyticsOverviewCharts,
+} from '@/components/charts/LazyManagerAnalyticsRecharts';
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics';
@@ -128,7 +111,7 @@ export default function ManagerAnalytics() {
       if (!supabase) return []
       const { data, error } = await supabase
         .from('v_expense_monthly_summary')
-        .select('*')
+        .select('mr_id, month, total_allotted, total_used')
         .in('mr_id', effectiveMrIds)
         .eq('month', `${monthLabel}-01`)
       if (error) throw error
@@ -142,7 +125,7 @@ export default function ManagerAnalytics() {
       if (!supabase) return []
       const { data, error } = await supabase
         .from('v_expense_by_category')
-        .select('*')
+        .select('mr_id, month, category, total_amount')
         .in('mr_id', effectiveMrIds)
         .eq('month', `${monthLabel}-01`)
       if (error) throw error
@@ -275,27 +258,13 @@ export default function ManagerAnalytics() {
                 {teamCallsOnly && teamCallsOnly.bySpeciality.length > 0 ? (
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Visits by speciality</p>
-                    <div className="h-[240px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={teamCallsOnly.bySpeciality}
-                            dataKey="visits"
-                            nameKey="speciality"
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={80}
-                            label={({ speciality, visits }) => `${speciality}: ${visits}`}
-                          >
-                            {teamCallsOnly.bySpeciality.map((_, i) => (
-                              <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
-                            ))}
-                          </Pie>
-                          <Tooltip {...analyticsTooltipContent} />
-                          <Legend wrapperStyle={{ fontSize: 11, color: 'hsl(var(--foreground))' }} />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <LazySpecialityPieChart
+                      data={teamCallsOnly.bySpeciality}
+                      heightPx={240}
+                      outerRadius={80}
+                      showSliceLabels
+                      legendFontSize={11}
+                    />
                   </div>
                 ) : (
                   <EmptyState message="No submitted field DCR visits in this period yet." />
@@ -316,97 +285,19 @@ export default function ManagerAnalytics() {
         )}
 
         {run && !chartsLoading && !isError && hasAnyChart && activeTab === 'overview' && (
-          <>
-            <div className="rounded-xl bg-primary/10 border border-primary/20 p-4 animate-fade-in">
-              <p className="text-sm font-semibold text-primary">
-                {totalVisits} visits across {uniqueDoctors} doctor visit records
-              </p>
-              <p className="text-xs text-primary/70 mt-0.5">
-                {formatDisplayDate(fromDate)} — {formatDisplayDate(toDate)}
-              </p>
-            </div>
-
-            {productData.length > 0 && (
-              <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Product-wise Promotions</p>
-                <div className="overflow-x-auto -mx-2">
-                  <div className="min-w-[340px] h-56">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={productData} layout="vertical" margin={{ left: 0, right: 16 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 11 }} />
-                        <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={75} />
-                        <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                        <Bar dataKey="count" fill="hsl(150, 62%, 26%)" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {mrData.length > 0 && (
-              <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">MR-wise Visit Count</p>
-                <div className="h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={mrData}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                      <Bar dataKey="visits" fill="hsl(37, 90%, 55%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            )}
-
-            {competitorData.length > 0 && (
-              <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Top Competitor Brands</p>
-                <div className="space-y-2.5">
-                  {competitorData.map((c, i) => (
-                    <div key={c.brand} className="space-y-1">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-foreground font-medium">{i + 1}. {c.brand}</span>
-                        <span className="text-xs font-semibold text-muted-foreground">{c.count}</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-destructive/60 transition-all"
-                          style={{ width: `${(c.count / maxCompetitor) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                Expense Overview ({monthLabel || 'month'})
-              </p>
-              <p className="text-sm">
-                Allotted: {expenseTotals.allotted.toFixed(0)} | Used: {expenseTotals.used.toFixed(0)} | Balance:{' '}
-                {(expenseTotals.allotted - expenseTotals.used).toFixed(0)}
-              </p>
-              {expenseByCategory.length > 0 && (
-                <div className="h-44 mt-3">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={expenseByCategory}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                      <Bar dataKey="amount" fill="hsl(210, 80%, 55%)" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
-          </>
+          <LazyManagerAnalyticsOverviewCharts
+            fromDate={fromDate}
+            toDate={toDate}
+            totalVisits={totalVisits}
+            uniqueDoctors={uniqueDoctors}
+            productData={productData}
+            mrData={mrData}
+            competitorData={competitorData}
+            maxCompetitor={maxCompetitor}
+            monthLabel={monthLabel}
+            expenseTotals={expenseTotals}
+            expenseByCategory={expenseByCategory}
+          />
         )}
 
         {run && !chartsLoading && !isError && activeTab === 'area' && (
@@ -417,17 +308,7 @@ export default function ManagerAnalytics() {
             {areaPerformance.length === 0 ? (
               <EmptyState message="No territory performance data for selected period" />
             ) : (
-              <div className="min-w-[340px] h-64 overflow-x-auto">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={areaPerformance} layout="vertical" margin={{ left: 0, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 11 }} />
-                    <YAxis dataKey="area" type="category" tick={{ fontSize: 10 }} width={85} />
-                    <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                    <Bar dataKey="qty" fill="hsl(210, 90%, 45%)" radius={[0, 4, 4, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <LazyManagerAnalyticsAreaChart areaPerformance={areaPerformance} />
             )}
           </div>
         )}
@@ -489,21 +370,7 @@ export default function ManagerAnalytics() {
             {competitorIntel.length === 0 ? (
               <EmptyState message="No competitor intelligence data available." />
             ) : (
-              <div className="min-w-[340px] h-64 overflow-x-auto">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={competitorIntel.slice(0, 20)}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="brand" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      {...analyticsTooltipContent}
-                      cursor={barTooltipCursor}
-                      formatter={(value, _name, props: any) => [value, `${props.payload.area} (${props.payload.month || 'N/A'})`]}
-                    />
-                    <Bar dataKey="qty" fill="hsl(6, 80%, 58%)" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              <LazyManagerAnalyticsIntelChart competitorIntel={competitorIntel} />
             )}
           </div>
         )}

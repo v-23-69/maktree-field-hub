@@ -17,7 +17,7 @@ import { formatDisplayDate } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { withPdfGenerationProgress, saveDcrReportsPdf } from '@/lib/dcrPdf';
+import { withPdfGenerationProgress } from '@/lib/dcrPdfAsync';
 import { doctorTerritoryLabels } from '@/lib/doctorTerritory';
 
 export default function ReportDetail() {
@@ -69,8 +69,8 @@ export default function ReportDetail() {
     const pdfSlug = isLeaveDetail ? 'Leave_DCR' : isSundayDetail ? 'Sunday_DCR' : 'DCR';
     const pdfTitle = isLeaveDetail ? 'Leave DCR' : isSundayDetail ? 'Sunday DCR' : 'Daily Call Report (DCR)';
     try {
-      await withPdfGenerationProgress(() => {
-        saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
+      await withPdfGenerationProgress(pdf => {
+        pdf.saveDcrReportsPdf([{ ...report, visits: sortedVisits }], {
           fileName: `${pdfSlug}_${name}_${report.report_date}.pdf`,
           documentTitle: pdfTitle,
         });

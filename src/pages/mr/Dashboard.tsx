@@ -38,7 +38,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
 import { useMrLeaves } from '@/hooks/useLeaves';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
+import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart';
 type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
@@ -83,7 +83,7 @@ export default function MRDashboard() {
       if (!supabase) return null;
       const { data, error } = await supabase
         .from('v_dcr_daily_status')
-        .select('*')
+        .select('mr_id, check_date, tour_program_done, dcr_done, expense_done, is_working_day')
         .eq('mr_id', userId)
         .eq('check_date', todayInputDate())
         .maybeSingle();
@@ -583,27 +583,13 @@ export default function MRDashboard() {
             {callAnalytics && callAnalytics.bySpeciality.length > 0 && (
               <div>
                 <p className="text-xs font-semibold text-muted-foreground mb-2">Visits by speciality</p>
-                <div className="h-[200px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={callAnalytics.bySpeciality}
-                        dataKey="visits"
-                        nameKey="speciality"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={70}
-                        label={({ speciality, visits }) => `${speciality}: ${visits}`}
-                      >
-                        {callAnalytics.bySpeciality.map((_, i) => (
-                          <Cell key={i} fill={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6'][i % 6]} />
-                        ))}
-                      </Pie>
-                      <Tooltip />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
+                <LazySpecialityPieChart
+                  data={callAnalytics.bySpeciality}
+                  heightPx={200}
+                  outerRadius={70}
+                  showSliceLabels
+                  legendFontSize={11}
+                />
               </div>
             )}
           </div>

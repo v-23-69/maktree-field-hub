@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, AlertCircle, Plus, Search, Stethoscope } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -11,10 +11,10 @@ import { Input } from '@/components/ui/input'
 import { useAuth } from '@/hooks/useAuth'
 import { useMrSubAreas } from '@/hooks/useAreas'
 import { useMasterListByMr } from '@/hooks/useMasterList'
+import { useMrDoctorsPaginated } from '@/hooks/useMrDoctorsPaginated'
 import type { Doctor, MasterListCompletion, SubArea } from '@/types/database.types'
 import DoctorMasterDrawer from '@/components/mr/DoctorMasterDrawer'
 import AreaSelectPager from '@/components/mr/AreaSelectPager'
-import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 function doctorInitials(name: string) {
@@ -59,6 +59,14 @@ export default function MasterList() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
+  const [searchDebounced, setSearchDebounced] = useState('')
+  const [doctorPage, setDoctorPage] = useState(0)
+  const [doctors, setDoctors] = useState<Doctor[]>([])
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearchDebounced(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
 
   const mrId = user?.id ?? ''
   const areaIdParam = searchParams.get('areaId')
@@ -90,6 +98,8 @@ export default function MasterList() {
   const selectSubArea = (id: string) => {
     setSelectedSubAreaId(id)
     setSearch('')
+    setDoctorPage(0)
+    setDoctors([])
     const next = new URLSearchParams(searchParams)
     next.set('subAreaId', id)
     const sa = subAreas.find(s => s.id === id)
@@ -120,25 +130,24 @@ export default function MasterList() {
     return map
   }, [completionRows])
 
+  useEffect(() => {
+    setDoctorPage(0)
+    setDoctors([])
+  }, [selectedSubAreaId, searchDebounced])
+
   const {
-    data: doctors = [],
+    data: doctorsPage,
     isLoading: doctorsLoading,
     isError: doctorsError,
-  } = useQuery({
-    queryKey: ['mr-doctors', mrId, selectedSubAreaId],
-    enabled: !!mrId && !!selectedSubAreaId && !!supabase,
-    queryFn: async (): Promise<Doctor[]> => {
-      if (!supabase || !selectedSubAreaId) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('doctors')
-        .select('*')
-        .eq('sub_area_id', selectedSubAreaId)
-        .eq('is_active', true)
-        .order('full_name')
-      if (error) throw error
-      return (data ?? []) as Doctor[]
-    },
-  })
+    isFetching: doctorsFetching,
+  } = useMrDoctorsPaginated(mrId, selectedSubAreaId, searchDebounced, doctorPage)
+
+  useEffect(() => {
+    if (!doctorsPage) return
+    setDoctors(prev =>
+      doctorPage === 0 ? doctorsPage.rows : [...prev, ...doctorsPage.rows],
+    )
+  }, [doctorsPage, doctorPage])
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerDoctorId, setDrawerDoctorId] = useState<string | null>(null)
@@ -167,7 +176,7 @@ export default function MasterList() {
   }, [doctorIdParam, doctorsLoading, doctors, drawerOpen, selectedSubAreaId])
 
   const comp = selectedSubAreaId ? completionBySubArea.get(selectedSubAreaId) : undefined
-  const total = comp?.total_doctors ?? doctors.length
+  const total = comp?.total_doctors ?? doctorsPage?.totalCount ?? doctors.length
   const complete = comp?.complete_doctors ?? doctors.filter(d => d.master_list_complete).length
   const pct = comp?.completion_pct ?? (total ? Math.round((complete / total) * 100) : 0)
 
@@ -293,6 +302,20 @@ export default function MasterList() {
                     </ul>
                   )}
                 </div>
+
+                {doctorsPage?.hasMore && (
+                  <div className="px-3 pb-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full rounded-xl"
+                      disabled={doctorsFetching}
+                      onClick={() => setDoctorPage(p => p + 1)}
+                    >
+                      {doctorsFetching ? 'Loading…' : `Load more (${doctors.length} of ${total})`}
+                    </Button>
+                  </div>
+                )}
 
                 <div className="p-3 border-t border-border/60 bg-background">
                   <Button
