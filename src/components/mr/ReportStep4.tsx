@@ -196,7 +196,14 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
       await queryClient.invalidateQueries({ queryKey: ['mr-sub-areas', user.id] });
       await queryClient.invalidateQueries({ queryKey: ['pending-dcr-imports'] });
 
-      toast.success('Report submitted successfully!');
+      if (user.role === 'mr' && managerIdsForSave.length > 0) {
+        toast.success('Report submitted successfully!', {
+          description:
+            'Your manager will review the shared visit details. Their copy is created after they approve the import.',
+        });
+      } else {
+        toast.success('Report submitted successfully!');
+      }
       onClearDraft();
       navigate(user?.role === 'manager' ? '/manager/reports' : '/mr/report/history');
     } catch (e) {

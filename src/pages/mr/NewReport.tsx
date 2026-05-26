@@ -20,7 +20,8 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, Calendar } from 'lucide-react';
-import { toast } from 'sonner';
+import { toast } from 'sonner'
+import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { coerceQuantity } from '@/lib/quantityInput';
 
@@ -416,7 +417,7 @@ export default function NewReport() {
                   mrId,
                   reason: unlockReason,
                 })
-                toast.success('Unlock request sent')
+                toastMrPendingManagerApproval('Unlock request sent')
                 setUnlockReason('')
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : 'Request failed')

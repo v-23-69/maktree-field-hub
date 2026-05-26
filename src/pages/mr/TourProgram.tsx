@@ -11,6 +11,7 @@ import { CalendarDays, Check, AlertCircle, Users, Save, Trash2 } from 'lucide-re
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
+import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
 import {
   useCreateOrUpdateTourProgram,
   useBatchSaveTourProgramEntries,
@@ -251,7 +252,13 @@ export default function TourProgramPage() {
       const rows = buildEntryRows(tpId)
       if (rows.length > 0) await batchSave.mutateAsync(rows)
       await submit.mutateAsync({ tourProgramId: tpId, month })
-      toast.success('Tour program submitted')
+      if (isManager && tab === 'self') {
+        toast.success('Tour program submitted')
+      } else if (!isManager) {
+        toastMrPendingManagerApproval('Tour program submitted')
+      } else {
+        toast.success('Tour program submitted')
+      }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Failed to submit')
     } finally {
@@ -450,7 +457,7 @@ export default function TourProgramPage() {
                           toast.success('Tour program deleted')
                         } else {
                           await requestTpDeletion.mutateAsync(id)
-                          toast.success('Deletion request sent to your manager')
+                          toastMrPendingManagerApproval('Deletion request sent')
                         }
                         setTpDeleteOpen(false)
                       } catch (e) {

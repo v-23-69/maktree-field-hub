@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useManagersForMr } from '@/hooks/useManagers'
 import { useApplyLeave, useMrLeaves } from '@/hooks/useLeaves'
 import { formatDisplayDate } from '@/lib/dateUtils'
+import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
 
 export default function MRLeave() {
   const { user } = useAuth()
@@ -134,7 +135,7 @@ export default function MRLeave() {
                 .then(() => {
                   setLeaveDate('')
                   setReason('')
-                  toast.success('Leave request sent to your manager')
+                  toastMrPendingManagerApproval('Leave request sent')
                 })
                 .catch(err => toast.error(err instanceof Error ? err.message : 'Failed'))
             }

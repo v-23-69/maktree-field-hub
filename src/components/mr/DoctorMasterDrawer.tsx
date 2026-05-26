@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
+import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
 import { CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { Chemist, Doctor } from '@/types/database.types'
 
@@ -486,7 +487,9 @@ export default function DoctorMasterDrawer({
                 Request removal
               </Label>
               {pendingRemoval ? (
-                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Pending approval</p>
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                  Pending manager approval — this doctor stays on your list until approved.
+                </p>
               ) : (
                 <>
                   <Textarea
@@ -509,7 +512,7 @@ export default function DoctorMasterDrawer({
                             manager_id: managers[0]?.id ?? null,
                             reason: removalReason,
                           })
-                          toast.success('Removal request sent')
+                          toastMrPendingManagerApproval('Removal request sent')
                           setRemovalReason('')
                         } catch (e) {
                           const msg = e instanceof Error ? e.message : 'Request failed'
