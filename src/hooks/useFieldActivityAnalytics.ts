@@ -98,6 +98,17 @@ export function useCallsAndSpecialityAnalytics(
   })
 }
 
+export type VisitFrequencyDoctorRow = {
+  doctorId: string
+  name: string
+  subAreaId: string
+  subArea: string
+  areaId: string
+  areaName: string
+  target: number
+  done: number
+}
+
 export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enabled: boolean) {
   const month = monthYmd.slice(0, 7)
   const monthStart = `${month}-01`
@@ -117,14 +128,14 @@ export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enable
       const subIds = (access ?? []).map((r: { sub_area_id: string }) => r.sub_area_id)
       if (subIds.length === 0) {
         return {
-          doctors: [] as { doctorId: string; name: string; subArea: string; target: number; done: number }[],
+          doctors: [] as VisitFrequencyDoctorRow[],
           totalTarget: 0,
           totalDone: 0,
         }
       }
       const { data: doctors, error: dErr } = await supabase
         .from('doctors')
-        .select('id, full_name, sub_area_id, monthly_visit_target, sub_area:sub_areas(name)')
+        .select('id, full_name, sub_area_id, monthly_visit_target, sub_area:sub_areas(name, area_id, area:areas(id, name))')
         .in('sub_area_id', subIds)
         .eq('is_active', true)
       if (dErr) throw dErr
@@ -133,7 +144,7 @@ export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enable
         full_name: string
         sub_area_id: string
         monthly_visit_target: number | null
-        sub_area?: { name?: string } | null
+        sub_area?: { name?: string; area_id?: string; area?: { id?: string; name?: string } | null } | null
       }[]
 
       const { data: reports, error: rErr } = await supabase
@@ -167,15 +178,26 @@ export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enable
         const rawDone = visitCounts.get(d.id) ?? 0
         totalTarget += target
         totalDone += Math.min(rawDone, target)
+        const areaId = d.sub_area?.area?.id ?? d.sub_area?.area_id ?? ''
+        const areaName = d.sub_area?.area?.name ?? 'Territory'
         return {
           doctorId: d.id,
           name: d.full_name,
+          subAreaId: d.sub_area_id,
           subArea: d.sub_area?.name ?? '—',
+          areaId,
+          areaName,
           target,
           done: rawDone,
         }
       })
-      out.sort((a, b) => a.name.localeCompare(b.name))
+      out.sort((a, b) => {
+        const areaCmp = a.areaName.localeCompare(b.areaName)
+        if (areaCmp !== 0) return areaCmp
+        const subCmp = a.subArea.localeCompare(b.subArea)
+        if (subCmp !== 0) return subCmp
+        return a.name.localeCompare(b.name)
+      })
       return { doctors: out, totalTarget, totalDone }
     },
   })

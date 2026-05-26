@@ -5,10 +5,16 @@ import type { MasterListCompletion, SubArea } from '@/types/database.types'
 const PER_PAGE = 4
 const CARD_HEIGHT = 'h-[76px]'
 
+export type SubAreaVisitProgress = {
+  cappedDone: number
+  target: number
+}
+
 type Props = {
   subAreas: SubArea[]
   selectedId: string | null
-  completionBySubArea: Map<string, MasterListCompletion>
+  completionBySubArea?: Map<string, MasterListCompletion>
+  visitProgressBySubArea?: Map<string, SubAreaVisitProgress>
   onSelect: (id: string) => void
 }
 
@@ -16,16 +22,27 @@ function AreaCard({
   sa,
   active,
   completion,
+  visitProgress,
   onSelect,
 }: {
   sa: SubArea
   active: boolean
   completion?: MasterListCompletion
+  visitProgress?: SubAreaVisitProgress
   onSelect: () => void
 }) {
-  const t = completion?.total_doctors ?? 0
-  const c = completion?.complete_doctors ?? 0
-  const pctDone = t > 0 ? Math.round((c / t) * 100) : 0
+  let footer: string | null = null
+  if (visitProgress && visitProgress.target > 0) {
+    const pct = Math.round((visitProgress.cappedDone / visitProgress.target) * 100)
+    footer = `${pct}% · ${visitProgress.cappedDone}/${visitProgress.target} visits`
+  } else if (completion) {
+    const t = completion.total_doctors ?? 0
+    const c = completion.complete_doctors ?? 0
+    if (t > 0) {
+      const pctDone = Math.round((c / t) * 100)
+      footer = `${pctDone}% · ${c}/${t}`
+    }
+  }
 
   return (
     <button
@@ -50,21 +67,27 @@ function AreaCard({
           {sa.area?.name}
         </p>
       </div>
-      {t > 0 && (
+      {footer && (
         <p
           className={cn(
             'text-[9px] font-semibold tabular-nums mt-1.5',
             active ? 'text-primary-foreground/85' : 'text-muted-foreground',
           )}
         >
-          {pctDone}% · {c}/{t}
+          {footer}
         </p>
       )}
     </button>
   )
 }
 
-export default function AreaSelectPager({ subAreas, selectedId, completionBySubArea, onSelect }: Props) {
+export default function AreaSelectPager({
+  subAreas,
+  selectedId,
+  completionBySubArea = new Map(),
+  visitProgressBySubArea,
+  onSelect,
+}: Props) {
   const pages = useMemo(() => {
     const chunks: SubArea[][] = []
     for (let i = 0; i < subAreas.length; i += PER_PAGE) {
@@ -157,7 +180,8 @@ export default function AreaSelectPager({ subAreas, selectedId, completionBySubA
                   key={sa.id}
                   sa={sa}
                   active={sa.id === selectedId}
-                  completion={completionBySubArea.get(sa.id)}
+                  completion={visitProgressBySubArea ? undefined : completionBySubArea.get(sa.id)}
+                  visitProgress={visitProgressBySubArea?.get(sa.id)}
                   onSelect={() => onSelect(sa.id)}
                 />
               )
