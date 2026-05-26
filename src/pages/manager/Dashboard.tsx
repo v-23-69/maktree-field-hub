@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, History, Target, ClipboardList, Umbrella, Users, Check } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -368,10 +368,6 @@ export default function ManagerDashboard() {
             <button type="button" onClick={() => setAction('assign-self')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
               <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><UserPlus className="h-4 w-4 text-primary" /></div>
               <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign Self</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/report/history')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center"><History className="h-4 w-4 text-primary" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My DCR history</span>
             </button>
           </div>
         </div>

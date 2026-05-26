@@ -28,7 +28,7 @@ export default function ReportSundayDcrStep({
   const markSunday = useMarkSundayDcr()
   const [busy, setBusy] = useState(false)
 
-  const historyPath = user?.role === 'manager' ? '/manager/report/history' : '/mr/report/history'
+  const historyPath = user?.role === 'manager' ? '/manager/history' : '/mr/report/history'
 
   const handleSubmit = async () => {
     if (!data.date) {

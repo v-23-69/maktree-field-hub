@@ -96,7 +96,7 @@ export default function ReportLeaveDcrStep({
       await queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
       toast.success('Leave DCR submitted')
       onClearDraft()
-      const historyPath = user.role === 'manager' ? '/manager/report/history' : '/mr/report/history'
+      const historyPath = user.role === 'manager' ? '/manager/history' : '/mr/report/history'
       navigate(historyPath)
     } catch (e) {
       console.error(e)

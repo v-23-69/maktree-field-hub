@@ -322,7 +322,7 @@ export default function ReportDetail() {
             </div>
             )}
 
-            <Button variant="outline" className="w-full" type="button" onClick={() => navigate(navRole === 'manager' ? '/manager/report/history' : '/mr/report/history')}>
+            <Button variant="outline" className="w-full" type="button" onClick={() => navigate(navRole === 'manager' ? '/manager/history' : '/mr/report/history')}>
               Back to history
             </Button>
 

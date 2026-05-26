@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { performAppBack } from '@/hooks/usePreventAccidentalBack';
+import ManagerRequestsHeaderButton from '@/components/shared/ManagerRequestsHeaderButton';
 
 interface PageHeaderProps {
   title: string;
@@ -66,23 +67,27 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
 
       {rightAction ?? (
         user ? (
-          <button
-            onClick={() => navigate('/profile')}
-            className="shrink-0 active:scale-90 transition-transform"
-            aria-label="Open profile"
-          >
-            {user.profile_photo_url ? (
-              <img
-                src={user.profile_photo_url}
-                alt={user.full_name}
-                className="h-9 w-9 rounded-full object-cover ring-2 ring-foreground/[0.06]"
-              />
-            ) : (
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-foreground/[0.04]">
-                <span className="text-xs font-bold text-primary">{initials}</span>
-              </div>
-            )}
-          </button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {user.role === 'manager' && <ManagerRequestsHeaderButton />}
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
+              className="active:scale-90 transition-transform touch-manipulation"
+              aria-label="Open profile"
+            >
+              {user.profile_photo_url ? (
+                <img
+                  src={user.profile_photo_url}
+                  alt={user.full_name}
+                  className="h-9 w-9 rounded-full object-cover ring-2 ring-foreground/[0.06]"
+                />
+              ) : (
+                <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center ring-2 ring-foreground/[0.04]">
+                  <span className="text-xs font-bold text-primary">{initials}</span>
+                </div>
+              )}
+            </button>
+          </div>
         ) : null
       )}
     </header>
