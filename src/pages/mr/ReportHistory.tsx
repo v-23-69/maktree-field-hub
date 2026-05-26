@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useMrReportsWithVisitCounts, useReportVisitDaySummary } from '@/hooks/useReport';
 import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Stethoscope, Pill, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatDisplayDate } from '@/lib/dateUtils';
+import { formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 
@@ -19,12 +19,10 @@ const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 function getMonthDays(year: number, month: number) {
   const first = new Date(year, month, 1);
   const last = new Date(year, month + 1, 0);
-  const days: { date: string; day: number; isWeekend: boolean }[] = [];
+  const days: { date: string; day: number; isSunday: boolean }[] = [];
   for (let d = 1; d <= last.getDate(); d++) {
-    const dt = new Date(year, month, d);
     const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const dow = dt.getDay();
-    days.push({ date: iso, day: d, isWeekend: dow === 0 || dow === 6 });
+    days.push({ date: iso, day: d, isSunday: isSundayYmd(iso) });
   }
   const startPad = (first.getDay() + 6) % 7;
   return { days, startPad };
@@ -81,7 +79,7 @@ export default function ReportHistory() {
   }, [reports, viewMonth]);
 
   const submittedCount = monthReports.filter(r => r.status === 'submitted').length;
-  const workingDays = days.filter(d => !d.isWeekend && d.date <= todayStr).length;
+  const workingDays = days.filter(d => !d.isSunday && d.date <= todayStr).length;
 
   const closeSummary = () => {
     setSummaryReportId(null);
@@ -250,7 +248,7 @@ export default function ReportHistory() {
                   const isPast = d.date <= todayStr;
                   const isToday = d.date === todayStr;
                   const isFuture = d.date > todayStr;
-                  const notSubmitted = isPast && !isSubmitted && !d.isWeekend;
+                  const notSubmitted = isPast && !isSubmitted && !d.isSunday;
 
                   return (
                     <button
@@ -272,9 +270,9 @@ export default function ReportHistory() {
                         isToday && 'ring-2 ring-primary/50',
                         isSubmitted && 'bg-emerald-600/15 text-emerald-800 font-semibold',
                         notSubmitted && 'bg-red-500/10 text-red-700',
-                        d.isWeekend && !isSubmitted && 'text-muted-foreground/50',
+                        d.isSunday && !isSubmitted && 'text-muted-foreground/50',
                         isFuture && 'opacity-30',
-                        !isSubmitted && !notSubmitted && !isFuture && !d.isWeekend && 'text-foreground',
+                        !isSubmitted && !notSubmitted && !isFuture && !d.isSunday && 'text-foreground',
                       )}
                     >
                       <span>{d.day}</span>
@@ -293,7 +291,7 @@ export default function ReportHistory() {
                 <span className="w-3 h-3 rounded bg-red-500/10" /> Not Submitted
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-muted/50" /> Weekend
+                <span className="w-3 h-3 rounded bg-muted/50" /> Sunday
               </span>
             </div>
           </div>
