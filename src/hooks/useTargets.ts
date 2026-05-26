@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { TARGET_ACHIEVEMENT_COLUMNS, TARGET_COLUMNS } from '@/lib/queryColumns'
+import { TARGET_COLUMNS } from '@/lib/queryColumns'
 import { supabase } from '@/lib/supabase'
 import type { Target, TargetAchievement } from '@/types/database.types'
 
@@ -13,11 +13,9 @@ export function useMrTargets(mrId: string) {
     enabled: !!mrId && !!supabase,
     queryFn: async (): Promise<TargetAchievement[]> => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
-        .from('v_target_achievement')
-        .select(TARGET_ACHIEVEMENT_COLUMNS)
-        .eq('mr_id', mrId)
-        .order('end_date', { ascending: true })
+      const { data, error } = await supabase.rpc('list_target_achievement_for_mr', {
+        p_mr_id: mrId,
+      })
       if (error) throw error
       return (data ?? []) as TargetAchievement[]
     },
@@ -39,10 +37,9 @@ export function useManagerTargets(managerId: string) {
       if (rows.length === 0) return []
 
       const targetIds = rows.map(r => r.id)
-      const { data: ach, error: aErr } = await supabase
-        .from('v_target_achievement')
-        .select('*')
-        .in('target_id', targetIds)
+      const { data: ach, error: aErr } = await supabase.rpc('list_target_achievement_for_target_ids', {
+        p_target_ids: targetIds,
+      })
       if (aErr) throw aErr
 
       const achByTargetId = new Map<string, TargetAchievement>()
@@ -75,10 +72,9 @@ export function useAllTargets() {
       if (rows.length === 0) return []
 
       const targetIds = rows.map(r => r.id)
-      const { data: ach, error: aErr } = await supabase
-        .from('v_target_achievement')
-        .select('*')
-        .in('target_id', targetIds)
+      const { data: ach, error: aErr } = await supabase.rpc('list_target_achievement_for_target_ids', {
+        p_target_ids: targetIds,
+      })
       if (aErr) throw aErr
 
       const achByTargetId = new Map<string, TargetAchievement>()

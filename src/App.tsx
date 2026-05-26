@@ -45,7 +45,7 @@ const ManagerTargets = lazy(() => import("@/pages/manager/Targets"));
 const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
 const ManagerSelfLeave = lazy(() => import("@/pages/manager/ManagerSelfLeave"));
 const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency"));
-const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
+const MRAnalytics = lazy(() => import("@/pages/mr/Analytics"));
 const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
 const ManagerTerritories = lazy(() => import("@/pages/manager/ManagerTerritories"));
 const ManagerTeamHub = lazy(() => import("@/pages/manager/TeamHub"));
@@ -116,7 +116,8 @@ const App = () => (
             <Route path="/mr/dashboard" element={<AppRoute scope="mr-dashboard" allowedRoles={['mr']}><MRDashboard /></AppRoute>} />
             <Route path="/mr/report/new" element={<AppRoute scope="mr-report-new" allowedRoles={['mr']}><NewReport /></AppRoute>} />
             <Route path="/mr/master-list" element={<AppRoute scope="mr-master-list" allowedRoles={['mr']}><MasterList /></AppRoute>} />
-            <Route path="/mr/visit-frequency" element={<AppRoute scope="mr-visit-frequency" allowedRoles={['mr']}><MRVisitFrequency /></AppRoute>} />
+            <Route path="/mr/analytics" element={<AppRoute scope="mr-analytics" allowedRoles={['mr']}><MRAnalytics /></AppRoute>} />
+            <Route path="/mr/visit-frequency" element={<Navigate to="/mr/analytics" replace />} />
             <Route path="/mr/leave" element={<AppRoute scope="mr-leave" allowedRoles={['mr']}><MRLeave /></AppRoute>} />
             <Route path="/mr/expense" element={<AppRoute scope="mr-expense" allowedRoles={['mr']}><MRExpense /></AppRoute>} />
             <Route path="/mr/tour-program" element={<AppRoute scope="mr-tour-program" allowedRoles={['mr']}><MRTourProgram /></AppRoute>} />

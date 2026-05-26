@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst, formatIstTimeNow } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,6 @@ import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
 import MrDashboardTodayPanel from '@/components/mr/MrDashboardTodayPanel';
 import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
-import DashboardCollapsibleSection from '@/components/shared/DashboardCollapsibleSection';
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import type { AllowedReportDate } from '@/types/database.types';
 import { toast } from 'sonner';
@@ -36,9 +35,7 @@ import DashboardBirthdaySlot from '@/components/shared/employee-birthday/Dashboa
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
-import { useCallsAndSpecialityAnalytics, useVisitFrequencyProgress } from '@/hooks/useFieldActivityAnalytics';
 import { useMrLeaves } from '@/hooks/useLeaves';
-import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart';
 type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
@@ -104,10 +101,6 @@ export default function MRDashboard() {
   });
 
   const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
-  const { data: vfProgress } = useVisitFrequencyProgress(userId, todayInputDate(), deferReady);
-  const [callPreset, setCallPreset] = useState<'daily' | 'weekly' | 'monthly' | 'all'>('monthly');
-  const { data: callAnalytics } = useCallsAndSpecialityAnalytics([userId], callPreset, todayInputDate(), deferReady);
-
   const areaProgress = useMemo(() => {
     const areaIdByName = new Map<string, string>();
     for (const sa of subAreas) {
@@ -522,78 +515,6 @@ export default function MRDashboard() {
             </div>
           </div>
         </div>
-
-        <DashboardCollapsibleSection
-          title="Field analytics"
-          summary="Visit frequency, calls & speciality breakdown"
-          defaultOpen={false}
-        >
-          <button
-            type="button"
-            onClick={() => navigate('/mr/visit-frequency')}
-            className="w-full text-left glass-card p-3.5 rounded-xl active:scale-[0.99] transition flex items-center justify-between gap-3"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <BarChart3 className="h-5 w-5 text-primary" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-foreground">Visit frequency</p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {vfProgress ? `${vfProgress.totalDone} / ${vfProgress.totalTarget} progress this month` : 'Loadingâ€¦'}
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-          </button>
-
-          <div className="glass-card p-3.5 space-y-3 rounded-xl">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-semibold text-foreground">Calls & average</p>
-              <div className="flex gap-1 flex-wrap justify-end">
-                {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setCallPreset(p)}
-                    className={cn(
-                      'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
-                      callPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card text-muted-foreground',
-                    )}
-                  >
-                    {p === 'all' ? 'Till date' : p}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="rounded-lg bg-muted/40 px-3 py-2">
-                <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
-                <p className="text-lg font-bold text-foreground tabular-nums">{callAnalytics?.totalCalls ?? 0}</p>
-              </div>
-              <div className="rounded-lg bg-muted/40 px-3 py-2">
-                <p className="text-[10px] text-muted-foreground font-medium">Avg / active day</p>
-                <p className="text-lg font-bold text-primary tabular-nums">
-                  {callAnalytics && callAnalytics.daysWithReports > 0
-                    ? callAnalytics.avgPerDay.toFixed(1)
-                    : 'â€”'}
-                </p>
-              </div>
-            </div>
-            {callAnalytics && callAnalytics.bySpeciality.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground mb-2">Visits by speciality</p>
-                <LazySpecialityPieChart
-                  data={callAnalytics.bySpeciality}
-                  heightPx={200}
-                  outerRadius={70}
-                  showSliceLabels
-                  legendFontSize={11}
-                />
-              </div>
-            )}
-          </div>
-        </DashboardCollapsibleSection>
 
         {dailyStatus?.is_working_day === false && (
           <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
