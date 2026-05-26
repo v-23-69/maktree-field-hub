@@ -40,13 +40,49 @@ function isForbidden(error: { code?: string; message?: string } | null): boolean
   return error.code === '42501' || /forbidden/i.test(error.message ?? '')
 }
 
-/** MR: sub-areas from mr_sub_area_access, grouped by parent area (for chip UI). */
+type MrSubAreaRpcRow = {
+  sub_area_id: string
+  sub_area_name: string
+  sub_area_code: string
+  area_id: string
+  area_name: string
+}
+
+/** MR: sub-areas from mr_sub_area_access (RPC first, embed fallback). */
 export function useMrSubAreas(mrId: string) {
   return useQuery({
     queryKey: ['mr-sub-areas', mrId],
     queryFn: async (): Promise<SubArea[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
+        const { data: rpcRows, error: rpcErr } = await supabase.rpc('list_sub_areas_for_mr', {
+          p_mr_id: mrId,
+        })
+        if (!rpcErr && rpcRows && Array.isArray(rpcRows) && rpcRows.length > 0) {
+          const list = (rpcRows as MrSubAreaRpcRow[]).map(r => ({
+            id: r.sub_area_id,
+            area_id: r.area_id,
+            name: r.sub_area_name,
+            code: r.sub_area_code,
+            is_active: true,
+            created_at: '',
+            area: {
+              id: r.area_id,
+              name: r.area_name,
+              code: '',
+              is_active: true,
+              created_at: '',
+            },
+          }))
+          list.sort((a, b) => {
+            const an = a.area?.name ?? ''
+            const bn = b.area?.name ?? ''
+            if (an !== bn) return an.localeCompare(bn)
+            return a.name.localeCompare(b.name)
+          })
+          return list
+        }
+
         const { data, error } = await supabase
           .from('mr_sub_area_access')
           .select(`
@@ -55,6 +91,7 @@ export function useMrSubAreas(mrId: string) {
               id,
               name,
               code,
+              area_id,
               is_active,
               areas (
                 id,
@@ -74,22 +111,23 @@ export function useMrSubAreas(mrId: string) {
           const sa = normalizeSubAreaEmbed(r.sub_areas)
           if (!sa || sa.is_active === false) continue
           const ar = sa.areas
+          const areaId = (sa as { area_id?: string }).area_id ?? ar?.id ?? ''
+          const areaName = ar?.name ?? 'Territory'
+          if (!areaId) continue
           list.push({
             id: sa.id,
-            area_id: ar?.id ?? '',
+            area_id: areaId,
             name: sa.name,
             code: sa.code,
             is_active: sa.is_active,
             created_at: '',
-            area: ar
-              ? {
-                  id: ar.id,
-                  name: ar.name,
-                  code: ar.code,
-                  is_active: true,
-                  created_at: '',
-                }
-              : undefined,
+            area: {
+              id: areaId,
+              name: areaName,
+              code: ar?.code ?? '',
+              is_active: true,
+              created_at: '',
+            },
           })
         }
         list.sort((a, b) => {
@@ -118,12 +156,13 @@ export interface MrAreaGroup {
 export function buildMrAreaGroups(subAreas: SubArea[]): MrAreaGroup[] {
   const map = new Map<string, MrAreaGroup>()
   for (const sa of subAreas) {
-    const area = sa.area
-    if (!area) continue
-    let g = map.get(area.id)
+    const areaId = sa.area?.id ?? sa.area_id
+    if (!areaId) continue
+    const areaName = sa.area?.name ?? 'Territory'
+    let g = map.get(areaId)
     if (!g) {
-      g = { area: { id: area.id, name: area.name }, sub_areas: [] }
-      map.set(area.id, g)
+      g = { area: { id: areaId, name: areaName }, sub_areas: [] }
+      map.set(areaId, g)
     }
     g.sub_areas.push({ id: sa.id, name: sa.name, code: sa.code })
   }

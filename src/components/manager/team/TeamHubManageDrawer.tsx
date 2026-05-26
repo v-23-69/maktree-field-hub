@@ -315,8 +315,9 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
                       toast.error('Choose an MR');
                       return;
                     }
+                    const merged = new Set([...assignMrServerAccess, ...assignSelectedSubAreas])
                     void saveMrSubAreaAccess
-                      .mutateAsync({ mrId: assignMrId, subAreaIds: [...assignSelectedSubAreas] })
+                      .mutateAsync({ mrId: assignMrId, subAreaIds: [...merged] })
                       .then(() => {
                         toast.success('Area assignments saved');
                         closeDrawer();

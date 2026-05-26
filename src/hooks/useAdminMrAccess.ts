@@ -52,12 +52,15 @@ export function useSaveMrSubAreaAccess() {
         throw new Error(message)
       }
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['mr-access'] })
       queryClient.invalidateQueries({ queryKey: ['mr-sub-areas'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-sub-areas', vars.mrId] })
       queryClient.invalidateQueries({ queryKey: ['territory-vacancy-snapshot'] })
       queryClient.invalidateQueries({ queryKey: ['territory-assignment-details'] })
       queryClient.invalidateQueries({ queryKey: ['manager-sub-area-assignees'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
     },
   })
 }
