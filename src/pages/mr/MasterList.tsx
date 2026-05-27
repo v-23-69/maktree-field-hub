@@ -12,7 +12,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { useMrSubAreas } from '@/hooks/useAreas'
 import { useMasterListByMr } from '@/hooks/useMasterList'
 import { useMrDoctorsPaginated } from '@/hooks/useMrDoctorsPaginated'
-import type { Doctor, MasterListCompletion, SubArea } from '@/types/database.types'
+import { usePendingDoctorAddRequests } from '@/hooks/useDoctorAddRequest'
+import type { Doctor, DoctorAddRequest, MasterListCompletion, SubArea } from '@/types/database.types'
 import DoctorMasterDrawer from '@/components/mr/DoctorMasterDrawer'
 import AreaSelectPager from '@/components/mr/AreaSelectPager'
 import { cn } from '@/lib/utils'
@@ -142,6 +143,8 @@ export default function MasterList() {
     isFetching: doctorsFetching,
   } = useMrDoctorsPaginated(mrId, selectedSubAreaId, searchDebounced, doctorPage)
 
+  const { data: pendingAddRequests = [] } = usePendingDoctorAddRequests(mrId, selectedSubAreaId)
+
   useEffect(() => {
     if (!doctorsPage) return
     setDoctors(prev =>
@@ -180,6 +183,16 @@ export default function MasterList() {
   const complete = comp?.complete_doctors ?? doctors.filter(d => d.master_list_complete).length
   const pct = comp?.completion_pct ?? (total ? Math.round((complete / total) * 100) : 0)
 
+  const filteredPendingAdds = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return pendingAddRequests
+    return pendingAddRequests.filter(req => {
+      const name = req.payload?.doctor?.full_name?.toLowerCase() ?? ''
+      const spec = req.payload?.doctor?.speciality?.toLowerCase() ?? ''
+      return name.includes(q) || spec.includes(q)
+    })
+  }, [pendingAddRequests, search])
+
   const filteredDoctors = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return doctors
@@ -201,6 +214,7 @@ export default function MasterList() {
     await queryClient.invalidateQueries({ queryKey: ['master-list-completion'] })
     await queryClient.invalidateQueries({ queryKey: ['mr-doctors'] })
     await queryClient.invalidateQueries({ queryKey: ['doctor-deletion-requests-mr', mrId] })
+    await queryClient.invalidateQueries({ queryKey: ['doctor-add-requests-mr', mrId] })
   }
 
   return (
@@ -267,14 +281,26 @@ export default function MasterList() {
                     <div className="py-12">
                       <LoadingSpinner />
                     </div>
-                  ) : doctors.length === 0 ? (
+                  ) : doctors.length === 0 && filteredPendingAdds.length === 0 ? (
                     <div className="p-6">
                       <EmptyState message="No doctors in this area yet." />
                     </div>
-                  ) : filteredDoctors.length === 0 ? (
+                  ) : filteredDoctors.length === 0 && filteredPendingAdds.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-8">No matches for your search.</p>
                   ) : (
                     <ul className="p-2 space-y-2">
+                      {filteredPendingAdds.length > 0 && (
+                        <li>
+                          <p className="text-[10px] font-semibold uppercase tracking-wide text-destructive px-2 py-1">
+                            Pending manager approval ({filteredPendingAdds.length})
+                          </p>
+                          <ul className="space-y-1.5 mt-1">
+                            {filteredPendingAdds.map(req => (
+                              <PendingDoctorRow key={req.id} request={req} />
+                            ))}
+                          </ul>
+                        </li>
+                      )}
                       {incompleteDoctors.length > 0 && (
                         <li>
                           <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400 px-2 py-1">
@@ -346,6 +372,41 @@ export default function MasterList() {
 
       <BottomNav role="mr" />
     </div>
+  )
+}
+
+function PendingDoctorRow({ request }: { request: DoctorAddRequest }) {
+  const doc = request.payload?.doctor
+  const name = doc?.full_name ?? 'New doctor'
+  const speciality = doc?.speciality
+
+  return (
+    <li>
+      <div
+        className="w-full flex items-center gap-3 rounded-xl border-2 border-destructive/50 bg-destructive/5 px-3 py-3 text-left"
+        role="status"
+        aria-label={`${name} pending manager approval`}
+      >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive text-xs font-bold">
+          {doctorInitials(name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-destructive leading-tight truncate">{name}</p>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            {speciality && (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-destructive/80 bg-destructive/10 px-1.5 py-0.5 rounded-md">
+                <Stethoscope className="h-3 w-3" />
+                {speciality}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              Awaiting approval
+            </span>
+          </div>
+        </div>
+      </div>
+    </li>
   )
 }
 

@@ -26,6 +26,7 @@ function AppRoute({
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import InstallPrompt from "@/components/shared/InstallPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
+import NotificationProvider from "@/components/shared/NotificationProvider";
 
 const Login = lazy(() => import("@/pages/auth/Login"));
 const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
@@ -104,6 +105,7 @@ const App = () => (
         <AuthProvider>
           <HashRouter>
           <EmployeeBirthdayProvider>
+          <NotificationProvider>
           <InstallPrompt />
           <Suspense fallback={<PageLoader />}>
           <Routes>
@@ -159,6 +161,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </NotificationProvider>
           </EmployeeBirthdayProvider>
           </HashRouter>
         </AuthProvider>

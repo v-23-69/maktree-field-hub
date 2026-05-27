@@ -13,10 +13,10 @@ import type { Chemist, Doctor } from '@/types/database.types'
 const EMPTY_CHEMISTS: Chemist[] = []
 import {
   useDoctorDetail,
-  useAddDoctorToSubArea,
   useUpdateDoctorDetail,
   useSyncDoctorChemists,
 } from '@/hooks/useMasterList'
+import { useSubmitDoctorAddRequest } from '@/hooks/useDoctorAddRequest'
 import { useChemistsByDoctor } from '@/hooks/useDoctors'
 import { useManagersForMr } from '@/hooks/useManagers'
 import { useMyDoctorDeletionRequests, useRequestDoctorDeletion } from '@/hooks/useDoctorDeletion'
@@ -64,7 +64,7 @@ export default function DoctorMasterDrawer({
   const activeDoctor = doctorDetail ?? doctor
 
   const updateDoctor = useUpdateDoctorDetail()
-  const addDoctor = useAddDoctorToSubArea()
+  const submitDoctorAdd = useSubmitDoctorAddRequest()
   const syncChemists = useSyncDoctorChemists()
   const { data: managers = [] } = useManagersForMr(mrId)
   const { data: myDeletionReqs = [] } = useMyDoctorDeletionRequests(mrId)
@@ -211,26 +211,34 @@ export default function DoctorMasterDrawer({
         return
       }
 
-      const { id } = await addDoctor.mutateAsync({
-        mrId,
-        subAreaId,
-        fullName,
-        speciality,
-        qualification,
-        address,
-        city,
-        mobile,
-        birthday,
-        marriage_anniversary: marriageAnniversary,
-        visit_frequency: visitFrequencyForSave(visitFrequency),
-        monthly_visit_target: monthlyVisitTarget,
+      const managerId = managers[0]?.id ?? null
+      await submitDoctorAdd.mutateAsync({
+        mr_id: mrId,
+        sub_area_id: subAreaId,
+        manager_id: managerId,
+        payload: {
+          doctor: {
+            full_name: fullName.trim(),
+            speciality: speciality.trim(),
+            qualification: qualification.trim() || null,
+            address: address.trim() || null,
+            city: city.trim() || null,
+            mobile: mobile.trim() || null,
+            birthday: birthday.trim() || null,
+            marriage_anniversary: marriageAnniversary.trim() || null,
+            visit_frequency: visitFrequencyForSave(visitFrequency),
+            monthly_visit_target: monthlyVisitTarget,
+          },
+          chemists: chemistPayload
+            .filter(r => r.name.trim())
+            .map(r => ({
+              name: r.name.trim(),
+              owner_name: r.ownerName.trim() || null,
+              owner_contact: r.ownerContact.trim() || null,
+            })),
+        },
       })
-      await syncChemists.mutateAsync({
-        doctorId: id,
-        subAreaId,
-        rows: chemistPayload,
-      })
-      toast.success('New doctor added')
+      toastMrPendingManagerApproval('Doctor added (pending approval)')
       onSaved()
       onClose()
     } catch (e) {
@@ -238,7 +246,7 @@ export default function DoctorMasterDrawer({
     }
   }
 
-  const savePending = updateDoctor.isPending || addDoctor.isPending || syncChemists.isPending
+  const savePending = updateDoctor.isPending || submitDoctorAdd.isPending || syncChemists.isPending
 
   return (
     <Drawer open={open} onOpenChange={v => { if (!v) onClose() }}>

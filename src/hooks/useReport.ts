@@ -467,7 +467,13 @@ export function useSubmitReport() {
           .select()
           .single()
         if (error) throw error
-        return data as DailyReport
+        const report = data as DailyReport
+        void supabase.rpc('notify_dcr_submitted_to_manager', {
+          p_mr_id: report.mr_id,
+          p_report_date: report.report_date,
+          p_manager_id: report.manager_id,
+        })
+        return report
       } catch (e) {
         const message =
           e instanceof Error ? e.message : 'Could not submit report'
@@ -477,6 +483,7 @@ export function useSubmitReport() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
       invalidateDashboardQueries(queryClient)
     },
   })

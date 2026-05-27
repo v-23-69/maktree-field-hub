@@ -174,6 +174,55 @@ export interface MonthlySupportEntry {
   product?: Product
 }
 
+export interface DoctorChemistPayload {
+  name: string
+  owner_name: string | null
+  owner_contact: string | null
+}
+
+/** MR requests adding a doctor; manager approves → doctor created. */
+export interface DoctorAddRequest {
+  id: string
+  mr_id: string
+  manager_id: string | null
+  sub_area_id: string
+  status: 'pending' | 'approved' | 'rejected'
+  payload: {
+    doctor: {
+      full_name: string
+      speciality: string
+      qualification?: string | null
+      address?: string | null
+      city?: string | null
+      mobile?: string | null
+      birthday?: string | null
+      marriage_anniversary?: string | null
+      visit_frequency?: 'weekly' | 'fortnightly' | 'monthly' | null
+      monthly_visit_target?: number
+    }
+    chemists?: DoctorChemistPayload[]
+  }
+  doctor_id: string | null
+  manager_note: string | null
+  approved_by: string | null
+  created_at: string
+  resolved_at: string | null
+  mr?: Pick<User, 'id' | 'full_name' | 'employee_code'>
+  sub_area?: Pick<SubArea, 'id' | 'name' | 'code'> & { area?: Pick<Area, 'id' | 'name'> }
+}
+
+export interface UserNotification {
+  id: string
+  user_id: string
+  kind: string
+  title: string
+  body: string
+  url: string
+  read_at: string | null
+  metadata: Record<string, unknown>
+  created_at: string
+}
+
 /** MR requests removal of a doctor; manager approves → doctor deactivated. */
 export interface DoctorDeletionRequest {
   id: string

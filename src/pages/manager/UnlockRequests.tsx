@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useManagerUnlockRequests, useResolveUnlockRequest } from '@/hooks/useUnlockRequests'
 import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
 import { useManagerDoctorDeletionRequests, useResolveDoctorDeletion } from '@/hooks/useDoctorDeletion'
+import { useManagerDoctorAddRequests, useResolveDoctorAddRequest } from '@/hooks/useDoctorAddRequest'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -22,6 +23,7 @@ import {
   KeyRound,
   Trash2,
   UserRoundX,
+  UserRoundPlus,
   XCircle,
 } from 'lucide-react'
 import {
@@ -36,9 +38,9 @@ import { useAllAreas } from '@/hooks/useAreas'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate } from '@/lib/dateUtils'
-import type { DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
+import type { DoctorAddRequest, DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
 
-type RequestKind = 'unlock' | 'tour-program' | 'tp-deletion' | 'leave' | 'doctor-removal'
+type RequestKind = 'unlock' | 'tour-program' | 'tp-deletion' | 'leave' | 'doctor-removal' | 'doctor-add'
 
 const KIND_META: Record<
   RequestKind,
@@ -68,6 +70,11 @@ const KIND_META: Record<
     label: 'Doctor removal',
     className: 'bg-rose-500/10 text-rose-900 border-rose-500/30 dark:text-rose-200',
     icon: UserRoundX,
+  },
+  'doctor-add': {
+    label: 'New doctor',
+    className: 'bg-red-500/10 text-red-900 border-red-500/30 dark:text-red-200',
+    icon: UserRoundPlus,
   },
 }
 
@@ -107,8 +114,11 @@ export default function UnlockRequests() {
   const { data: leaves = [], isLoading: leavesLoading } = useManagerLeaves(managerId)
   const { data: doctorRemovalReqs = [], isLoading: docDelListLoading } =
     useManagerDoctorDeletionRequests(managerId)
+  const { data: doctorAddReqs = [], isLoading: docAddListLoading } =
+    useManagerDoctorAddRequests(managerId)
   const resolveLeave = useResolveLeave()
   const resolveDoctorDeletion = useResolveDoctorDeletion()
+  const resolveDoctorAdd = useResolveDoctorAddRequest()
   const { data: teamMrs = [] } = useManagerMrs(managerId)
   const mrNameById = useMemo(() => new Map(teamMrs.map(m => [m.id, m.full_name?.trim() || 'MR'] as const)), [teamMrs])
 
@@ -152,6 +162,7 @@ export default function UnlockRequests() {
   const [tpDelNotes, setTpDelNotes] = useState<Record<string, string>>({})
   const [leaveNoteById, setLeaveNoteById] = useState<Record<string, string>>({})
   const [docRemovalNoteById, setDocRemovalNoteById] = useState<Record<string, string>>({})
+  const [docAddNoteById, setDocAddNoteById] = useState<Record<string, string>>({})
 
   const pendingLeaves = useMemo(() => leaves.filter(l => l.status === 'pending'), [leaves])
   const pendingDocRemovals = useMemo(
@@ -164,8 +175,15 @@ export default function UnlockRequests() {
     pendingTp.length +
     tpDeletionReqs.length +
     pendingLeaves.length +
-    pendingDocRemovals.length
-  const isLoading = unlockLoading || tpLoading || tpDelLoading || leavesLoading || docDelListLoading
+    pendingDocRemovals.length +
+    doctorAddReqs.length
+  const isLoading =
+    unlockLoading ||
+    tpLoading ||
+    tpDelLoading ||
+    leavesLoading ||
+    docDelListLoading ||
+    docAddListLoading
 
   const statusBadge = (status: string) => {
     if (status === 'approved') {
@@ -581,6 +599,87 @@ export default function UnlockRequests() {
     </div>
   )
 
+  const renderDoctorAddCard = (req: DoctorAddRequest) => {
+    const doc = req.payload?.doctor
+    const areaLabel = req.sub_area
+      ? `${req.sub_area.area?.name ?? ''} / ${req.sub_area.name}`.replace(/^ \/ /, '')
+      : '—'
+  return (
+    <div key={`docadd-${req.id}`} className="rounded-xl border border-destructive/40 bg-card p-4 shadow-sm space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <KindBadge kind="doctor-add" />
+        <Badge className="bg-destructive/10 text-destructive border-destructive/30">Pending</Badge>
+      </div>
+      <div className="space-y-1">
+        <p className="text-sm font-bold text-foreground">{req.mr?.full_name ?? 'MR'}</p>
+        <p className="text-xs text-muted-foreground">
+          New doctor:{' '}
+          <span className="font-medium text-destructive">{doc?.full_name ?? '—'}</span>
+          {doc?.speciality ? ` · ${doc.speciality}` : ''}
+        </p>
+        <p className="text-xs text-muted-foreground">Area: {areaLabel}</p>
+        {(req.payload?.chemists?.length ?? 0) > 0 && (
+          <p className="text-[11px] text-muted-foreground">
+            Chemists: {(req.payload?.chemists ?? []).map(c => c.name).join(', ')}
+          </p>
+        )}
+      </div>
+      <div>
+        <label
+          className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider"
+          htmlFor={`docadd-note-${req.id}`}
+        >
+          Manager note
+        </label>
+        <Input
+          id={`docadd-note-${req.id}`}
+          className="mt-1 rounded-lg text-sm"
+          value={docAddNoteById[req.id] ?? ''}
+          onChange={e => setDocAddNoteById(prev => ({ ...prev, [req.id]: e.target.value }))}
+          placeholder="Optional note…"
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          className="rounded-lg bg-emerald-600 text-white hover:bg-emerald-600/90"
+          disabled={resolveDoctorAdd.isPending}
+          onClick={() =>
+            void resolveDoctorAdd
+              .mutateAsync({
+                requestId: req.id,
+                status: 'approved',
+                managerNote: docAddNoteById[req.id],
+              })
+              .then(() => toast.success('Doctor approved and added'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Approve
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className="rounded-lg"
+          disabled={resolveDoctorAdd.isPending}
+          onClick={() =>
+            void resolveDoctorAdd
+              .mutateAsync({
+                requestId: req.id,
+                status: 'rejected',
+                managerNote: docAddNoteById[req.id],
+              })
+              .then(() => toast.success('Request rejected'))
+              .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+          }
+        >
+          Reject
+        </Button>
+      </div>
+    </div>
+  )
+  }
+
   const renderDoctorRemovalCard = (req: DoctorDeletionRequest) => (
     <div key={`docdel-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -681,6 +780,7 @@ export default function UnlockRequests() {
                   {tpDeletionReqs.map(req => renderTpDeletionCard(req))}
                   {pendingLeaves.map(leave => renderLeaveCard(leave))}
                   {pendingDocRemovals.map(req => renderDoctorRemovalCard(req))}
+                  {doctorAddReqs.map(req => renderDoctorAddCard(req))}
                 </div>
               )}
             </div>

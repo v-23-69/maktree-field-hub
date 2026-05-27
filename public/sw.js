@@ -1,5 +1,5 @@
 /* Maktree Field Hub — app-shell + static asset caching for PWA installability & speed */
-const SHELL_CACHE = "maktree-shell-v4";
+const SHELL_CACHE = "maktree-shell-v5";
 const ASSET_CACHE = "maktree-assets-v1";
 
 self.addEventListener("install", (event) => {
@@ -77,4 +77,27 @@ self.addEventListener("fetch", (event) => {
       })(),
     );
   }
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url || "/";
+  const target = url.startsWith("/") ? url : `/${url}`;
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.focus();
+          if ("navigate" in client && typeof client.navigate === "function") {
+            return client.navigate(`${self.registration.scope}#${target}`);
+          }
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(`${self.registration.scope}#${target}`);
+      }
+    }),
+  );
 });
