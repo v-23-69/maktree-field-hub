@@ -2,7 +2,6 @@ import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { performAppBack } from '@/hooks/usePreventAccidentalBack';
-import ManagerRequestsHeaderButton from '@/components/shared/ManagerRequestsHeaderButton';
 import NotificationBell from '@/components/shared/NotificationBell';
 
 interface PageHeaderProps {
@@ -69,8 +68,9 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
       {rightAction ?? (
         user ? (
           <div className="flex items-center gap-1.5 shrink-0">
-            {(user.role === 'mr' || user.role === 'manager') && <NotificationBell userId={user.id} />}
-            {user.role === 'manager' && <ManagerRequestsHeaderButton />}
+            {(user.role === 'mr' || user.role === 'manager') && (
+              <NotificationBell userId={user.id} role={user.role} />
+            )}
             <button
               type="button"
               onClick={() => navigate('/profile')}

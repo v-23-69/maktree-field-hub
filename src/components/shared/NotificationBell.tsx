@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bell, Check } from 'lucide-react'
+import { Bell, Check, ChevronRight, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   useMarkNotificationRead,
   useUnreadNotificationCount,
   useUserNotifications,
 } from '@/hooks/useUserNotifications'
-import { normalizeNotificationUrl } from '@/lib/notifications/notificationRoutes'
+import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount'
+import { normalizeNotificationUrl, NOTIFICATION_ROUTES } from '@/lib/notifications/notificationRoutes'
 import { requestNotificationPermission } from '@/lib/notifications/showBrowserNotification'
 import {
   Sheet,
@@ -18,17 +19,22 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { formatDisplayDate } from '@/lib/dateUtils'
+import type { UserRole } from '@/types/database.types'
 
 interface Props {
   userId: string
+  role: UserRole
 }
 
-export default function NotificationBell({ userId }: Props) {
+export default function NotificationBell({ userId, role }: Props) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const unread = useUnreadNotificationCount(userId)
+  const pendingApprovals = useManagerPendingRequestsCount(role === 'manager' ? userId : '')
   const { data: notifications = [] } = useUserNotifications(userId)
   const markRead = useMarkNotificationRead()
+
+  const badgeCount = unread + (role === 'manager' ? pendingApprovals : 0)
 
   const onOpen = () => {
     setOpen(true)
@@ -43,6 +49,11 @@ export default function NotificationBell({ userId }: Props) {
     navigate(normalizeNotificationUrl(url))
   }
 
+  const goToRequests = () => {
+    setOpen(false)
+    navigate(NOTIFICATION_ROUTES.managerRequests)
+  }
+
   return (
     <>
       <button
@@ -52,12 +63,14 @@ export default function NotificationBell({ userId }: Props) {
           'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
           'hover:bg-foreground/5 active:scale-95 transition-transform touch-manipulation',
         )}
-        aria-label={unread > 0 ? `Notifications, ${unread} unread` : 'Notifications'}
+        aria-label={
+          badgeCount > 0 ? `Notifications, ${badgeCount} unread or pending` : 'Notifications'
+        }
       >
         <Bell className="h-5 w-5 text-foreground" />
-        {unread > 0 && (
+        {badgeCount > 0 && (
           <span className="absolute -top-0.5 -right-0.5 min-w-[17px] px-0.5 h-[17px] text-[9px] rounded-full bg-destructive text-white flex items-center justify-center border-2 border-background font-bold">
-            {unread > 99 ? '99+' : unread}
+            {badgeCount > 99 ? '99+' : badgeCount}
           </span>
         )}
       </button>
@@ -67,13 +80,44 @@ export default function NotificationBell({ userId }: Props) {
           <SheetHeader className="px-4 pt-4 pb-3 border-b border-border/60 text-left">
             <SheetTitle className="text-base">Notifications</SheetTitle>
             <SheetDescription className="text-xs">
-              Tap a message to open the related page. Enable alerts in your phone settings for reminders at 8 PM and 11 PM.
+              {role === 'manager'
+                ? 'Alerts, DCR updates, and approval requests in one place.'
+                : 'Tap a message to open the related page. Enable alerts for DCR reminders at 8 PM and 11 PM.'}
             </SheetDescription>
           </SheetHeader>
 
           <div className="flex-1 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-12 px-4">No notifications yet.</p>
+            {role === 'manager' && pendingApprovals > 0 && (
+              <div className="p-3 border-b border-border/60 bg-amber-500/5">
+                <button
+                  type="button"
+                  onClick={goToRequests}
+                  className="w-full flex items-center gap-3 rounded-xl border border-amber-500/40 bg-card px-3 py-3 text-left hover:bg-amber-500/10 active:bg-amber-500/15 transition-colors touch-manipulation"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-500/15 text-amber-800 dark:text-amber-300">
+                    <ClipboardList className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-foreground">
+                      {pendingApprovals} approval{pendingApprovals !== 1 ? 's' : ''} waiting
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Leave, tour program, doctor add/remove, unlock & more
+                    </p>
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                </button>
+              </div>
+            )}
+
+            {notifications.length === 0 && !(role === 'manager' && pendingApprovals > 0) ? (
+              <p className="text-sm text-muted-foreground text-center py-12 px-4">
+                No notifications yet.
+              </p>
+            ) : notifications.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6 px-4">
+                No other alerts right now. Use the card above for pending approvals.
+              </p>
             ) : (
               <ul className="divide-y divide-border/60">
                 {notifications.map(n => {
@@ -92,7 +136,9 @@ export default function NotificationBell({ userId }: Props) {
                         <div
                           className={cn(
                             'mt-0.5 h-10 w-10 shrink-0 rounded-full flex items-center justify-center',
-                            isUnread ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+                            isUnread
+                              ? 'bg-primary/15 text-primary'
+                              : 'bg-muted text-muted-foreground',
                           )}
                         >
                           {isUnread ? (
@@ -106,7 +152,9 @@ export default function NotificationBell({ userId }: Props) {
                             <p
                               className={cn(
                                 'text-sm truncate',
-                                isUnread ? 'font-bold text-foreground' : 'font-medium text-foreground/90',
+                                isUnread
+                                  ? 'font-bold text-foreground'
+                                  : 'font-medium text-foreground/90',
                               )}
                             >
                               {n.title}
@@ -115,7 +163,9 @@ export default function NotificationBell({ userId }: Props) {
                               {formatDisplayDate(dateLabel).split(',')[0]}
                             </span>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
+                            {n.body}
+                          </p>
                         </div>
                       </button>
                     </li>
