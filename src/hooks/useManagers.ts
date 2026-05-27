@@ -119,17 +119,7 @@ export function useManagersForMr(mrId: string) {
       if (error) {
         throw new Error(error.message ?? 'Could not load managers')
       }
-      const managers = (data ?? []) as ManagerRow[]
-      const managerIds = managers.map(m => m.id).filter(Boolean)
-      if (managerIds.length === 0) return managers
-      const { data: photoRows } = await supabase
-        .from('users')
-        .select('id, profile_photo_url')
-        .in('id', managerIds)
-      const photoById = new Map<string, string | null>(
-        (photoRows ?? []).map((r: { id: string; profile_photo_url: string | null }) => [r.id, r.profile_photo_url]),
-      )
-      return managers.map(m => ({ ...m, profile_photo_url: photoById.get(m.id) ?? null }))
+      return (data ?? []) as ManagerRow[]
     },
   })
 }

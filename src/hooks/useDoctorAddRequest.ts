@@ -79,7 +79,13 @@ export function useSubmitDoctorAddRequest() {
         p_manager_id: p.manager_id,
         p_payload: p.payload,
       })
-      if (error) throw error
+      if (error) {
+        const msg = error.message ?? 'Could not submit doctor request'
+        if (error.code === '23505' || msg.includes('doctor_add_one_pending')) {
+          throw new Error('A request to add this doctor is already pending approval.')
+        }
+        throw new Error(msg)
+      }
       return data as string
     },
     onSuccess: (_id, v) => {
