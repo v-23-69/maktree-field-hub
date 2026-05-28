@@ -295,6 +295,8 @@ export default function NewReport() {
       return {
         onBack: () => setStep(2),
         onNext: () => setStep(4),
+        nextLabel: 'Review & Submit',
+        showBack: true,
       }
     }
     if ((step === 4 && !leaveFlow && !sundayFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow)) {
