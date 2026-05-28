@@ -9,14 +9,15 @@ import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
 import { Textarea } from '@/components/ui/textarea';
-import { useDailyReport } from '@/hooks/useReport';
+import { useDailyReport, useDeleteReport } from '@/hooks/useReport';
 import type { ReportVisit } from '@/types/database.types';
-import { ChevronDown, Pill, Download } from 'lucide-react';
+import { ChevronDown, Pill, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { withPdfGenerationProgress } from '@/lib/dcrPdfAsync';
 import { doctorTerritoryLabels } from '@/lib/doctorTerritory';
 
@@ -30,8 +31,10 @@ export default function ReportDetail() {
   const [issueDrawerOpen, setIssueDrawerOpen] = useState(false);
   const [issueText, setIssueText] = useState('');
   const [issueSubmitting, setIssueSubmitting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: report, isLoading, isError } = useDailyReport(id ?? '');
+  const deleteReport = useDeleteReport();
 
   const visits: ReportVisit[] = report?.visits ?? [];
   const sortedVisits = useMemo(
@@ -81,6 +84,20 @@ export default function ReportDetail() {
   };
 
   const dateLabel = report?.report_date ? formatDisplayDate(report.report_date) : '';
+
+  const canManagerDelete = navRole === 'manager' && user?.role === 'manager' && !!report;
+
+  const handleDeleteReport = async () => {
+    if (!report?.id) return;
+    try {
+      await deleteReport.mutateAsync(report.id);
+      toast.success('DCR deleted');
+      setShowDeleteConfirm(false);
+      navigate(`/manager/history?mrId=${report.mr_id}`, { replace: true });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete DCR');
+    }
+  };
 
   if (!id) {
     return (
@@ -135,18 +152,32 @@ export default function ReportDetail() {
                   >
                     {report.status === 'submitted' ? 'Submitted' : 'Draft'}
                   </Badge>
-                  {report.status === 'submitted' && (navRole === 'manager' || report.mr_id === user?.id) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-lg touch-target"
-                      onClick={() => void downloadThisReportPdf()}
-                    >
-                      <Download className="h-4 w-4 mr-2 shrink-0" />
-                      Download PDF
-                    </Button>
-                  )}
+                  <div className="flex flex-col gap-2 sm:items-end w-full sm:w-auto">
+                    {report.status === 'submitted' && (navRole === 'manager' || report.mr_id === user?.id) && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg touch-target w-full sm:w-auto"
+                        onClick={() => void downloadThisReportPdf()}
+                      >
+                        <Download className="h-4 w-4 mr-2 shrink-0" />
+                        Download PDF
+                      </Button>
+                    )}
+                    {canManagerDelete && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-lg touch-target w-full sm:w-auto border-destructive/40 text-destructive hover:bg-destructive/10"
+                        onClick={() => setShowDeleteConfirm(true)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2 shrink-0" />
+                        Delete DCR
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </div>
               {report.manager && reportKind === 'field' && (
@@ -249,40 +280,15 @@ export default function ReportDetail() {
                                       <tr className="bg-muted/50">
                                         <th className="text-left px-3 py-1.5 font-medium text-muted-foreground">Product</th>
                                         <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Qty</th>
-                                        <th className="text-right px-3 py-1.5 font-medium text-muted-foreground">Amount (Rs)</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {monthly.map((row, i) => {
-                                        const saved = Number(row.amount_inr ?? 0);
-                                        const fallback =
-                                          (row.product?.ptr ?? 0) * (row.quantity || 0);
-                                        const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
-                                        return (
-                                          <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
-                                            <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
-                                            <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
-                                            <td className="px-3 py-1.5 text-right font-semibold text-primary">
-                                              {amount > 0 ? `Rs ${amount.toLocaleString('en-IN')}` : '—'}
-                                            </td>
-                                          </tr>
-                                        );
-                                      })}
-                                      {(() => {
-                                        const total = monthly.reduce((sum, row) => {
-                                          const saved = Number(row.amount_inr ?? 0);
-                                          const fallback =
-                                            (row.product?.ptr ?? 0) * (row.quantity || 0);
-                                          const amount = saved > 0 ? saved : Math.round(fallback * 100) / 100;
-                                          return sum + amount;
-                                        }, 0);
-                                        return total > 0 ? (
-                                          <tr className="border-t border-border bg-primary/5">
-                                            <td colSpan={2} className="px-3 py-1.5 text-right font-semibold text-foreground text-[10px]">Total</td>
-                                            <td className="px-3 py-1.5 text-right font-bold text-primary">Rs {total.toLocaleString('en-IN')}</td>
-                                          </tr>
-                                        ) : null;
-                                      })()}
+                                      {monthly.map((row, i) => (
+                                        <tr key={row.id ?? i} className={i % 2 === 1 ? 'bg-muted/30' : ''}>
+                                          <td className="px-3 py-1.5 text-foreground">{row.product?.name ?? '—'}</td>
+                                          <td className="px-3 py-1.5 text-right text-foreground">{row.quantity}</td>
+                                        </tr>
+                                      ))}
                                     </tbody>
                                   </table>
                                 </div>
@@ -400,6 +406,17 @@ export default function ReportDetail() {
           </div>
         </DrawerContent>
       </Drawer>
+
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        onOpenChange={setShowDeleteConfirm}
+        title="Delete this DCR?"
+        description="This permanently removes the report and all doctor visits for this date. This cannot be undone."
+        onConfirm={() => void handleDeleteReport()}
+        confirmLabel={deleteReport.isPending ? 'Deleting…' : 'Delete'}
+        destructive
+        confirmDisabled={deleteReport.isPending}
+      />
 
       <BottomNav role={navRole} />
     </div>

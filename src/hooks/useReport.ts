@@ -450,6 +450,29 @@ export function useSaveVisit() {
   })
 }
 
+/** Manager (or MR own row via RLS) — deletes report and cascaded visits. */
+export function useDeleteReport() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.from('daily_reports').delete().eq('id', reportId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-reports-counts'] })
+      queryClient.invalidateQueries({ queryKey: ['daily-report'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-report'] })
+      queryClient.invalidateQueries({ queryKey: ['manager-mr-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
+      queryClient.invalidateQueries({ queryKey: ['pending-dcr-imports'] })
+      invalidateDashboardQueries(queryClient)
+    },
+  })
+}
+
 export function useSubmitReport() {
   const queryClient = useQueryClient()
 

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
@@ -43,16 +43,9 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  useEffect(() => {
-    if (!hideFooter || !onDockedFooter) return;
-    onDockedFooter({
-      onBack,
-      onNext: () => setShowConfirm(true),
-      nextLabel: isSubmitting ? 'Submitting…' : 'Submit Report',
-      nextDisabled: isSubmitting,
-      showBack: true,
-    });
-  }, [hideFooter, onDockedFooter, onBack, isSubmitting]);
+  // NOTE: We intentionally do not register a docked footer here.
+  // Parent-level docked footers can cause render loops when callbacks change across renders.
+  // This step renders its own Back/Submit controls when `hideFooter` is true.
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -345,47 +338,11 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
                             Monthly support
                           </p>
-                          {visit.monthlySupport.filter(m => m.productId).map((ms, i) => {
-                            const prod = products.find(p => p.id === ms.productId);
-                            const ptr = prod?.ptr ?? 0;
-                            const lineTotal = Math.round(ptr * (ms.quantity || 0) * 100) / 100;
-                            return (
-                              <div
-                                key={i}
-                                className="flex flex-col gap-0.5 rounded-lg border border-border/60 bg-muted/20 px-2 py-1.5 mb-1.5 last:mb-0"
-                              >
-                                <div className="flex items-center justify-between gap-2 text-xs text-foreground">
-                                  <span className="min-w-0 truncate font-medium">
-                                    {productName(ms.productId)} — {ms.quantity} qty
-                                  </span>
-                                  {ptr > 0 ? (
-                                    <span className="shrink-0 font-semibold text-primary tabular-nums">
-                                      Rs {lineTotal.toLocaleString('en-IN')}
-                                    </span>
-                                  ) : (
-                                    <span className="shrink-0 text-[10px] text-amber-700 dark:text-amber-300">
-                                      Rate pending
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                          {(() => {
-                            const total = visit.monthlySupport.filter(m => m.productId).reduce((sum, ms) => {
-                              const p = products.find(pr => pr.id === ms.productId);
-                              return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
-                            }, 0);
-                            const hasLines = visit.monthlySupport.some(m => m.productId);
-                            return hasLines ? (
-                              <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-border/50">
-                                <span className="text-[10px] font-semibold text-muted-foreground">Estimated total</span>
-                                <span className="text-xs font-bold text-primary tabular-nums">
-                                  Rs {(Math.round(total * 100) / 100).toLocaleString('en-IN')}
-                                </span>
-                              </div>
-                            ) : null;
-                          })()}
+                          {visit.monthlySupport.filter(m => m.productId).map((ms, i) => (
+                            <p key={i} className="text-xs text-foreground mb-1 last:mb-0">
+                              {productName(ms.productId)} — {ms.quantity} qty
+                            </p>
+                          ))}
                         </div>
                       )}
                       {visit.competitors.some(c => c.brandName.trim()) && (
@@ -404,6 +361,31 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
           </div>
         )}
       </div>
+
+      {hideFooter && (
+        <div className="pt-3">
+          <div className="rounded-xl border border-border/70 bg-card/60 p-3">
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onBack}
+                className="flex-1 touch-target rounded-lg min-h-11"
+              >
+                Back
+              </Button>
+              <Button
+                type="button"
+                onClick={() => setShowConfirm(true)}
+                disabled={isSubmitting}
+                className="flex-1 touch-target rounded-lg min-h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold border border-primary/60 shadow-sm"
+              >
+                {isSubmitting ? 'Submitting…' : 'Submit Report'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {!hideFooter && (
         <ReportStepFooter

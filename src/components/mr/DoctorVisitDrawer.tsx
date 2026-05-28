@@ -11,7 +11,6 @@ import {
   Store,
   Banknote,
   Swords,
-  IndianRupee,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Doctor, Product } from '@/types/database.types';
@@ -160,13 +159,6 @@ export default function DoctorVisitDrawer({
   const suggestChemists = (
     q ? allChemists.filter(c => c.name.toLowerCase().includes(q)) : allChemists
   ).slice(0, 8);
-
-  const monthlyTotal = Math.round(
-    monthlySupport.reduce((sum, ms) => {
-      const p = products.find(pr => pr.id === ms.productId);
-      return sum + (p?.ptr ?? 0) * (ms.quantity || 0);
-    }, 0) * 100,
-  ) / 100;
 
   const handleSave = () => {
     if (productsPromoted.length < 1) {
@@ -341,11 +333,6 @@ export default function DoctorVisitDrawer({
           >
             <div className="space-y-3">
               {monthlySupport.map((ms, i) => {
-                const selectedProduct = products.find(p => p.id === ms.productId);
-                const ptr = selectedProduct?.ptr ?? 0;
-                const lineTotal = Math.round(ptr * (ms.quantity || 0) * 100) / 100;
-                const showAmount = !!ms.productId;
-
                 return (
                   <div
                     key={i}
@@ -390,56 +377,29 @@ export default function DoctorVisitDrawer({
                       </select>
                     </div>
 
-                    <div className="flex items-end gap-3">
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <Label className="text-xs font-medium text-foreground">Quantity</Label>
-                        <Input
-                          type="text"
-                          inputMode="numeric"
-                          autoComplete="off"
-                          value={quantityInputDisplay(ms.quantity)}
-                          onChange={e => {
-                            const next = [...monthlySupport];
-                            next[i] = {
-                              ...next[i],
-                              quantity: parseQuantityInput(e.target.value),
-                            };
-                            setMonthlySupport(next);
-                          }}
-                          placeholder="0"
-                          className={cn(qtyInputClass, 'max-w-none w-full')}
-                          aria-label="Monthly support quantity"
-                        />
-                      </div>
-                      {showAmount && ptr > 0 && (
-                        <div className="shrink-0 rounded-xl bg-primary/5 border border-primary/20 px-3 py-2 min-w-[5.5rem] text-right">
-                          <p className="text-[9px] font-semibold uppercase text-muted-foreground">Est.</p>
-                          <p className="text-sm font-bold text-primary tabular-nums flex items-center justify-end gap-0.5">
-                            <IndianRupee className="h-3 w-3" />
-                            {lineTotal.toLocaleString('en-IN')}
-                          </p>
-                        </div>
-                      )}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-foreground">Quantity</Label>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        value={quantityInputDisplay(ms.quantity)}
+                        onChange={e => {
+                          const next = [...monthlySupport];
+                          next[i] = {
+                            ...next[i],
+                            quantity: parseQuantityInput(e.target.value),
+                          };
+                          setMonthlySupport(next);
+                        }}
+                        placeholder="0"
+                        className={cn(qtyInputClass, 'max-w-none w-full')}
+                        aria-label="Monthly support quantity"
+                      />
                     </div>
-
-                    {showAmount && ptr <= 0 && (
-                      <p className="text-[11px] text-amber-800 dark:text-amber-200/90 bg-amber-500/10 border border-amber-500/25 rounded-lg px-3 py-2 leading-snug">
-                        PTR not set for this product. Ask your manager to update brand rates.
-                      </p>
-                    )}
                   </div>
                 );
               })}
-
-              {monthlySupport.some(ms => ms.productId) && (
-                <div className="flex items-center justify-between rounded-xl bg-primary/8 border border-primary/25 px-4 py-3">
-                  <span className="text-xs font-semibold text-foreground">Estimated total</span>
-                  <span className="text-base font-bold text-primary tabular-nums flex items-center gap-0.5">
-                    <IndianRupee className="h-4 w-4" />
-                    {monthlyTotal.toLocaleString('en-IN')}
-                  </span>
-                </div>
-              )}
 
               <Button
                 variant="outline"

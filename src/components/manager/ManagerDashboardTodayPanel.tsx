@@ -130,7 +130,7 @@ export default function ManagerDashboardTodayPanel({
       {mrs.length > 0 && (
         <div className="px-4 py-3">
           <p className="text-[10px] font-medium text-muted-foreground mb-2">Team DCR today</p>
-          <div className="flex flex-wrap gap-4">
+          <div className="grid grid-cols-3 gap-x-2 gap-y-4">
             {mrs.map(mr => {
               const submitted = statusByMrId.get(mr.id) === true
               return (
@@ -140,6 +140,7 @@ export default function ManagerDashboardTodayPanel({
                   photoUrl={mr.profile_photo_url}
                   status={submitted ? 'active' : 'inactive'}
                   size="md"
+                  className="mx-auto max-w-none w-full"
                   onClick={() => navigate(`/manager/team/${mr.id}`)}
                 />
               )

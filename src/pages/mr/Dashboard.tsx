@@ -35,6 +35,7 @@ import DashboardBirthdaySlot from '@/components/shared/employee-birthday/Dashboa
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
+import ProfileCompletionPrompt from '@/components/shared/ProfileCompletionPrompt';
 import { useMrLeaves } from '@/hooks/useLeaves';
 type DrawerAction = 'strike' | 'holiday' | null;
 
@@ -710,6 +711,8 @@ export default function MRDashboard() {
         destructive
         confirmDisabled={markStrike.isPending}
       />
+
+      <ProfileCompletionPrompt />
 
       <BottomNav role="mr" />
     </div>

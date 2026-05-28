@@ -32,6 +32,7 @@ import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { useExpenseReport } from '@/hooks/useExpense';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
+import ProfileCompletionPrompt from '@/components/shared/ProfileCompletionPrompt';
 
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
 
@@ -560,6 +561,8 @@ export default function ManagerDashboard() {
         destructive
         confirmDisabled={markStrike.isPending}
       />
+
+      <ProfileCompletionPrompt />
 
       <BottomNav role="manager" />
     </div>
