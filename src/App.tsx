@@ -8,19 +8,6 @@ import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
 import type { UserRole } from "@/types/database.types";
 
-function MaintenanceModeScreen() {
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-6">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-sm">
-        <h1 className="text-xl md:text-2xl font-bold text-foreground">Maintenance Mode</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          We are fixing some issues. Please check back shortly.
-        </p>
-      </div>
-    </div>
-  );
-}
-
 function AppRoute({
   scope,
   allowedRoles,
@@ -112,24 +99,16 @@ function RootRedirect() {
 
 const App = () => (
   <ThemeProvider>
-    {(() => {
-      const maintenanceEnabled = import.meta.env.VITE_MAINTENANCE_MODE === "true";
-      const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
-      const isVercelHost = host.endsWith(".vercel.app") || host === "maktree.vercel.app";
-      if (maintenanceEnabled && isVercelHost) {
-        return <MaintenanceModeScreen />;
-      }
-      return (
-        <QueryClientProvider client={queryClient}>
-          <TooltipProvider>
-            <Sonner />
-            <AuthProvider>
-              <HashRouter>
-              <EmployeeBirthdayProvider>
-              <NotificationProvider>
-              <InstallPrompt />
-              <Suspense fallback={<PageLoader />}>
-              <Routes>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Sonner />
+        <AuthProvider>
+          <HashRouter>
+          <EmployeeBirthdayProvider>
+          <NotificationProvider>
+          <InstallPrompt />
+          <Suspense fallback={<PageLoader />}>
+          <Routes>
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
             <Route path="/blocked-complaint" element={<BlockedComplaint />} />
@@ -180,16 +159,14 @@ const App = () => (
             <Route path="/admin/holidays" element={<AppRoute scope="admin-holidays" allowedRoles={['admin']}><AdminHolidays /></AppRoute>} />
 
             <Route path="*" element={<NotFound />} />
-              </Routes>
-              </Suspense>
-              </NotificationProvider>
-              </EmployeeBirthdayProvider>
-              </HashRouter>
-            </AuthProvider>
-          </TooltipProvider>
-        </QueryClientProvider>
-      );
-    })()}
+          </Routes>
+          </Suspense>
+          </NotificationProvider>
+          </EmployeeBirthdayProvider>
+          </HashRouter>
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   </ThemeProvider>
 );
 

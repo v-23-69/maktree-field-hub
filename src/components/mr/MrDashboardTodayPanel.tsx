@@ -31,7 +31,7 @@ export default function MrDashboardTodayPanel({
           disabled={dcrBlocked || (todayIsSunday && dcrDone)}
           onClick={() => !dcrBlocked && navigate('/mr/report/new')}
           className={cn(
-            'flex items-center gap-2.5 rounded-xl px-3 py-3 text-left transition-all',
+            'flex items-center gap-2.5 rounded-xl px-3 py-3 text-left transition-all touch-pan-y',
             dcrDone
               ? 'bg-emerald-500/10 ring-1 ring-emerald-500/25'
               : dcrBlocked
@@ -66,7 +66,7 @@ export default function MrDashboardTodayPanel({
           type="button"
           onClick={() => navigate('/mr/expense')}
           className={cn(
-            'flex items-center gap-2.5 rounded-xl px-3 py-3 text-left transition-all active:scale-[0.98]',
+            'flex items-center gap-2.5 rounded-xl px-3 py-3 text-left transition-all active:scale-[0.98] touch-pan-y',
             expenseDone
               ? 'bg-emerald-500/10 ring-1 ring-emerald-500/25'
               : 'bg-background ring-1 ring-border/80 hover:ring-primary/35',
