@@ -436,7 +436,7 @@ export default function NewReport() {
   }
 
   return (
-    <div className="h-[100dvh] flex flex-col bg-background overflow-hidden">
+    <div className="min-h-[100dvh] flex flex-col bg-background">
       <PageHeader title="New Daily Report" showBack onBack={safeGoBack} />
 
       <div className="shrink-0 px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full">
@@ -470,7 +470,12 @@ export default function NewReport() {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
-        <div className="px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full">
+        <div
+          className={cn(
+            "px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full",
+            dockedFooter && "pb-28 md:pb-32",
+          )}
+        >
           {step === 1 && (
             <ReportStep1
               data={formData}
