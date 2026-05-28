@@ -1,21 +1,96 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { boundsForPreset, previousBounds } from '@/lib/analyticsPeriodCompare'
+import { ANALYTICS_QUERY_OPTIONS } from '@/lib/analyticsQueryOptions'
+import {
+  fetchCallsAnalyticsForRange,
+  fetchCallsComparison,
+  type CallsAnalyticsResult,
+} from '@/lib/fetchCallsAnalytics'
 
-export type PeriodPreset = 'daily' | 'weekly' | 'monthly' | 'all'
+export type PeriodPreset = 'weekly' | 'monthly' | 'yearly'
 
-function boundsForPreset(preset: PeriodPreset, anchorYmd: string): { from: string; to: string } {
-  const to = anchorYmd
-  if (preset === 'daily') return { from: to, to }
-  if (preset === 'all') return { from: '2000-01-01', to }
-  const t = new Date(to + 'T12:00:00')
-  if (preset === 'weekly') {
-    const s = new Date(t)
-    s.setDate(s.getDate() - 6)
-    const from = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, '0')}-${String(s.getDate()).padStart(2, '0')}`
-    return { from, to }
-  }
-  const from = `${to.slice(0, 7)}-01`
-  return { from, to }
+export { boundsForPreset }
+
+export function useCallsForDateRange(
+  mrIds: string[],
+  from: string,
+  to: string,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ['calls-date-range-analytics', mrIds.slice().sort().join(','), from, to],
+    enabled: enabled && mrIds.length > 0 && !!from && !!to && !!supabase,
+    ...ANALYTICS_QUERY_OPTIONS,
+    queryFn: () => fetchCallsAnalyticsForRange(mrIds, from, to),
+  })
+}
+
+/** Single fetch for current period + optional previous period (2× fewer DB round-trips). */
+export function useCallsComparisonAnalytics(
+  mrIds: string[],
+  preset: PeriodPreset,
+  anchorYmd: string,
+  compareEnabled: boolean,
+  enabled: boolean,
+) {
+  const periodBounds = boundsForPreset(preset, anchorYmd)
+  const prevBounds = previousBounds(periodBounds.from, periodBounds.to)
+
+  return useQuery({
+    queryKey: [
+      'calls-comparison-analytics',
+      mrIds.slice().sort().join(','),
+      preset,
+      anchorYmd,
+      compareEnabled,
+    ],
+    enabled: enabled && mrIds.length > 0 && !!supabase,
+    ...ANALYTICS_QUERY_OPTIONS,
+    queryFn: async (): Promise<{
+      current: CallsAnalyticsResult
+      previous: CallsAnalyticsResult | null
+    }> => {
+      if (!compareEnabled) {
+        const current = await fetchCallsAnalyticsForRange(
+          mrIds,
+          periodBounds.from,
+          periodBounds.to,
+        )
+        return { current, previous: null }
+      }
+      const { current, previous } = await fetchCallsComparison(
+        mrIds,
+        periodBounds.from,
+        periodBounds.to,
+        prevBounds.from,
+        prevBounds.to,
+      )
+      return { current, previous }
+    },
+  })
+}
+
+export function useCallsRangeComparison(
+  mrIds: string[],
+  fromDate: string,
+  toDate: string,
+  enabled: boolean,
+) {
+  const prevBounds = previousBounds(fromDate, toDate)
+
+  return useQuery({
+    queryKey: [
+      'calls-range-comparison',
+      mrIds.slice().sort().join(','),
+      fromDate,
+      toDate,
+    ],
+    enabled: enabled && mrIds.length > 0 && !!fromDate && !!toDate && !!supabase,
+    ...ANALYTICS_QUERY_OPTIONS,
+    queryFn: () =>
+      fetchCallsComparison(mrIds, fromDate, toDate, prevBounds.from, prevBounds.to),
+  })
 }
 
 /** Calls = doctor visits on submitted field DCRs (one visit = one call). */
@@ -29,72 +104,8 @@ export function useCallsAndSpecialityAnalytics(
   return useQuery({
     queryKey: ['calls-speciality-analytics', mrIds.slice().sort().join(','), preset, from, to],
     enabled: enabled && mrIds.length > 0 && !!supabase,
-    queryFn: async () => {
-      if (!supabase) throw new Error('Supabase not configured')
-      const { data: reports, error: rErr } = await supabase
-        .from('daily_reports')
-        .select('id, report_date, report_kind')
-        .in('mr_id', mrIds)
-        .eq('status', 'submitted')
-        .gte('report_date', from)
-        .lte('report_date', to)
-      if (rErr) throw rErr
-      const repList = (reports ?? []) as { id: string; report_date: string; report_kind?: string | null }[]
-      const fieldReportIds = repList.filter(r => (r.report_kind ?? 'field') === 'field').map(r => r.id)
-      if (fieldReportIds.length === 0) {
-        return {
-          totalCalls: 0,
-          daysWithReports: 0,
-          byDay: [] as { date: string; calls: number }[],
-          bySpeciality: [] as { speciality: string; visits: number }[],
-          avgPerDay: 0,
-        }
-      }
-      const { data: visits, error: vErr } = await supabase
-        .from('report_visits')
-        .select('id, report_id, doctor_id')
-        .in('report_id', fieldReportIds)
-      if (vErr) throw vErr
-      const visitRows = (visits ?? []) as { report_id: string; doctor_id: string }[]
-      const totalCalls = visitRows.length
-
-      const reportMeta = new Map(repList.map(r => [r.id, r.report_date]))
-      const byDate = new Map<string, number>()
-      for (const v of visitRows) {
-        const d = reportMeta.get(v.report_id)
-        if (!d) continue
-        byDate.set(d, (byDate.get(d) ?? 0) + 1)
-      }
-      const byDay = [...byDate.entries()]
-        .map(([date, calls]) => ({ date, calls }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-      const daysWithReports = byDate.size
-      const avgPerDay = daysWithReports > 0 ? totalCalls / daysWithReports : 0
-
-      const doctorIds = [...new Set(visitRows.map(v => v.doctor_id))]
-      let bySpeciality: { speciality: string; visits: number }[] = []
-      if (doctorIds.length > 0) {
-        const { data: docs, error: dErr } = await supabase
-          .from('doctors')
-          .select('id, speciality')
-          .in('id', doctorIds)
-        if (!dErr && docs) {
-          const specByDoctor = new Map(
-            (docs as { id: string; speciality: string | null }[]).map(d => [d.id, d.speciality]),
-          )
-          const specCount = new Map<string, number>()
-          for (const v of visitRows) {
-            const s = (specByDoctor.get(v.doctor_id) ?? '').trim() || 'Unknown'
-            specCount.set(s, (specCount.get(s) ?? 0) + 1)
-          }
-          bySpeciality = [...specCount.entries()]
-            .map(([speciality, visits]) => ({ speciality, visits }))
-            .sort((a, b) => b.visits - a.visits)
-        }
-      }
-
-      return { totalCalls, daysWithReports, byDay, bySpeciality, avgPerDay }
-    },
+    ...ANALYTICS_QUERY_OPTIONS,
+    queryFn: () => fetchCallsAnalyticsForRange(mrIds, from, to),
   })
 }
 
@@ -118,6 +129,7 @@ export function useVisitFrequencyProgress(mrId: string, monthYmd: string, enable
   return useQuery({
     queryKey: ['visit-frequency-progress', mrId, month],
     enabled: !!mrId && !!supabase && enabled,
+    ...ANALYTICS_QUERY_OPTIONS,
     queryFn: async () => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data: access, error: aErr } = await supabase

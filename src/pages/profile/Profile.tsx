@@ -19,7 +19,6 @@ import {
 } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -28,6 +27,9 @@ import { useAuth } from '@/hooks/useAuth'
 import { useProfile, useUpdateProfile, useUploadProfilePhoto } from '@/hooks/useProfile'
 import { useTheme } from '@/hooks/useTheme'
 import BottomNav from '@/components/shared/BottomNav'
+import ProfileSummaryCard, {
+  profileStatFromContact,
+} from '@/components/dashboard/profile-summary-card'
 
 const REQUIRED_FIELDS: string[] = [
   'full_name',
@@ -110,120 +112,47 @@ export default function ProfilePage() {
       <PageHeader title="Profile" showBack />
 
       <div className="max-w-md md:max-w-xl lg:max-w-2xl mx-auto space-y-4 px-4 md:px-6 pt-4">
-        {/* Hero card */}
-        <div className="relative rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              {profile.profile_photo_url ? (
-                <img
-                  src={profile.profile_photo_url}
-                  alt={profile.full_name}
-                  className="h-20 w-20 rounded-full object-cover ring-[3px] ring-primary/20 shadow-lg"
+        <ProfileSummaryCard
+          name={profile.full_name}
+          title={profile.designation ?? undefined}
+          role={profile.role}
+          avatarUrl={profile.profile_photo_url}
+          initials={initials}
+          completionPercent={completion}
+          stats={profileStatFromContact(profile)}
+          headerAction={
+            canEdit ? (
+              <label className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground cursor-pointer shadow-md active:scale-90 transition-transform">
+                <Camera className="h-3.5 w-3.5" />
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]
+                    if (!file || !user?.auth_user_id || !effectiveUserId) return
+                    void uploadPhoto
+                      .mutateAsync({ file, authUserId: user.auth_user_id, userId: effectiveUserId })
+                      .then(() => toast.success('Photo updated'))
+                      .catch(err => toast.error(err instanceof Error ? err.message : 'Upload failed'))
+                  }}
                 />
-              ) : (
-                <div className="h-20 w-20 rounded-full bg-primary/15 flex items-center justify-center ring-[3px] ring-primary/20 shadow-lg">
-                  <span className="text-2xl font-bold text-primary">{initials}</span>
-                </div>
-              )}
-              {canEdit && (
-                <label className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center cursor-pointer shadow-md active:scale-90 transition-transform">
-                  <Camera className="h-3.5 w-3.5" />
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => {
-                      const file = e.target.files?.[0]
-                      if (!file || !user?.auth_user_id || !effectiveUserId) return
-                      void uploadPhoto
-                        .mutateAsync({ file, authUserId: user.auth_user_id, userId: effectiveUserId })
-                        .then(() => toast.success('Photo updated'))
-                        .catch(err => toast.error(err instanceof Error ? err.message : 'Upload failed'))
-                    }}
-                  />
-                </label>
-              )}
-            </div>
+              </label>
+            ) : undefined
+          }
+        />
 
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold text-foreground truncate">{profile.full_name}</h2>
-              <p className="text-xs text-muted-foreground">{profile.email ?? '—'}</p>
-              <div className="flex items-center gap-2 mt-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary uppercase">
-                  {profile.role}
-                </span>
-                {profile.designation && (
-                  <span className="text-[11px] text-muted-foreground truncate">{profile.designation}</span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Completion */}
         {completion < 100 && (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3.5 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-                Profile {Math.round(completion)}% Complete
-              </p>
-              <button
-                onClick={() => setShowEdit(true)}
-                className="text-[11px] font-semibold text-primary"
-              >
-                Complete now
-              </button>
-            </div>
-            <Progress value={completion} className="h-1.5" />
-          </div>
+          <button
+            type="button"
+            onClick={() => setShowEdit(true)}
+            className="w-full rounded-xl border border-amber-500/30 bg-amber-500/5 px-3.5 py-2.5 text-left text-xs font-semibold text-foreground flex items-center gap-1.5"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            Complete missing profile fields
+            <ChevronRight className="h-4 w-4 ml-auto text-muted-foreground" />
+          </button>
         )}
-
-        {/* Quick info cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-          {profile.mobile && (
-            <div className="glass-card !rounded-xl p-3 flex items-center gap-2.5">
-              <Phone className="h-4 w-4 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground">Mobile</p>
-                <p className="text-xs font-medium text-foreground truncate">{profile.mobile}</p>
-              </div>
-            </div>
-          )}
-          {(profile.city || profile.state) && (
-            <div className="glass-card !rounded-xl p-3 flex items-center gap-2.5">
-              <MapPin className="h-4 w-4 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground">Location</p>
-                <p className="text-xs font-medium text-foreground truncate">
-                  {[profile.city, profile.state].filter(Boolean).join(', ')}
-                </p>
-              </div>
-            </div>
-          )}
-          {profile.joining_date && (
-            <div className="glass-card !rounded-xl p-3 flex items-center gap-2.5">
-              <Calendar className="h-4 w-4 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground">Joined</p>
-                <p className="text-xs font-medium text-foreground truncate">
-                  {new Date(profile.joining_date).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}
-                </p>
-              </div>
-            </div>
-          )}
-          {profile.dob && (
-            <div className="glass-card !rounded-xl p-3 flex items-center gap-2.5">
-              <Calendar className="h-4 w-4 text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-muted-foreground">Birthday</p>
-                <p className="text-xs font-medium text-foreground truncate">
-                  {new Date(profile.dob).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
 
         {/* Details section */}
         <div className="glass-card !rounded-xl divide-y divide-border/50">

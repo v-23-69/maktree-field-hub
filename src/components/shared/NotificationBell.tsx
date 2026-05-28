@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Check, ChevronRight, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -8,7 +8,6 @@ import {
   useUserNotifications,
 } from '@/hooks/useUserNotifications'
 import { useManagerPendingRequestsCount } from '@/hooks/useManagerPendingRequestsCount'
-import { normalizeNotificationUrl, NOTIFICATION_ROUTES } from '@/lib/notifications/notificationRoutes'
 import { requestNotificationPermission } from '@/lib/notifications/showBrowserNotification'
 import {
   Sheet,
@@ -19,7 +18,35 @@ import {
 } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { formatDisplayDate } from '@/lib/dateUtils'
-import type { UserRole } from '@/types/database.types'
+import type { UserNotification, UserRole } from '@/types/database.types'
+import { normalizeNotificationUrl, NOTIFICATION_ROUTES } from '@/lib/notifications/notificationRoutes'
+
+const TERMINAL_REQUEST_STATUSES = new Set([
+  'approved',
+  'rejected',
+  'declined',
+  'resolved',
+  'completed',
+  'done',
+  'cancelled',
+  'canceled',
+])
+
+function shouldKeepUnread(n: UserNotification): boolean {
+  const url = normalizeNotificationUrl(n.url)
+  const kind = (n.kind ?? '').toLowerCase()
+  const status = (n.metadata as { status?: string } | null)?.status?.toLowerCase()
+  const isRequestLike =
+    url.startsWith(NOTIFICATION_ROUTES.managerRequests) ||
+    kind.includes('request') ||
+    kind.includes('approval') ||
+    kind.includes('leave') ||
+    kind.includes('unlock') ||
+    kind.includes('complaint')
+  if (!isRequestLike) return false
+  if (!status) return true
+  return !TERMINAL_REQUEST_STATUSES.has(status)
+}
 
 interface Props {
   userId: string
@@ -41,8 +68,15 @@ export default function NotificationBell({ userId, role }: Props) {
     void requestNotificationPermission()
   }
 
-  const openNotification = (id: string, url: string, read: boolean) => {
-    if (!read) {
+  useEffect(() => {
+    if (!open || notifications.length === 0) return
+    const toMark = notifications.filter(n => !n.read_at && !shouldKeepUnread(n))
+    if (toMark.length === 0) return
+    void Promise.all(toMark.map(n => markRead.mutateAsync({ id: n.id, userId })))
+  }, [open, notifications, userId, markRead])
+
+  const openNotification = (id: string, url: string, n: UserNotification) => {
+    if (!n.read_at && !shouldKeepUnread(n)) {
       void markRead.mutateAsync({ id, userId })
     }
     setOpen(false)
@@ -127,7 +161,7 @@ export default function NotificationBell({ userId, role }: Props) {
                     <li key={n.id}>
                       <button
                         type="button"
-                        onClick={() => openNotification(n.id, n.url, !isUnread)}
+                        onClick={() => openNotification(n.id, n.url, n)}
                         className={cn(
                           'w-full text-left px-4 py-3.5 flex gap-3 hover:bg-muted/40 active:bg-muted/60 transition-colors touch-manipulation',
                           isUnread && 'bg-primary/5',
@@ -175,24 +209,6 @@ export default function NotificationBell({ userId, role }: Props) {
             )}
           </div>
 
-          {notifications.some(n => !n.read_at) && (
-            <div className="p-3 border-t border-border/60">
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-xl text-sm"
-                disabled={markRead.isPending}
-                onClick={() => {
-                  const unreadList = notifications.filter(n => !n.read_at)
-                  void Promise.all(
-                    unreadList.map(n => markRead.mutateAsync({ id: n.id, userId })),
-                  )
-                }}
-              >
-                Mark all as read
-              </Button>
-            </div>
-          )}
         </SheetContent>
       </Sheet>
     </>

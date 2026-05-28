@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { Phone } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -6,32 +7,56 @@ import EmptyState from '@/components/shared/EmptyState'
 import LazySpecialityBarChart from '@/components/charts/LazySpecialityBarChart'
 import { rollupSpecialityRows } from '@/lib/chartRollup'
 import LazyMrCallsDayChart from '@/components/charts/LazyMrCallsDayChart'
+import TeamFieldCallsChart from '@/components/charts/TeamFieldCallsChart'
 import { useAuth } from '@/hooks/useAuth'
 import { useMrDashboardStats } from '@/hooks/useDashboardStats'
-import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics'
-import VisitFrequencyByAreaSection from '@/components/mr/VisitFrequencyByAreaSection'
+import {
+  useCallsComparisonAnalytics,
+  type PeriodPreset,
+} from '@/hooks/useFieldActivityAnalytics'
+import { buildDayComparisonChart, percentChange } from '@/lib/analyticsPeriodCompare'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 
-const PERIOD_PRESETS: PeriodPreset[] = ['daily', 'weekly', 'monthly', 'all']
+const PERIOD_PRESETS: PeriodPreset[] = ['weekly', 'monthly', 'yearly']
 
 function periodLabel(p: PeriodPreset) {
-  return p === 'all' ? 'Till date' : p.charAt(0).toUpperCase() + p.slice(1)
+  return p.charAt(0).toUpperCase() + p.slice(1)
 }
 
 export default function MRAnalyticsPage() {
   const { user } = useAuth()
   const mrId = user?.id ?? ''
-  const today = todayInputDate()
   const [callPreset, setCallPreset] = useState<PeriodPreset>('monthly')
+  const [deferHeavy, setDeferHeavy] = useState(false)
 
-  const { data: stats, isLoading: statsLoading } = useMrDashboardStats(mrId)
-  const { data: calls, isLoading: callsLoading } = useCallsAndSpecialityAnalytics(
+  useEffect(() => {
+    const t = window.setTimeout(() => setDeferHeavy(true), 200)
+    return () => window.clearTimeout(t)
+  }, [])
+
+  const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferHeavy ? mrId : '')
+  const compareEnabled = !!mrId
+  const { data: callsBundle, isLoading: callsLoading } = useCallsComparisonAnalytics(
     [mrId],
     callPreset,
-    today,
+    todayInputDate(),
+    compareEnabled,
     !!mrId,
   )
+
+  const calls = callsBundle?.current
+  const prevCalls = callsBundle?.previous
+
+  const comparisonChart = useMemo(
+    () => buildDayComparisonChart(calls?.byDay ?? [], prevCalls?.byDay ?? []),
+    [calls?.byDay, prevCalls?.byDay],
+  )
+  const callsChange = useMemo(
+    () => percentChange(calls?.totalCalls ?? 0, prevCalls?.totalCalls ?? 0),
+    [calls?.totalCalls, prevCalls?.totalCalls],
+  )
+
   const specialityChartData = useMemo(
     () => rollupSpecialityRows(calls?.bySpeciality ?? [], 7),
     [calls?.bySpeciality],
@@ -40,7 +65,7 @@ export default function MRAnalyticsPage() {
   return (
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Analytics" />
-      <div className="px-4 py-4 space-y-5 max-w-2xl md:max-w-4xl lg:max-w-5xl mx-auto">
+      <div className="mx-auto w-full px-4 py-4 space-y-5 max-w-lg md:px-8 md:max-w-3xl md:space-y-6 lg:px-10 lg:max-w-5xl">
         <p className="text-sm text-muted-foreground -mt-2">
           Your field performance — calls, visit targets, and doctor coverage for this account only.
         </p>
@@ -84,6 +109,17 @@ export default function MRAnalyticsPage() {
             <LoadingSpinner />
           ) : (
             <>
+              {compareEnabled && comparisonChart.length > 0 && (
+                <TeamFieldCallsChart
+                  title="Field calls"
+                  icon={<Phone className="h-5 w-5" />}
+                  mainValue={String(calls?.totalCalls ?? 0)}
+                  changeValue={callsChange}
+                  changeDescription="vs previous period"
+                  chartData={comparisonChart}
+                />
+              )}
+
               <div className="grid grid-cols-3 gap-2">
                 <div className="rounded-xl bg-muted/40 px-3 py-2.5">
                   <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
@@ -122,8 +158,6 @@ export default function MRAnalyticsPage() {
             </>
           )}
         </section>
-
-        <VisitFrequencyByAreaSection mrId={mrId} />
 
       </div>
       <BottomNav role="mr" />

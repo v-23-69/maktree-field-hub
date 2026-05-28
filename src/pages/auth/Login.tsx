@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import AppLogo from '@/components/shared/AppLogo';
+import MaktreeBrand from '@/components/shared/MaktreeBrand';
+import { prefetchRoleDashboard } from '@/lib/prefetchDashboard';
 
 export default function Login() {
   const { signIn, user, authReady, isProfileLoading, blockedInfo, clearBlockedInfo } =
@@ -20,6 +21,7 @@ export default function Login() {
 
   useEffect(() => {
     if (user && authReady) {
+      prefetchRoleDashboard(user.role)
       if (user.role === 'mr') navigate('/mr/dashboard', { replace: true })
       else if (user.role === 'manager') navigate('/manager/dashboard', { replace: true })
       else navigate('/admin/dashboard', { replace: true })
@@ -64,12 +66,8 @@ export default function Login() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 w-full max-w-full overflow-x-hidden">
       <div className="w-full max-w-sm md:max-w-md min-w-0 animate-fade-in-up md:glass-card md:p-8 md:rounded-2xl">
-        <div className="mb-10 flex flex-col items-center gap-4">
-          <AppLogo className="h-24 w-auto drop-shadow-sm" />
-          <div className="text-center space-y-1">
-            <h1 className="text-xl font-extrabold text-foreground tracking-tight">MakTree DCR Portal</h1>
-            <p className="text-sm text-muted-foreground font-medium">Field Reporting System</p>
-          </div>
+        <div className="mb-10 flex flex-col items-center">
+          <MaktreeBrand variant="login" />
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">

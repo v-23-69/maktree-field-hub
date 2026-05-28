@@ -9,6 +9,8 @@ import ReportStep3 from '@/components/mr/ReportStep3';
 import ReportStep4 from '@/components/mr/ReportStep4';
 import ReportSundayDcrStep from '@/components/mr/ReportSundayDcrStep';
 import ReportLeaveDcrStep from '@/components/mr/ReportLeaveDcrStep';
+import ReportStrikeDcrStep from '@/components/mr/ReportStrikeDcrStep';
+import ReportHolidayDcrStep from '@/components/mr/ReportHolidayDcrStep';
 import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -42,8 +44,8 @@ export interface ReportFormData {
   selectedSubAreaIds: string[]
   visits: Record<string, VisitFormEntry>
   tpAutoFilled?: boolean
-  /** MR: 'leave' when selected date is an approved full-day leave (Leave DCR flow). 'sunday' for Sunday DCR. */
-  reportKind?: 'field' | 'leave' | 'sunday'
+  /** DCR type chosen on step 1 before filling the form. */
+  reportKind?: 'field' | 'leave' | 'sunday' | 'strike' | 'holiday'
   leaveDcrCategory?: 'casual' | 'sick' | ''
   leaveDcrRemark?: string
 }
@@ -54,7 +56,7 @@ const DRAFT_KEY = 'maktree_report_draft';
 
 type ReportNavState = {
   date?: string
-  reportKind?: 'field' | 'leave' | 'sunday'
+  reportKind?: 'field' | 'leave' | 'sunday' | 'strike' | 'holiday'
 }
 
 function migrateDraft(raw: unknown): ReportFormData | null {
@@ -76,7 +78,16 @@ function migrateDraft(raw: unknown): ReportFormData | null {
       ? migrateVisits(o.visits as Record<string, unknown>)
       : {},
     tpAutoFilled: typeof o.tpAutoFilled === 'boolean' ? o.tpAutoFilled : false,
-    reportKind: o.reportKind === 'leave' ? 'leave' : o.reportKind === 'sunday' ? 'sunday' : 'field',
+    reportKind:
+      o.reportKind === 'leave'
+        ? 'leave'
+        : o.reportKind === 'sunday'
+          ? 'sunday'
+          : o.reportKind === 'strike'
+            ? 'strike'
+            : o.reportKind === 'holiday'
+              ? 'holiday'
+              : 'field',
     leaveDcrCategory: o.leaveDcrCategory === 'sick' || o.leaveDcrCategory === 'casual' ? o.leaveDcrCategory : '',
     leaveDcrRemark: typeof o.leaveDcrRemark === 'string' ? o.leaveDcrRemark : '',
   }
@@ -135,7 +146,6 @@ export default function NewReport() {
   const [step, setStep] = useState(1);
   const [step1CanProceed, setStep1CanProceed] = useState(false);
   const [step2CanProceed, setStep2CanProceed] = useState(false);
-  const [childFooter, setChildFooter] = useState<ReportStepFooterProps | null>(null);
   const [unlockReason, setUnlockReason] = useState('')
   const [formData, setFormData] = useState<ReportFormData>(() => {
     const draft = loadDraft();
@@ -154,6 +164,9 @@ export default function NewReport() {
 
   const leaveFlow = user?.role === 'mr' && formData.reportKind === 'leave';
   const sundayFlow = formData.reportKind === 'sunday';
+  const strikeFlow = formData.reportKind === 'strike';
+  const holidayFlow = formData.reportKind === 'holiday';
+  const altDcrFlow = leaveFlow || sundayFlow || strikeFlow || holidayFlow;
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
@@ -169,7 +182,10 @@ export default function NewReport() {
         ...prev,
         date,
         reportKind,
-        ...(reportKind === 'sunday' || reportKind === 'leave'
+        ...(reportKind === 'sunday' ||
+        reportKind === 'leave' ||
+        reportKind === 'strike' ||
+        reportKind === 'holiday'
           ? {
               selectedSubAreaIds: [],
               visits: {},
@@ -181,25 +197,10 @@ export default function NewReport() {
       }
     })
     if (navState.reportKind === 'sunday') setStep(5)
+    else if (navState.reportKind === 'strike') setStep(6)
+    else if (navState.reportKind === 'holiday') setStep(7)
     else if (navState.reportKind === 'leave') setStep(2)
   }, [navState?.date, navState?.reportKind])
-
-  useEffect(() => {
-    if (!isSundayYmd(formData.date)) return
-    setFormData(prev => {
-      if (prev.reportKind === 'sunday') return prev
-      return {
-        ...prev,
-        reportKind: 'sunday',
-        selectedSubAreaIds: [],
-        visits: {},
-        workingWithIds: [],
-        workingWithId: '',
-        tpAutoFilled: false,
-      }
-    })
-    setStep(5)
-  }, [formData.date])
 
   useEffect(() => {
     if (user?.role !== 'mr' || wwSanitizeOpts.length === 0) return
@@ -215,7 +216,14 @@ export default function NewReport() {
   useEffect(() => {
     const applyTourPlanAutofill = async () => {
       if (!supabase || !mrId || !formData.date) return
-      if (isSundayYmd(formData.date) || formData.reportKind === 'sunday') return
+      if (
+        isSundayYmd(formData.date) ||
+        formData.reportKind === 'sunday' ||
+        formData.reportKind === 'strike' ||
+        formData.reportKind === 'holiday' ||
+        formData.reportKind === 'leave'
+      )
+        return
       const { data, error } = await supabase.rpc('get_tour_plan_for_date', {
         p_mr_id: mrId,
         p_date: formData.date,
@@ -258,10 +266,6 @@ export default function NewReport() {
     localStorage.removeItem(DRAFT_KEY);
   }, []);
 
-  useEffect(() => {
-    setChildFooter(null);
-  }, [step]);
-
   const {
     data: blockStatus,
     isLoading: blockLoading,
@@ -271,27 +275,44 @@ export default function NewReport() {
 
   const navRole = user?.role === 'manager' ? 'manager' : 'mr';
   const currentMonthTpMissing = tpStatus && !tpStatus.current_month_tp_exists;
-  const stepLabels = sundayFlow ? ['Date', 'Sunday DCR'] : leaveFlow ? LEAVE_STEPS : STEPS;
+  const stepLabels = sundayFlow
+    ? ['Date', 'Sunday DCR']
+    : leaveFlow
+      ? LEAVE_STEPS
+      : strikeFlow
+        ? ['Date', 'Strike DCR']
+        : holidayFlow
+          ? ['Date', 'Holiday DCR']
+          : STEPS;
 
   const dockedFooter = useMemo((): ReportStepFooterProps | null => {
-    if (step === 1 && !leaveFlow && !sundayFlow) {
+    if (step === 1 && !altDcrFlow) {
+      return {
+        showBack: false,
+        onNext: () => setStep(2),
+        nextDisabled: !step1CanProceed,
+      }
+    }
+    if (step === 1 && altDcrFlow) {
       return {
         showBack: false,
         onNext: () => {
           if (sundayFlow) setStep(5)
-          else setStep(2)
+          else if (strikeFlow) setStep(6)
+          else if (holidayFlow) setStep(7)
+          else if (leaveFlow) setStep(2)
         },
         nextDisabled: !step1CanProceed,
       }
     }
-    if (step === 2 && !leaveFlow && !sundayFlow) {
+    if (step === 2 && !altDcrFlow) {
       return {
         onBack: () => setStep(1),
         onNext: () => setStep(3),
         nextDisabled: !step2CanProceed,
       }
     }
-    if (step === 3 && !leaveFlow && !sundayFlow) {
+    if (step === 3 && !altDcrFlow) {
       return {
         onBack: () => setStep(2),
         onNext: () => setStep(4),
@@ -299,11 +320,8 @@ export default function NewReport() {
         showBack: true,
       }
     }
-    if ((step === 4 && !leaveFlow && !sundayFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow)) {
-      return childFooter
-    }
     return null
-  }, [step, leaveFlow, sundayFlow, step1CanProceed, step2CanProceed, childFooter])
+  }, [step, altDcrFlow, leaveFlow, sundayFlow, strikeFlow, holidayFlow, step1CanProceed, step2CanProceed])
 
   if (blockLoading || tpLoading) {
     return (
@@ -442,11 +460,7 @@ export default function NewReport() {
       <div className="shrink-0 px-4 md:px-6 pt-4 pb-2 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full">
         <div className="flex items-center gap-1">
           {stepLabels.map((s, i) => {
-            const visualStep = sundayFlow
-              ? (step >= 5 ? 2 : step)
-              : leaveFlow
-                ? (step >= 2 ? 2 : step)
-                : step
+            const visualStep = altDcrFlow ? (step === 1 ? 1 : 2) : step
             const isActive = i + 1 === visualStep
             const isCompleted = i + 1 < visualStep
             return (
@@ -476,7 +490,7 @@ export default function NewReport() {
         <div
           className={cn(
             "px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full",
-            dockedFooter && "pb-28 md:pb-32",
+            (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow)) && "pb-28 md:pb-32",
           )}
         >
           {step === 1 && (
@@ -487,6 +501,9 @@ export default function NewReport() {
               onCanProceedChange={setStep1CanProceed}
               onNext={() => {
                 if (sundayFlow) setStep(5)
+                else if (strikeFlow) setStep(6)
+                else if (holidayFlow) setStep(7)
+                else if (leaveFlow) setStep(2)
                 else setStep(2)
               }}
             />
@@ -497,7 +514,22 @@ export default function NewReport() {
               onBack={() => setStep(1)}
               onClearDraft={clearDraft}
               hideFooter
-              onDockedFooter={setChildFooter}
+            />
+          )}
+          {step === 6 && strikeFlow && (
+            <ReportStrikeDcrStep
+              data={formData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+            />
+          )}
+          {step === 7 && holidayFlow && (
+            <ReportHolidayDcrStep
+              data={formData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
             />
           )}
           {step === 2 && leaveFlow && (
@@ -507,10 +539,9 @@ export default function NewReport() {
               onBack={() => setStep(1)}
               onClearDraft={clearDraft}
               hideFooter
-              onDockedFooter={setChildFooter}
             />
           )}
-          {step === 2 && !leaveFlow && !sundayFlow && (
+          {step === 2 && !altDcrFlow && (
             <ReportStep2
               data={formData}
               onChange={updateData}
@@ -520,7 +551,7 @@ export default function NewReport() {
               onBack={() => setStep(1)}
             />
           )}
-          {step === 3 && !leaveFlow && !sundayFlow && (
+          {step === 3 && !altDcrFlow && (
             <ReportStep3
               data={formData}
               onChange={updateData}
@@ -529,13 +560,12 @@ export default function NewReport() {
               onBack={() => setStep(2)}
             />
           )}
-          {step === 4 && !leaveFlow && !sundayFlow && (
+          {step === 4 && !altDcrFlow && (
             <ReportStep4
               data={formData}
               onBack={() => setStep(3)}
               onClearDraft={clearDraft}
               hideFooter
-              onDockedFooter={setChildFooter}
             />
           )}
         </div>

@@ -178,6 +178,17 @@ export default function MasterList() {
     setDrawerOpen(true)
   }, [doctorIdParam, doctorsLoading, doctors, drawerOpen, selectedSubAreaId])
 
+  const overallMasterList = useMemo(() => {
+    let total = 0
+    let complete = 0
+    for (const row of completionRows) {
+      total += row.total_doctors ?? 0
+      complete += row.complete_doctors ?? 0
+    }
+    const pct = total > 0 ? Math.round((complete / total) * 100) : 0
+    return { total, complete, pct }
+  }, [completionRows])
+
   const comp = selectedSubAreaId ? completionBySubArea.get(selectedSubAreaId) : undefined
   const total = comp?.total_doctors ?? doctorsPage?.totalCount ?? doctors.length
   const complete = comp?.complete_doctors ?? doctors.filter(d => d.master_list_complete).length
@@ -231,6 +242,40 @@ export default function MasterList() {
 
         {!loading && !error && subAreas.length > 0 && (
           <>
+            {overallMasterList.total > 0 && (
+              <div className="rounded-2xl border border-border/80 bg-card px-4 py-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-foreground">Master list coverage</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      Complete profiles across all your areas
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-lg font-bold tabular-nums text-foreground">
+                      {overallMasterList.pct}%
+                    </p>
+                    <p className="text-[10px] text-muted-foreground tabular-nums">
+                      {overallMasterList.complete}/{overallMasterList.total}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2.5 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all',
+                      overallMasterList.pct > 80
+                        ? 'bg-emerald-500'
+                        : overallMasterList.pct >= 50
+                          ? 'bg-amber-500'
+                          : 'bg-destructive',
+                    )}
+                    style={{ width: `${overallMasterList.pct}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <AreaSelectPager
               subAreas={flatSubAreas}
               selectedId={selectedSubAreaId}

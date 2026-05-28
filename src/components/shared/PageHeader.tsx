@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { performAppBack } from '@/hooks/usePreventAccidentalBack';
 import NotificationBell from '@/components/shared/NotificationBell';
+import MaktreeBrand from '@/components/shared/MaktreeBrand';
 
 interface PageHeaderProps {
   title: string;
@@ -25,10 +26,10 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
 
   return (
     <header
-      className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-6 shrink-0 border-b border-border/40"
+      className="sticky top-0 z-30 glass flex items-center gap-3 px-4 md:px-8 lg:px-10 shrink-0 border-b border-border/40"
       style={{
         paddingTop: 'max(0px, env(safe-area-inset-top))',
-        minHeight: 'calc(3.5rem + env(safe-area-inset-top, 0px))',
+        minHeight: 'calc(4rem + env(safe-area-inset-top, 0px))',
       }}
     >
       {showBack ? (
@@ -40,26 +41,11 @@ export default function PageHeader({ title, showBack, onBack, rightAction }: Pag
         >
           <ArrowLeft className="h-5 w-5 text-foreground" />
         </button>
-      ) : (
-        <div className="h-9 w-9 rounded-xl overflow-hidden shrink-0 bg-primary/5 flex items-center justify-center">
-          <img
-            src="/icons/icon-192-v2.png"
-            alt="MakTree"
-            className="h-[150%] w-[150%] object-cover"
-          />
-        </div>
-      )}
+      ) : null}
 
       <div className="flex-1 min-w-0">
         {!showBack ? (
-          <div>
-            <p className="text-[15px] md:text-base font-extrabold text-foreground truncate leading-tight tracking-tight">
-              MakTree DCR Portal
-            </p>
-            <p className="text-[10px] md:text-[11px] text-muted-foreground/70 font-medium tracking-wide">
-              Field Reporting System
-            </p>
-          </div>
+          <MaktreeBrand variant="compact" className="min-w-0" />
         ) : (
           <h1 className="text-[15px] font-bold text-foreground truncate tracking-tight">{title}</h1>
         )}

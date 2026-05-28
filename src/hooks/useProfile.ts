@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { USER_PROFILE_COLUMNS } from '@/lib/queryColumns'
+import { PROFILE_QUERY_OPTIONS } from '@/lib/queryOptions'
 import { supabase } from '@/lib/supabase'
 import { hasProfileUpdates, sanitizeProfileUpdates } from '@/lib/profileUpdateUtils'
 import type { UserProfile } from '@/types/database.types'
@@ -8,6 +9,7 @@ export function useProfile(userId?: string) {
   return useQuery({
     queryKey: ['profile', userId],
     enabled: !!userId && !!supabase,
+    ...PROFILE_QUERY_OPTIONS,
     queryFn: async (): Promise<UserProfile> => {
       if (!supabase || !userId) throw new Error('Supabase not configured')
       const { data, error } = await supabase.from('users').select(USER_PROFILE_COLUMNS).eq('id', userId).single()

@@ -1,9 +1,9 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate, isSundayYmd, formatShortDateIst, formatIstTimeNow } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, isSundayYmd, formatIstTimeNow } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Circle, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
-import { useMasterListByMr } from '@/hooks/useMasterList';
 import { useMrSubAreas } from '@/hooks/useAreas';
 import { useMrTargets } from '@/hooks/useTargets';
 import { useMrDashboardStats } from '@/hooks/useDashboardStats';
@@ -25,8 +24,7 @@ import { useAllowedReportDates } from '@/hooks/useReport';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
-import MrDashboardTodayPanel from '@/components/mr/MrDashboardTodayPanel';
-import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
+import MrDashboardTodayCard from '@/components/mr/MrDashboardTodayCard';
 import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import type { AllowedReportDate } from '@/types/database.types';
 import { toast } from 'sonner';
@@ -35,7 +33,8 @@ import DashboardBirthdaySlot from '@/components/shared/employee-birthday/Dashboa
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
-import ProfileCompletionPrompt from '@/components/shared/ProfileCompletionPrompt';
+import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
+import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 import { useMrLeaves } from '@/hooks/useLeaves';
 type DrawerAction = 'strike' | 'holiday' | null;
 
@@ -48,14 +47,13 @@ export default function MRDashboard() {
 
   // Defer non-critical queries so the main UI renders fast
   const [deferReady, setDeferReady] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setDeferReady(true), 100); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setDeferReady(true), 250); return () => clearTimeout(t); }, []);
 
   // Critical queries (needed for first paint)
   const { data: tpStatus, isLoading: tpStatusLoading } = useTpStatus(userId);
   const { data: todayPlan } = useTodayTpPlan(userId);
   const { data: allowedDates = [] } = useAllowedReportDates(userId);
   // Deferred queries (below the fold)
-  const { data: completionRows = [], isLoading: completionLoading } = useMasterListByMr(deferReady ? userId : '');
   const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(userId);
   const { data: targetRows = [], isLoading: targetsLoading } = useMrTargets(deferReady ? userId : '');
   const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferReady ? userId : '');
@@ -102,27 +100,6 @@ export default function MRDashboard() {
   });
 
   const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
-  const areaProgress = useMemo(() => {
-    const areaIdByName = new Map<string, string>();
-    for (const sa of subAreas) {
-      if (sa.area?.name && sa.area?.id) areaIdByName.set(sa.area.name, sa.area.id);
-    }
-    const map = new Map<string, { areaId: string | null; total: number; complete: number }>();
-    for (const row of completionRows) {
-      const existing = map.get(row.area) ?? { areaId: areaIdByName.get(row.area) ?? null, total: 0, complete: 0 };
-      existing.total += row.total_doctors ?? 0;
-      existing.complete += row.complete_doctors ?? 0;
-      map.set(row.area, existing);
-    }
-    return Array.from(map.entries()).map(([areaName, v]) => {
-      const pct = v.total > 0 ? Math.round((v.complete / v.total) * 100) : 0;
-      let color: 'green' | 'amber' | 'red' = 'red';
-      if (pct > 80) color = 'green';
-      else if (pct >= 50) color = 'amber';
-      return { areaName, areaId: v.areaId, total: v.total, complete: v.complete, pct, color };
-    });
-  }, [completionRows, subAreas]);
-
   const activeTargets = useMemo(() => {
     const now = new Date();
     return targetRows
@@ -145,8 +122,6 @@ export default function MRDashboard() {
   const pendingSundayDcrDays = allowedDates.filter(
     d => !d.already_submitted && d.day_type === 'sunday',
   );
-  const allDcrDone = allowedDates.length > 0 && allowedDates.every(d => d.already_submitted);
-
   const openFieldReport = (d: AllowedReportDate) => {
     const reportKind = d.day_type === 'leave' ? 'leave' as const : 'field' as const
     navigate('/mr/report/new', { state: { date: d.report_date, reportKind } })
@@ -167,11 +142,46 @@ export default function MRDashboard() {
   const tpGateLoading = tpStatusLoading || (!!userId && subAreasLoading);
 
   const showSundayDcrCta = isSundayYmd(todayDate) && !todayDcrDone;
-  const pendingFieldDcrPast = pendingFieldDcrDays.filter(d => d.report_date !== todayDate);
-  const showMrStats =
-    deferReady && ((stats?.reportsThisMonth ?? 0) > 0 || (stats?.doctorsThisWeek ?? 0) > 0);
-  const showDoctorCoverage =
-    !completionLoading && areaProgress.some(a => a.total > 0);
+  const pendingAllDcrs = useMemo(
+    () =>
+      [...pendingFieldDcrDays, ...pendingSundayDcrDays].sort((a, b) =>
+        a.report_date.localeCompare(b.report_date),
+      ),
+    [pendingFieldDcrDays, pendingSundayDcrDays],
+  );
+
+  const showMrStats = deferReady && !!userId;
+
+  const mrStatItems = useMemo(() => {
+    const pending = pendingFieldDcrDays.length + pendingSundayDcrDays.length;
+    return [
+      {
+        name: 'DCRs this month',
+        value: stats?.reportsThisMonth ?? 0,
+        href: '/mr/report/history',
+        linkLabel: 'View history →',
+      },
+      {
+        name: 'Doctors this week',
+        value: stats?.doctorsThisWeek ?? 0,
+        href: '/mr/analytics',
+        linkLabel: 'Open analytics →',
+      },
+      {
+        name: 'Pending DCRs',
+        value: pending,
+        change: pending > 0 ? 'Needs action' : 'Up to date',
+        changeType: (pending > 0 ? 'negative' : 'positive') as const,
+        href: '/mr/report/history',
+        linkLabel: pending > 0 ? 'Submit now →' : 'View history →',
+      },
+    ];
+  }, [
+    stats?.reportsThisMonth,
+    stats?.doctorsThisWeek,
+    pendingFieldDcrDays.length,
+    pendingSundayDcrDays.length,
+  ]);
 
   const closeDrawer = () => {
     setAction(null);
@@ -195,7 +205,7 @@ export default function MRDashboard() {
               {user?.pause_reason ?? 'Your account has been paused due to non-compliance with Tour Program requirements.'}
             </p>
           </div>
-          <div className="glass-card p-4 text-left space-y-2">
+          <div className={cn(dashboardPanelClass(), 'p-4 text-left space-y-2')}>
             <p className="text-sm font-semibold text-foreground">What to do:</p>
             <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
               <li>Contact your Manager to unpause your account</li>
@@ -325,11 +335,11 @@ export default function MRDashboard() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Dashboard" />
 
-      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
-        <DashboardBirthdaySlot />
+      <div className={cn(dashboardPageClass(), 'max-md:flex max-md:flex-col')}>
+        <DashboardBirthdaySlot className="max-md:order-[5]" />
 
         {/* Welcome hero */}
-        <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
+        <div className={cn(dashboardPanelClass(), 'bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/15 p-5 animate-fade-in-up max-md:order-[10]')}>
           <div className="flex items-start gap-3.5">
             {user?.profile_photo_url ? (
               <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow shrink-0" />
@@ -347,57 +357,93 @@ export default function MRDashboard() {
               <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                 <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <p className="text-xs text-muted-foreground font-medium">{today}</p>
-                <span className="text-[10px] text-muted-foreground/80">Â· {formatIstTimeNow()}</span>
+                <span className="text-[10px] text-muted-foreground/80">· {formatIstTimeNow()}</span>
               </div>
             </div>
           </div>
         </div>
 
-        {deferReady && hasSubAreaAccess && tpApproved && (
-          <>
-            {todayPlan?.sub_area_id && (
-              <TodayPlanFromTp
-                subAreaName={todayPlan.sub_area_name ?? ''}
-                areaName={todayPlan.area_name ?? ''}
-                dcrDone={todayDcrDone}
-                dcrBlocked={dcrBlocked}
-                todayIsSunday={todayIsSunday}
-                onStartDcr={() => navigate('/mr/report/new')}
-              />
-            )}
-            <MrDashboardTodayPanel
-              todayIsSunday={todayIsSunday}
-              dcrDone={todayDcrDone}
-              expenseDone={expenseDoneToday}
-              dcrBlocked={dcrBlocked}
-            />
-          </>
-        )}
-
         {/* TP Deadline Alert */}
         {(nextMonthDeadlineApproaching || nextMonthOverdue) && (
           <div className={cn(
-            'rounded-2xl p-4 flex items-start gap-3 border',
+            'rounded-2xl p-4 max-md:p-3 flex items-start gap-3 max-md:gap-2 border max-md:order-[15]',
             nextMonthOverdue ? 'border-destructive/30 bg-destructive/5' : 'border-amber-500/30 bg-amber-500/5'
           )}>
-            <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', nextMonthOverdue ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')} />
+            <AlertTriangle className={cn('h-5 w-5 max-md:h-4 max-md:w-4 shrink-0 mt-0.5', nextMonthOverdue ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm max-md:text-xs font-semibold text-foreground">
                 {nextMonthOverdue ? 'Tour Program Overdue!' : `TP Deadline in ${tpStatus!.days_to_deadline} day(s)`}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs max-md:text-[10px] text-muted-foreground mt-0.5 max-md:leading-snug">
                 Create next month's Tour Program to avoid account pause.
               </p>
             </div>
-            <Button size="sm" variant={nextMonthOverdue ? 'destructive' : 'outline'} className="shrink-0 text-xs rounded-xl" onClick={() => navigate('/mr/tour-program')}>
+            <Button size="sm" variant={nextMonthOverdue ? 'destructive' : 'outline'} className="shrink-0 text-xs max-md:text-[10px] max-md:h-7 max-md:px-2 rounded-xl" onClick={() => navigate('/mr/tour-program')}>
               Create TP
             </Button>
           </div>
         )}
 
+        {showMrStats && !statsLoading && (
+          <DashboardSection title="Overview" className="max-md:order-[40]">
+            <DashboardStatLinkCards items={mrStatItems} columns={3} />
+          </DashboardSection>
+        )}
+
+        {deferReady && hasSubAreaAccess && tpApproved && (
+          <div className="max-md:order-[20]">
+            <MrDashboardTodayCard
+              subAreaName={todayPlan?.sub_area_name ?? ''}
+              areaName={todayPlan?.area_name ?? ''}
+              dcrDone={todayDcrDone}
+              dcrBlocked={dcrBlocked}
+              expenseDone={expenseDoneToday}
+              todayIsSunday={todayIsSunday}
+              pendingDcrs={pendingAllDcrs}
+              onOpenPendingDcr={openFieldReport}
+              onStartDcr={() => navigate('/mr/report/new')}
+            />
+          </div>
+        )}
+
+        <DashboardSection title="Quick actions" className="max-md:order-[30]">
+          <div className="grid grid-cols-5 gap-2">
+            <button type="button" onClick={() => navigate('/mr/tour-program')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
+              <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center"><CalendarDays className="h-3.5 w-3.5 text-primary" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Tour</span>
+            </button>
+            <button type="button" onClick={() => navigate('/mr/expense')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
+              <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center"><Receipt className="h-3.5 w-3.5 text-primary" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Expense</span>
+            </button>
+            <button type="button" onClick={() => setAction('strike')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all border-destructive/20')}>
+              <div className="h-8 w-8 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-3.5 w-3.5 text-destructive" /></div>
+              <span className="text-[9px] font-semibold text-destructive text-center leading-tight">Strike</span>
+            </button>
+            <button type="button" onClick={() => setAction('holiday')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
+              <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Holiday</span>
+            </button>
+            <button type="button" onClick={() => navigate('/mr/leave')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
+              <div className="h-8 w-8 rounded-xl bg-violet-500/10 flex items-center justify-center"><Umbrella className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" /></div>
+              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Leave</span>
+            </button>
+          </div>
+          <div className="flex gap-2">
+            <div className={cn(dashboardPanelClass(), 'flex-1 px-3 py-2 flex items-center justify-between')}>
+              <span className="text-[11px] text-muted-foreground font-medium">Strikes this year</span>
+              <span className="text-sm font-bold text-destructive tabular-nums">{strikeCount}</span>
+            </div>
+            <div className={cn(dashboardPanelClass(), 'flex-1 px-3 py-2 flex items-center justify-between')}>
+              <span className="text-[11px] text-muted-foreground font-medium">Holidays this year</span>
+              <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{holidayCount}</span>
+            </div>
+          </div>
+        </DashboardSection>
+
         {/* Sunday DCR (IST) */}
         {showSundayDcrCta && (
-          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3">
+          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3 max-md:order-[60]">
             <div className="flex items-start gap-2">
               <Calendar className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
               <div>
@@ -412,120 +458,31 @@ export default function MRDashboard() {
         )}
 
 
-        {pendingFieldDcrPast.length > 0 && !allDcrDone && (
-          <div className="glass-card p-4 space-y-3">
-            <p className="section-title">Past pending DCR</p>
-            <div className="space-y-1.5">
-              {pendingFieldDcrPast.map(d => (
-                  <button
-                    key={d.report_date}
-                    type="button"
-                    onClick={() => openFieldReport(d)}
-                    className="w-full flex items-center justify-between rounded-xl px-3 py-2.5 hover:bg-muted/40 active:scale-[0.98] transition-all border border-border"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Circle className="h-4 w-4 text-amber-500 shrink-0" />
-                      <span className="text-sm font-medium text-foreground">
-                        {formatShortDateIst(d.report_date)}
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] text-amber-600 dark:text-amber-400 border-amber-500/30">
-                      {d.day_type === 'leave' ? 'Leave DCR' : 'Pending'}
-                    </Badge>
-                  </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {pendingSundayDcrDays.length > 0 && !allDcrDone && (
-          <div className="glass-card p-4 space-y-3 border border-sky-500/20">
-            <p className="section-title text-sky-800 dark:text-sky-200">Pending Sunday DCR</p>
-            <div className="space-y-2">
-              {pendingSundayDcrDays.map(d => (
-                <div
-                  key={d.report_date}
-                  className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2.5"
-                >
-                  <span className="text-sm font-medium text-foreground">
-                    {d.report_date === todayDate ? 'Today (Sunday)' : formatShortDateIst(d.report_date)}
-                  </span>
-                  <MarkSundayDcrButton reportDate={d.report_date} className="shrink-0" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* All DCR done message */}
-        {allDcrDone && (
-          <div className="flex items-center gap-2 rounded-xl bg-emerald-600/10 border border-emerald-600/20 px-4 py-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">All reports up to date</p>
-          </div>
-        )}
-
         {deferReady &&
           mrLeaves
             .filter(l => l.status === 'approved')
             .slice(0, 3)
             .map(leave => (
-              <div key={leave.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3">
+              <div key={leave.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 max-md:order-[60]">
                 <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100 leading-snug">
                   Leave approved
                   {leave.approver?.full_name ? ` by ${leave.approver.full_name}` : ''}
-                  {' â€” '}
+                  {' — '}
                   {formatDisplayDate(leave.leave_date)} ({leave.leave_category === 'sick' ? 'Sick' : 'Casual'})
                 </p>
               </div>
             ))}
 
-        {/* Quick Actions */}
-        <div className="space-y-3">
-          <p className="section-title">Quick Actions</p>
-          <div className="grid grid-cols-5 gap-2">
-            <button type="button" onClick={() => navigate('/mr/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
-              <div className="h-8 w-8 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" /></div>
-              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Tour</span>
-            </button>
-            <button type="button" onClick={() => navigate('/mr/expense')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
-              <div className="h-8 w-8 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /></div>
-              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Expense</span>
-            </button>
-            <button type="button" onClick={() => setAction('strike')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all border border-destructive/15">
-              <div className="h-8 w-8 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-3.5 w-3.5 text-destructive" /></div>
-              <span className="text-[9px] font-semibold text-destructive text-center leading-tight">Strike</span>
-            </button>
-            <button type="button" onClick={() => setAction('holiday')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
-              <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
-              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Holiday</span>
-            </button>
-            <button type="button" onClick={() => navigate('/mr/leave')} className="flex flex-col items-center gap-1.5 glass-card p-2.5 active:scale-95 transition-all">
-              <div className="h-8 w-8 rounded-xl bg-violet-500/10 flex items-center justify-center"><Umbrella className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" /></div>
-              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Leave</span>
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <div className="flex-1 rounded-xl bg-muted/50 px-3 py-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground font-medium">Strikes this year</span>
-              <span className="text-sm font-bold text-destructive tabular-nums">{strikeCount}</span>
-            </div>
-            <div className="flex-1 rounded-xl bg-muted/50 px-3 py-2 flex items-center justify-between">
-              <span className="text-[11px] text-muted-foreground font-medium">Holidays this year</span>
-              <span className="text-sm font-bold text-amber-600 dark:text-amber-400 tabular-nums">{holidayCount}</span>
-            </div>
-          </div>
-        </div>
-
         {dailyStatus?.is_working_day === false && (
-          <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+          <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 max-md:order-[60]">
             <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
-            <p className="text-sm text-muted-foreground">Today is a holiday â€” no field reports needed.</p>
+            <p className="text-sm text-muted-foreground">Today is a holiday — no field reports needed.</p>
           </div>
         )}
 
         {/* Alerts */}
         {!alertsLoading && alerts.length > 0 && (
+          <DashboardSection title="Reminders" className="max-md:order-[70]">
           <div className="space-y-2">
             {alerts.slice(0, 3).map(a => {
               const isBirthday = a.alert_type === 'birthday';
@@ -534,7 +491,7 @@ export default function MRDashboard() {
                 ? `${a.doctor_name}'s ${isBirthday ? 'birthday' : 'anniversary'} is today!`
                 : `${a.doctor_name}'s ${isBirthday ? 'birthday' : 'anniversary'} in ${a.days_until} days`;
               return (
-                <button key={a.doctor_id} type="button" className="w-full text-left glass-card p-3.5 active:scale-[0.98] transition-all flex items-center gap-3" onClick={() => navigate(`/mr/master-list?doctorId=${encodeURIComponent(a.doctor_id)}`)}>
+                <button key={a.doctor_id} type="button" className={cn(dashboardPanelClass(), 'w-full text-left p-3.5 active:scale-[0.98] transition-all flex items-center gap-3')} onClick={() => navigate(`/mr/master-list?doctorId=${encodeURIComponent(a.doctor_id)}`)}>
                   <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center shrink-0">
                     <AlertIcon className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                   </div>
@@ -544,54 +501,16 @@ export default function MRDashboard() {
               );
             })}
           </div>
+          </DashboardSection>
         )}
 
-        {showMrStats && (
-          <div className="rounded-2xl border border-border/80 bg-card/60 px-4 py-3 grid grid-cols-2 gap-3">
-            <div>
-              <p className="text-xl font-bold tabular-nums text-foreground">{stats?.reportsThisMonth ?? 0}</p>
-              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">DCRs this month</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold tabular-nums text-foreground">{stats?.doctorsThisWeek ?? 0}</p>
-              <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Doctors this week</p>
-            </div>
-          </div>
-        )}
-
-        {showDoctorCoverage && (
-          <div className="space-y-3">
-            <p className="section-title">Doctor Coverage</p>
-            <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
-              {areaProgress.map(a => (
-                <button key={a.areaName} type="button" onClick={() => a.areaId && navigate(`/mr/master-list?areaId=${encodeURIComponent(a.areaId)}`)} disabled={!a.areaId} className="w-full text-left glass-card p-4 active:scale-[0.98] transition-all">
-                  <div className="flex items-center justify-between gap-3 mb-2.5">
-                    <p className="text-sm font-semibold text-foreground truncate flex-1">{a.areaName}</p>
-                    <span className={cn(
-                      'text-xs font-bold tabular-nums',
-                      a.color === 'green' ? 'text-emerald-600 dark:text-emerald-400' : a.color === 'amber' ? 'text-amber-600 dark:text-amber-400' : 'text-destructive'
-                    )}>
-                      {a.complete}/{a.total}
-                    </span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div className={cn('h-full rounded-full transition-all', a.color === 'green' ? 'bg-emerald-500' : a.color === 'amber' ? 'bg-amber-500' : 'bg-destructive')} style={{ width: `${a.pct}%` }} />
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Targets */}
         {!targetsLoading && activeTargets.length > 0 && (
-          <div className="space-y-3">
-            <p className="section-title">Active Targets</p>
+          <DashboardSection title="Active targets" className="max-md:order-[70]">
             <div className="space-y-2.5 md:grid md:grid-cols-2 md:gap-3 md:space-y-0">
               {activeTargets.map(t => (
-                <div key={t.target_id} className="glass-card p-4">
+                <div key={t.target_id} className={cn(dashboardPanelClass(), 'p-4')}>
                   <div className="flex items-center justify-between gap-3 mb-2">
-                    <p className="text-sm font-semibold text-foreground truncate flex-1">{t.product_name}{t.sub_area ? ` â€” ${t.sub_area}` : ''}</p>
+                    <p className="text-sm font-semibold text-foreground truncate flex-1">{t.product_name}{t.sub_area ? ` — ${t.sub_area}` : ''}</p>
                     <Badge variant="secondary" className="text-[10px] font-bold shrink-0">{t.pct}%</Badge>
                   </div>
                   <div className="h-2 w-full rounded-full bg-muted overflow-hidden mb-2">
@@ -604,7 +523,7 @@ export default function MRDashboard() {
                 </div>
               ))}
             </div>
-          </div>
+          </DashboardSection>
         )}
       </div>
 
@@ -711,8 +630,6 @@ export default function MRDashboard() {
         destructive
         confirmDisabled={markStrike.isPending}
       />
-
-      <ProfileCompletionPrompt />
 
       <BottomNav role="mr" />
     </div>

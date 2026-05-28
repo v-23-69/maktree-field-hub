@@ -14,6 +14,10 @@ import type { SubArea } from '@/types/database.types'
 
 type Props = {
   mrId: string
+  /** YYYY-MM — defaults to current month */
+  month?: string
+  /** When false, renders own section title (standalone page). */
+  embedded?: boolean
 }
 
 function pickInitialSubAreaId(subAreas: SubArea[]): string | null {
@@ -53,12 +57,20 @@ function VisitFrequencyDoctorCard({ row }: { row: VisitFrequencyDoctorRow }) {
   )
 }
 
-export default function VisitFrequencyByAreaSection({ mrId }: Props) {
-  const today = todayInputDate()
-  const month = today.slice(0, 7)
+export default function VisitFrequencyByAreaSection({
+  mrId,
+  month: monthProp,
+  embedded = true,
+}: Props) {
+  const month = monthProp ?? todayInputDate().slice(0, 7)
+  const monthAnchor = `${month}-01`
 
   const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(mrId)
-  const { data: vfProgress, isLoading: vfLoading } = useVisitFrequencyProgress(mrId, today, !!mrId)
+  const { data: vfProgress, isLoading: vfLoading } = useVisitFrequencyProgress(
+    mrId,
+    monthAnchor,
+    !!mrId,
+  )
 
   const flatSubAreas = useMemo(
     () =>
@@ -124,13 +136,15 @@ export default function VisitFrequencyByAreaSection({ mrId }: Props) {
 
   return (
     <section className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">Visit frequency</h2>
-        <Badge variant="outline" className="text-[10px] tabular-nums">
-          {month}
-        </Badge>
-      </div>
-      <p className="text-xs text-muted-foreground -mt-1">
+      {embedded ? (
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Visit frequency</h2>
+          <Badge variant="outline" className="text-[10px] tabular-nums">
+            {month}
+          </Badge>
+        </div>
+      ) : null}
+      <p className={cn('text-xs text-muted-foreground', embedded && '-mt-1')}>
         Pick an area like on the Doctors page, then see each doctor&apos;s visits vs monthly target.
       </p>
 

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ManagerStatsFilter } from '@/hooks/useDashboardStats'
+import { useManagerDashboardStats } from '@/hooks/useDashboardStats'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Users, Plus, ChevronRight, Lock, PiggyBank } from 'lucide-react'
+import { Users, Plus, ChevronRight, Lock } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -19,8 +21,13 @@ import { useDashboardRefresh } from '@/hooks/useDashboardRefresh'
 import { Input } from '@/components/ui/input'
 import { todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
-import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart'
+import AnalyticsDonutPie from '@/components/charts/AnalyticsDonutPie'
+import ChartStatsSplit from '@/components/charts/ChartStatsSplit'
+import LazySpecialityBarChart from '@/components/charts/LazySpecialityBarChart'
+import { rollupSpecialityRows } from '@/lib/chartRollup'
 import TeamHubManageDrawer, { type TeamManageAction } from '@/components/manager/team/TeamHubManageDrawer'
+import TeamPerformanceLeaderboard from '@/components/manager/TeamPerformanceLeaderboard'
+import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell'
 
 type TeamHubLocationState = { openManage?: TeamManageAction }
 
@@ -36,7 +43,17 @@ export default function TeamHub() {
 
   const [manageAction, setManageAction] = useState<TeamManageAction>(null)
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly')
+  const [performanceFilter, setPerformanceFilter] = useState<ManagerStatsFilter>('This Month')
   const [search, setSearch] = useState('')
+
+  const teamMemberIds = useMemo(() => mrIds, [mrIds])
+  const { data: teamActivity, isLoading: teamActivityLoading } = useManagerDashboardStats(
+    managerId,
+    teamMemberIds,
+    performanceFilter,
+    user?.full_name ?? 'Manager',
+    mrs,
+  )
 
   useEffect(() => {
     const state = location.state as TeamHubLocationState | null
@@ -65,6 +82,11 @@ export default function TeamHub() {
 
   const dcrDone = todayReports.filter(r => r.submitted).length
 
+  const teamSpecialityChart = useMemo(
+    () => rollupSpecialityRows(teamCallAnalytics?.bySpeciality ?? [], 8),
+    [teamCallAnalytics?.bySpeciality],
+  )
+
   const sortedMrs = useMemo(() => {
     const q = search.trim().toLowerCase()
     const list = q
@@ -90,41 +112,51 @@ export default function TeamHub() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Team" showBack />
 
-      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
-        <div className="glass-card p-4 space-y-3">
+      <div className={dashboardPageClass()}>
+        <div className={cn(dashboardPanelClass(), 'p-4 space-y-3')}>
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-semibold text-foreground">Team overview</p>
-              <p className="text-[10px] text-muted-foreground">{mrs.length} medical representatives</p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button size="sm" className="rounded-xl h-9" onClick={() => setManageAction('create-mr')}>
-                <Plus className="h-4 w-4 mr-1" />
-                Manage
-              </Button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-muted-foreground">Today DCR</p>
-              <p className="font-bold tabular-nums">
-                {dcrDone}/{mrs.length}
+              <p className="text-[10px] text-muted-foreground">
+                {mrs.length} medical representative{mrs.length !== 1 ? 's' : ''}
               </p>
             </div>
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-muted-foreground">Team MS (month)</p>
-              <p className="font-bold text-primary tabular-nums">
-                Rs {(teamMonthlySupport?.total_inr ?? 0).toLocaleString('en-IN')}
+            <Button size="sm" className="rounded-xl h-9 shrink-0" onClick={() => setManageAction('create-mr')}>
+              <Plus className="h-4 w-4 mr-1" />
+              Manage team
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className={cn(dashboardPanelClass(), 'px-3 py-2.5 bg-muted/30')}>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Today DCR</p>
+              <p className="text-lg font-bold tabular-nums text-foreground">
+                {dcrDone}<span className="text-muted-foreground font-medium">/{mrs.length}</span>
+              </p>
+            </div>
+            <div className={cn(dashboardPanelClass(), 'px-3 py-2.5 bg-primary/5 border-primary/15')}>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Team MS (month)</p>
+              <p className="text-lg font-bold tabular-nums text-primary">
+                Rs {(teamMonthlySupport?.total_inr ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
               </p>
             </div>
           </div>
         </div>
 
-        <div className="glass-card p-3.5 space-y-3">
+        <TeamPerformanceLeaderboard
+          managerId={managerId}
+          mrCount={mrs.length}
+          activeFilter={performanceFilter}
+          onFilterChange={setPerformanceFilter}
+          activity={teamActivity}
+          loading={teamActivityLoading}
+        />
+
+        <DashboardSection title="Team calls">
+        <div className={cn(dashboardPanelClass(), 'p-4 space-y-3')}>
           <div className="flex items-center justify-between flex-wrap gap-2">
-            <p className="text-sm font-semibold">Team calls</p>
+            <p className="text-sm font-semibold text-foreground">Call volume</p>
             <div className="flex gap-1 flex-wrap">
-              {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
+              {(['weekly', 'monthly', 'yearly'] as const).map(p => (
                 <button
                   key={p}
                   type="button"
@@ -136,90 +168,149 @@ export default function TeamHub() {
                       : 'border-border bg-card text-muted-foreground',
                   )}
                 >
-                  {p === 'all' ? 'Till date' : p}
+                  {p.charAt(0).toUpperCase() + p.slice(1)}
                 </button>
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] text-muted-foreground">Total calls</p>
-              <p className="text-lg font-bold tabular-nums">{teamCallAnalytics?.totalCalls ?? 0}</p>
-            </div>
-            <div className="rounded-lg bg-muted/40 px-3 py-2">
-              <p className="text-[10px] text-muted-foreground">Avg / day</p>
-              <p className="text-lg font-bold text-primary tabular-nums">
-                {teamCallAnalytics && teamCallAnalytics.daysWithReports > 0
-                  ? teamCallAnalytics.avgPerDay.toFixed(1)
-                  : '—'}
-              </p>
-            </div>
-          </div>
-          {teamCallAnalytics && teamCallAnalytics.bySpeciality.length > 0 && (
-            <LazySpecialityPieChart
-              data={teamCallAnalytics.bySpeciality}
-              heightPx={180}
-              outerRadius={65}
-              legendFontSize={10}
-              colors={['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#ec4899']}
-            />
-          )}
+          <ChartStatsSplit
+            chart={
+              teamSpecialityChart.length > 0 ? (
+                <LazySpecialityBarChart data={teamSpecialityChart} heightPx={180} />
+              ) : (
+                <p className="text-xs text-muted-foreground text-center py-6">No calls in this period.</p>
+              )
+            }
+            stats={
+              <>
+                <div className="rounded-lg bg-muted/40 px-3 py-2.5 flex-1 sm:w-full">
+                  <p className="text-[10px] text-muted-foreground">Total calls</p>
+                  <p className="text-lg font-bold tabular-nums">{teamCallAnalytics?.totalCalls ?? 0}</p>
+                </div>
+                <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 flex-1 sm:w-full">
+                  <p className="text-[10px] text-muted-foreground">Avg / day</p>
+                  <p className="text-lg font-bold text-primary tabular-nums">
+                    {teamCallAnalytics && teamCallAnalytics.daysWithReports > 0
+                      ? teamCallAnalytics.avgPerDay.toFixed(1)
+                      : '—'}
+                  </p>
+                </div>
+              </>
+            }
+            footer={
+              teamSpecialityChart.length > 0 ? (
+                <div className="border-t border-border/60 pt-2 space-y-1 max-h-28 overflow-y-auto">
+                  {teamSpecialityChart.slice(0, 6).map(row => (
+                    <div key={row.speciality} className="flex justify-between gap-2 text-[11px]">
+                      <span className="text-muted-foreground truncate">{row.speciality}</span>
+                      <span className="font-semibold tabular-nums shrink-0">{row.visits}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : undefined
+            }
+          />
         </div>
+        </DashboardSection>
 
         {(teamMonthlySupport?.byMr ?? []).length > 0 && (
-          <div className="glass-card p-3 space-y-2">
-            <div className="flex items-center gap-2">
-              <PiggyBank className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-semibold">Monthly support by MR</p>
+          <DashboardSection
+            title="Monthly support by MR"
+            description={`Total Rs ${(teamMonthlySupport?.total_inr ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })} this month`}
+          >
+            <div className={cn(dashboardPanelClass(), 'p-4')}>
+              <ChartStatsSplit
+                chart={
+                  <AnalyticsDonutPie
+                    title="Distribution"
+                    data={(teamMonthlySupport?.byMr ?? []).map(row => ({
+                      key: row.mr_id,
+                      label: row.full_name,
+                      value: Math.round(row.total_inr),
+                    }))}
+                    valueLabel="Rs"
+                    maxHeightPx={180}
+                  />
+                }
+                stats={
+                  <>
+                    {(teamMonthlySupport?.byMr ?? []).slice(0, 4).map(row => {
+                      const pct =
+                        (teamMonthlySupport?.total_inr ?? 0) > 0
+                          ? Math.round((row.total_inr / (teamMonthlySupport?.total_inr ?? 1)) * 100)
+                          : 0
+                      return (
+                        <div
+                          key={row.mr_id}
+                          className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2 flex-1 sm:w-full"
+                        >
+                          <p className="text-[11px] font-medium truncate leading-tight">{row.full_name}</p>
+                          <p className="text-sm font-bold text-primary tabular-nums mt-0.5">
+                            Rs {row.total_inr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">{pct}% of team</p>
+                        </div>
+                      )
+                    })}
+                  </>
+                }
+                footer={
+                  (teamMonthlySupport?.byMr ?? []).length > 4 ? (
+                    <div className="border-t border-border/60 pt-2 space-y-1.5 max-h-32 overflow-y-auto">
+                      {(teamMonthlySupport?.byMr ?? []).slice(4).map(row => (
+                        <div key={row.mr_id} className="flex justify-between gap-2 text-xs">
+                          <span className="truncate">{row.full_name}</span>
+                          <span className="font-semibold text-primary tabular-nums shrink-0">
+                            Rs {row.total_inr.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : undefined
+                }
+              />
             </div>
-            <div className="space-y-1 max-h-28 overflow-y-auto text-xs">
-              {(teamMonthlySupport?.byMr ?? []).map(row => (
-                <div key={row.mr_id} className="flex justify-between gap-2">
-                  <span className="truncate">{row.full_name}</span>
-                  <span className="font-semibold text-primary tabular-nums shrink-0">
-                    Rs {row.total_inr.toLocaleString('en-IN')}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
+          </DashboardSection>
         )}
 
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="rounded-lg text-xs"
-            onClick={() => navigate('/manager/team/visit-frequency')}
-          >
-            Visit frequency
-          </Button>
-          {(
-            [
-              ['assign', 'Assign areas'],
-              ['create-mr', 'Create MR'],
-              ['doctor', 'Add doctor'],
-              ['set-ptr', 'Brand rates'],
-            ] as const
-          ).map(([key, label]) => (
+        <div className={cn(dashboardPanelClass(), 'p-3 space-y-2')}>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Team tools</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <Button
-              key={key}
               type="button"
               variant="outline"
               size="sm"
-              className="rounded-lg text-xs"
-              onClick={() => setManageAction(key)}
+              className="rounded-xl text-xs h-10 justify-start"
+              onClick={() => navigate('/manager/team/visit-frequency')}
             >
-              {label}
+              Visit frequency
             </Button>
-          ))}
+            {(
+              [
+                ['assign', 'Assign areas'],
+                ['create-mr', 'Create MR'],
+                ['doctor', 'Add doctor'],
+                ['set-ptr', 'Brand rates'],
+              ] as const
+            ).map(([key, label]) => (
+              <Button
+                key={key}
+                type="button"
+                variant="outline"
+                size="sm"
+                className="rounded-xl text-xs h-10 justify-start"
+                onClick={() => setManageAction(key)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <p className="section-title mb-0">Your MRs</p>
-          <p className="text-[10px] text-muted-foreground">Pending DCR first</p>
-        </div>
+        <DashboardSection
+          title="Your MRs"
+          description="Pending DCR shown first"
+        >
         <Input
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -247,7 +338,8 @@ export default function TeamHub() {
                   type="button"
                   onClick={() => navigate(`/manager/team/${mr.id}`)}
                   className={cn(
-                    'w-full glass-card p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-all',
+                    dashboardPanelClass(),
+                    'w-full p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-all',
                     paused && 'opacity-80 ring-1 ring-destructive/20',
                   )}
                 >
@@ -275,6 +367,7 @@ export default function TeamHub() {
             })}
           </div>
         )}
+        </DashboardSection>
       </div>
 
       <TeamHubManageDrawer

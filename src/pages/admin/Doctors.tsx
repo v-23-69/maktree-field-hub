@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Edit, ToggleRight, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatDoctorLabel } from '@/lib/displayLabels';
 import { toast } from 'sonner';
 
 export default function AdminDoctors() {
@@ -230,10 +231,11 @@ export default function AdminDoctors() {
                   )}
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground text-sm">{doc.full_name}</p>
+                    <p className="font-medium text-foreground text-sm">
+                      {formatDoctorLabel(doc.full_name, doc.speciality)}
+                    </p>
                     <p className="text-xs text-muted-foreground">
-                      {doc.doctor_code} · {doc.speciality}
-                      {arName && ` · ${arName}`}{saName && ` / ${saName}`}
+                      {arName && saName ? `${arName} / ${saName}` : arName || saName || '—'}
                     </p>
                   </div>
                   <div className="flex gap-1 shrink-0">

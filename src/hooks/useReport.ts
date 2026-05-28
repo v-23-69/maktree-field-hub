@@ -457,6 +457,11 @@ export function useDeleteReport() {
   return useMutation({
     mutationFn: async (reportId: string) => {
       if (!supabase) throw new Error('Supabase not configured')
+      const { error: rpcErr } = await supabase.rpc('delete_daily_report', {
+        p_report_id: reportId,
+      })
+      if (!rpcErr) return
+      if (rpcErr.code !== 'PGRST202') throw rpcErr
       const { error } = await supabase.from('daily_reports').delete().eq('id', reportId)
       if (error) throw error
     },
@@ -468,6 +473,8 @@ export function useDeleteReport() {
       queryClient.invalidateQueries({ queryKey: ['manager-mr-report-dates'] })
       queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
       queryClient.invalidateQueries({ queryKey: ['pending-dcr-imports'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['report-block-status'] })
       invalidateDashboardQueries(queryClient)
     },
   })
@@ -682,10 +689,19 @@ export function useRequestReportUnlock() {
 }
 
 /** Saved monthly support totals for an MR in a calendar month (submitted DCRs only). */
+export type MonthlySupportLine = {
+  doctor_id: string
+  doctor_name: string
+  product_name: string
+  quantity: number
+  amount_inr: number
+}
+
 export type MonthlySupportMonthAggregate = {
   month: string
   total_inr: number
   byDoctor: Array<{ doctor_id: string; full_name: string; total_inr: number }>
+  lines: MonthlySupportLine[]
 }
 
 export async function aggregateMonthlySupportForMrInMonth(
@@ -704,7 +720,7 @@ export async function aggregateMonthlySupportForMrInMonth(
   if (error) throw error
   const reportIds = (reports ?? []).map(r => r.id as string)
   if (reportIds.length === 0) {
-    return { month: monthYyyyMm, total_inr: 0, byDoctor: [] }
+    return { month: monthYyyyMm, total_inr: 0, byDoctor: [], lines: [] }
   }
   const { data: visits, error: vErr } = await client
     .from('report_visits')
@@ -715,19 +731,33 @@ export async function aggregateMonthlySupportForMrInMonth(
   const visitIds = visitRows.map(v => v.id)
   const doctorByVisit = new Map(visitRows.map(v => [v.id, v.doctor_id]))
   if (visitIds.length === 0) {
-    return { month: monthYyyyMm, total_inr: 0, byDoctor: [] }
+    return { month: monthYyyyMm, total_inr: 0, byDoctor: [], lines: [] }
   }
   const { data: mse, error: mErr } = await client
     .from('monthly_support_entries')
-    .select('visit_id, amount_inr')
+    .select('visit_id, amount_inr, quantity, product:products(name)')
     .in('visit_id', visitIds)
   if (mErr) throw mErr
   const doctorTotals = new Map<string, number>()
-  for (const row of (mse ?? []) as Array<{ visit_id: string; amount_inr: number | null }>) {
+  const lines: MonthlySupportLine[] = []
+  for (const row of (mse ?? []) as Array<{
+    visit_id: string
+    amount_inr: number | null
+    quantity: number | null
+    product: { name: string | null } | null
+  }>) {
     const docId = doctorByVisit.get(row.visit_id)
     if (!docId) continue
     const amt = Number(row.amount_inr ?? 0)
+    const qty = Number(row.quantity ?? 0)
     doctorTotals.set(docId, (doctorTotals.get(docId) ?? 0) + amt)
+    lines.push({
+      doctor_id: docId,
+      doctor_name: '',
+      product_name: row.product?.name?.trim() || 'Product',
+      quantity: qty,
+      amount_inr: Math.round(amt * 100) / 100,
+    })
   }
   const doctorIds = [...doctorTotals.keys()]
   const names = new Map<string, string>()
@@ -746,7 +776,19 @@ export async function aggregateMonthlySupportForMrInMonth(
     })
     .sort((a, b) => a.full_name.localeCompare(b.full_name, undefined, { sensitivity: 'base' }))
   for (const r of byDoctor) totalSum += r.total_inr
-  return { month: monthYyyyMm, total_inr: Math.round(totalSum * 100) / 100, byDoctor }
+  const linesWithNames = lines.map(line => ({
+    ...line,
+    doctor_name: names.get(line.doctor_id) ?? 'Doctor',
+  }))
+  linesWithNames.sort((a, b) =>
+    a.doctor_name.localeCompare(b.doctor_name, undefined, { sensitivity: 'base' }),
+  )
+  return {
+    month: monthYyyyMm,
+    total_inr: Math.round(totalSum * 100) / 100,
+    byDoctor,
+    lines: linesWithNames,
+  }
 }
 
 export type ManagerTeamMonthlySupportAggregate = {

@@ -1,34 +1,70 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { UserCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile } from '@/hooks/useProfile'
 import {
+  dismissProfilePrompt,
   getProfileCompletionPct,
   getProfileMissingFields,
   isProfileComplete,
+  markProfilePromptShownThisSession,
+  wasProfilePromptShownThisSession,
 } from '@/lib/profileCompletion'
 
-/** Shown on MR/Manager dashboard until profile is 100% complete. Skip hides until next visit. */
+/**
+ * Shown once per portal session when profile is incomplete (MR/Manager).
+ * Reappears on next login or new browser session. "Skip for now" hides until then.
+ */
 export default function ProfileCompletionPrompt() {
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const { data: profile, isLoading } = useProfile(user?.id)
-  const [skipped, setSkipped] = useState(false)
   const [showSkip, setShowSkip] = useState(false)
+  const [hidden, setHidden] = useState(false)
+
+  const isPublicRoute =
+    location.pathname === '/login' || location.pathname === '/blocked-complaint'
+
+  const userId = user?.id ?? ''
+  const profileRecord = profile as Record<string, unknown> | undefined
+  const complete = isProfileComplete(profileRecord)
+  const shownThisSession = userId ? wasProfilePromptShownThisSession(userId) : false
+
+  const shouldShow =
+    isAuthenticated &&
+    !!user &&
+    user.role !== 'admin' &&
+    !isPublicRoute &&
+    !isLoading &&
+    !complete &&
+    !shownThisSession &&
+    !hidden
 
   useEffect(() => {
+    if (!shouldShow || !userId) return
+    markProfilePromptShownThisSession(userId)
     const t = window.setTimeout(() => setShowSkip(true), 2500)
     return () => window.clearTimeout(t)
-  }, [])
+  }, [shouldShow, userId])
 
-  if (!user || user.role === 'admin' || isLoading || skipped) return null
-  if (isProfileComplete(profile as Record<string, unknown> | undefined)) return null
+  if (!shouldShow) return null
 
-  const missing = getProfileMissingFields(profile as Record<string, unknown> | undefined)
-  const pct = getProfileCompletionPct(profile as Record<string, unknown> | undefined)
+  const missing = getProfileMissingFields(profileRecord)
+  const pct = getProfileCompletionPct(profileRecord)
+
+  const goToProfile = () => {
+    if (userId) markProfilePromptShownThisSession(userId)
+    navigate('/profile')
+  }
+
+  const skip = () => {
+    if (userId) dismissProfilePrompt(userId)
+    setHidden(true)
+  }
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-4 bg-background/85 backdrop-blur-sm">
@@ -65,11 +101,7 @@ export default function ProfileCompletionPrompt() {
           )}
         </div>
 
-        <Button
-          type="button"
-          className="w-full h-11 rounded-xl font-semibold"
-          onClick={() => navigate('/profile')}
-        >
+        <Button type="button" className="w-full h-11 rounded-xl font-semibold" onClick={goToProfile}>
           Complete profile
         </Button>
 
@@ -78,7 +110,7 @@ export default function ProfileCompletionPrompt() {
             type="button"
             variant="ghost"
             className="w-full h-10 rounded-xl text-muted-foreground"
-            onClick={() => setSkipped(true)}
+            onClick={skip}
           >
             Skip for now
           </Button>

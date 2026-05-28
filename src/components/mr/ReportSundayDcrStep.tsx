@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { formatDisplayDate } from '@/lib/dateUtils'
@@ -6,14 +6,13 @@ import type { ReportFormData } from '@/pages/mr/NewReport'
 import { useAuth } from '@/hooks/useAuth'
 import { useMarkSundayDcr } from '@/hooks/useReport'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter'
+import ReportStepFooter from '@/components/mr/ReportStepFooter'
 
 interface Props {
   data: ReportFormData
   onBack: () => void
   onClearDraft: () => void
   hideFooter?: boolean
-  onDockedFooter?: (config: ReportStepFooterProps) => void
 }
 
 export default function ReportSundayDcrStep({
@@ -21,7 +20,6 @@ export default function ReportSundayDcrStep({
   onBack,
   onClearDraft,
   hideFooter,
-  onDockedFooter,
 }: Props) {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -48,17 +46,6 @@ export default function ReportSundayDcrStep({
     }
   }
 
-  useEffect(() => {
-    if (!hideFooter || !onDockedFooter) return
-    onDockedFooter({
-      onBack,
-      onNext: () => void handleSubmit(),
-      nextLabel: busy ? 'Submitting…' : 'Submit Sunday DCR',
-      nextDisabled: busy,
-      showBack: true,
-    })
-  }, [hideFooter, onDockedFooter, onBack, busy, data.date])
-
   if (!user) return <LoadingSpinner />
 
   return (
@@ -74,6 +61,15 @@ export default function ReportSundayDcrStep({
         <p className="text-xs text-muted-foreground">Date</p>
         <p className="text-sm font-semibold text-foreground">{formatDisplayDate(data.date)}</p>
       </div>
+
+      {hideFooter && (
+        <ReportStepFooter
+          onBack={onBack}
+          onNext={() => void handleSubmit()}
+          nextLabel={busy ? 'Submitting…' : 'Submit Sunday DCR'}
+          nextDisabled={busy}
+        />
+      )}
     </div>
   )
 }

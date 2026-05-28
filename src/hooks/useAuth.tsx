@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react'
 import { User, AuthState, UserRole } from '@/types/database.types'
 import { supabase } from '@/lib/supabase'
+import { prefetchRoleDashboard } from '@/lib/prefetchDashboard'
+import { resetProfilePromptSession } from '@/lib/profileCompletion'
 
 interface AuthContextType extends AuthState {
   signIn: (
@@ -30,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearBlockedInfo = useCallback(() => setBlockedInfo(null), [])
 
-  const loadProfile = useCallback(async (authUserId: string, preferCache = false) => {
+  const loadProfile = useCallback(async (authUserId: string, preferCache = false, freshLogin = false) => {
     if (!supabase) return
     if (loadingAuthUserIdRef.current === authUserId) return
 
@@ -85,6 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const nextUser = profile as User
     setUser(nextUser)
     sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: nextUser }))
+    if (freshLogin) resetProfilePromptSession(nextUser.id)
+    prefetchRoleDashboard(nextUser.role)
     lastLoadedAuthUserIdRef.current = authUserId
     lastLoadedAtRef.current = Date.now()
     setAuthReady(true)
@@ -205,7 +209,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
       }
-      void loadProfile(authData.session.user.id, true)
+      void loadProfile(authData.session.user.id, true, true)
       return { success: true }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed'
@@ -214,15 +218,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadProfile])
 
   const logout = useCallback(async () => {
+    const userId = user?.id
     try {
       if (supabase) await supabase.auth.signOut()
     } finally {
+      if (userId) resetProfilePromptSession(userId)
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
       sessionStorage.removeItem(PROFILE_CACHE_KEY)
+      lastLoadedAuthUserIdRef.current = null
+      lastLoadedAtRef.current = 0
     }
-  }, [])
+  }, [user?.id])
 
   const value = useMemo((): AuthContextType => {
     return {

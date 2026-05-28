@@ -17,7 +17,7 @@ export default function ReportHistory() {
         onBack={safeGoBack}
       />
 
-      <div className="px-4 md:px-6 py-4 max-w-2xl lg:max-w-4xl mx-auto">
+      <div className="mx-auto w-full px-4 py-4 max-w-lg md:px-8 md:max-w-3xl lg:px-10 lg:max-w-5xl">
         {user?.id && (
           <ReportHistoryView
             subjectMrId={user.id}

@@ -1,5 +1,8 @@
 import { useMemo, useState } from 'react'
-import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart'
+import LazySpecialityBarChart from '@/components/charts/LazySpecialityBarChart'
+import ChartStatsSplit from '@/components/charts/ChartStatsSplit'
+import { rollupSpecialityRows } from '@/lib/chartRollup'
+import AnalyticsDonutPie from '@/components/charts/AnalyticsDonutPie'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics'
 import { useManagerAnalytics } from '@/hooks/useManagerAnalytics'
@@ -30,14 +33,19 @@ export default function TeamMrAnalyticsTab({ mrId }: Props) {
     monthStart,
     today,
     !!mrId,
+    'overview',
   )
 
   const loading = callsLoading || chartsLoading
+  const specialityChart = useMemo(
+    () => rollupSpecialityRows(calls?.bySpeciality ?? [], 8),
+    [calls?.bySpeciality],
+  )
 
   return (
     <div className="space-y-4 animate-fade-in">
       <div className="flex flex-wrap gap-1">
-        {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
+        {(['weekly', 'monthly', 'yearly'] as const).map(p => (
           <button
             key={p}
             type="button"
@@ -47,7 +55,7 @@ export default function TeamMrAnalyticsTab({ mrId }: Props) {
               callPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-card',
             )}
           >
-            {p === 'all' ? 'Till date' : p}
+            {p.charAt(0).toUpperCase() + p.slice(1)}
           </button>
         ))}
       </div>
@@ -56,30 +64,29 @@ export default function TeamMrAnalyticsTab({ mrId }: Props) {
         <LoadingSpinner />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-muted/40 px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground uppercase">Total calls</p>
-              <p className="text-lg font-bold tabular-nums">{calls?.totalCalls ?? 0}</p>
-            </div>
-            <div className="rounded-xl bg-muted/40 px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground uppercase">Avg / active day</p>
-              <p className="text-lg font-bold text-primary tabular-nums">
-                {calls && calls.daysWithReports > 0 ? calls.avgPerDay.toFixed(1) : '—'}
-              </p>
-            </div>
-          </div>
-
-          {calls && calls.bySpeciality.length > 0 && (
-            <div className="glass-card p-3">
-              <p className="text-xs font-semibold mb-2">Visits by speciality</p>
-              <LazySpecialityPieChart
-                data={calls.bySpeciality}
-                heightPx={200}
-                outerRadius={70}
-                legendFontSize={10}
-              />
-            </div>
-          )}
+          <ChartStatsSplit
+            chart={
+              specialityChart.length > 0 ? (
+                <LazySpecialityBarChart data={specialityChart} heightPx={160} />
+              ) : (
+                <p className="text-xs text-muted-foreground py-4 text-center">No calls in this period.</p>
+              )
+            }
+            stats={
+              <>
+                <div className="rounded-xl bg-muted/40 px-3 py-2.5 flex-1 sm:w-full">
+                  <p className="text-[10px] text-muted-foreground uppercase">Total calls</p>
+                  <p className="text-lg font-bold tabular-nums">{calls?.totalCalls ?? 0}</p>
+                </div>
+                <div className="rounded-xl bg-primary/5 border border-primary/15 px-3 py-2.5 flex-1 sm:w-full">
+                  <p className="text-[10px] text-muted-foreground uppercase">Avg / active day</p>
+                  <p className="text-lg font-bold text-primary tabular-nums">
+                    {calls && calls.daysWithReports > 0 ? calls.avgPerDay.toFixed(1) : '—'}
+                  </p>
+                </div>
+              </>
+            }
+          />
 
           <div className="glass-card p-3 space-y-2">
             <p className="text-xs font-semibold">This month overview</p>
@@ -92,13 +99,18 @@ export default function TeamMrAnalyticsTab({ mrId }: Props) {
               <span className="font-bold">{charts?.uniqueDoctorVisits ?? 0}</span>
             </p>
             {(charts?.productPromotions ?? []).length > 0 && (
-              <div className="pt-2 space-y-1 max-h-32 overflow-y-auto text-xs">
-                {charts!.productPromotions.slice(0, 8).map(p => (
-                  <div key={p.name} className="flex justify-between gap-2">
-                    <span className="truncate">{p.name}</span>
-                    <span className="font-semibold shrink-0">{p.count}</span>
-                  </div>
-                ))}
+              <div className="pt-2">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase mb-2">
+                  Product promotions
+                </p>
+                <AnalyticsDonutPie
+                  data={charts!.productPromotions.slice(0, 8).map(p => ({
+                    key: p.name,
+                    label: p.name,
+                    value: p.count,
+                  }))}
+                  maxHeightPx={200}
+                />
               </div>
             )}
           </div>

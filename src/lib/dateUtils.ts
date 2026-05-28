@@ -115,6 +115,12 @@ export function addDaysYmd(ymd: string, days: number): string {
 }
 
 /** First day of current month in IST as `YYYY-MM-DD`. */
+export function startOfYearIstYmd(): string {
+  const now = new Date()
+  const y = now.getFullYear()
+  return `${y}-01-01`
+}
+
 export function startOfMonthIstYmd(): string {
   return `${todayInputDate().slice(0, 7)}-01`
 }

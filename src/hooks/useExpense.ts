@@ -101,16 +101,21 @@ export function useExpenseItems(reportId?: string) {
     enabled: !!reportId && !!supabase,
     queryFn: async (): Promise<ExpenseItem[]> => {
       if (!supabase || !reportId) throw new Error('Supabase not configured')
-      const { data, error } = await supabase
+      const { data, error } = await supabase.rpc('list_expense_lines', {
+        p_expense_report_id: reportId,
+      })
+      if (!error) return (data ?? []) as ExpenseItem[]
+      if (!isForbidden(error)) throw error
+      const { data: fallback, error: fbErr } = await supabase
         .from('expense_items')
         .select(EXPENSE_ITEM_COLUMNS)
         .eq('expense_report_id', reportId)
         .order('created_at')
-      if (error) {
-        if (isForbidden(error)) return []
-        throw error
+      if (fbErr) {
+        if (isForbidden(fbErr)) return []
+        throw fbErr
       }
-      return (data ?? []) as ExpenseItem[]
+      return (fallback ?? []) as ExpenseItem[]
     },
     retry: false,
   })
@@ -121,11 +126,19 @@ export function useAddExpenseItem() {
   return useMutation({
     mutationFn: async (payload: Omit<ExpenseItem, 'id' | 'created_at'>) => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { error } = await supabase.from('expense_items').insert(payload)
-      if (error) throw error
+      const { error } = await supabase.rpc('add_expense_line', {
+        p_expense_report_id: payload.expense_report_id,
+        p_category: payload.category,
+        p_description: payload.description ?? '',
+        p_amount: payload.amount,
+      })
+      if (!error) return
+      if (!isForbidden(error)) throw error
+      const { error: insErr } = await supabase.from('expense_items').insert(payload)
+      if (insErr) throw insErr
+      await syncExpenseReportTotalUsed(payload.expense_report_id)
     },
     onSuccess: async (_data, vars) => {
-      await syncExpenseReportTotalUsed(vars.expense_report_id)
       queryClient.invalidateQueries({ queryKey: ['expense-items', vars.expense_report_id] })
       queryClient.invalidateQueries({ queryKey: ['expense-report'] })
       queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })
@@ -141,11 +154,14 @@ export function useDeleteExpenseItem() {
   return useMutation({
     mutationFn: async (payload: { id: string; expense_report_id: string }) => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { error } = await supabase.from('expense_items').delete().eq('id', payload.id)
-      if (error) throw error
+      const { error } = await supabase.rpc('delete_expense_line', { p_item_id: payload.id })
+      if (!error) return
+      if (!isForbidden(error)) throw error
+      const { error: delErr } = await supabase.from('expense_items').delete().eq('id', payload.id)
+      if (delErr) throw delErr
+      await syncExpenseReportTotalUsed(payload.expense_report_id)
     },
     onSuccess: async (_data, vars) => {
-      await syncExpenseReportTotalUsed(vars.expense_report_id)
       queryClient.invalidateQueries({ queryKey: ['expense-items', vars.expense_report_id] })
       queryClient.invalidateQueries({ queryKey: ['expense-report'] })
       queryClient.invalidateQueries({ queryKey: ['dcr-daily-status'] })

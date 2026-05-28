@@ -4,10 +4,11 @@ import {
   todayInputDate,
   startOfMonthIstYmd,
   startOfWeekIstYmd,
+  startOfYearIstYmd,
 } from '@/lib/dateUtils'
 import { DASHBOARD_QUERY_OPTIONS, LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 
-export type ManagerStatsFilter = 'Today' | 'This Week' | 'This Month'
+export type ManagerStatsFilter = 'Today' | 'This Week' | 'This Month' | 'This Year'
 
 export type ManagerActivityReportRow = {
   id: string
@@ -41,6 +42,7 @@ function statsDateRange(filter: ManagerStatsFilter) {
   const rangeEnd = today
   if (filter === 'This Week') rangeStart = startOfWeekIstYmd()
   else if (filter === 'This Month') rangeStart = startOfMonthIstYmd()
+  else if (filter === 'This Year') rangeStart = startOfYearIstYmd()
   return { rangeStart, rangeEnd }
 }
 

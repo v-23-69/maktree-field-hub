@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List } from 'lucide-react';
+import { Home, History, BarChart3, FileText, Users, MapPin, Settings, ShieldCheck, List, Target } from 'lucide-react';
 import { UserRole } from '@/types/database.types';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +15,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
   mr: [
     { to: '/mr/dashboard', icon: Home, label: 'Home' },
     { to: '/mr/master-list', icon: List, label: 'Doctors' },
+    { to: '/mr/visit-frequency', icon: Target, label: 'Visits' },
     { to: '/mr/analytics', icon: BarChart3, label: 'Analytics' },
     { to: '/mr/report/history', icon: History, label: 'History' },
   ],
@@ -41,7 +42,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
     <nav className="fixed bottom-0 left-0 right-0 z-40 glass border-t"
       style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
-      <div className="mx-auto flex max-w-2xl lg:max-w-3xl items-stretch">
+      <div className="mx-auto flex w-full max-w-lg md:max-w-2xl lg:max-w-3xl items-stretch md:px-4">
         {items.map(item => {
           const isActive = item.exact
             ? location.pathname === item.to

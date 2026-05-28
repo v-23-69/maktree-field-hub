@@ -38,3 +38,42 @@ export function isProfileComplete(
   if (!profile) return false
   return getProfileCompletionPct(profile) >= 100
 }
+
+const LEGACY_DISMISSED_KEY = (userId: string) => `maktree_sfa_profile_prompt_dismissed_${userId}`
+const SHOWN_SESSION_KEY = (userId: string) => `maktree_sfa_profile_prompt_shown_${userId}`
+
+/** Prompt already shown this browser session (once per portal open). */
+export function wasProfilePromptShownThisSession(userId: string): boolean {
+  try {
+    return sessionStorage.getItem(SHOWN_SESSION_KEY(userId)) === '1'
+  } catch {
+    return false
+  }
+}
+
+export function markProfilePromptShownThisSession(userId: string): void {
+  try {
+    sessionStorage.setItem(SHOWN_SESSION_KEY(userId), '1')
+  } catch {
+    /* private mode / quota */
+  }
+}
+
+/** "Skip for now" — hide until next login / new portal session. */
+export function dismissProfilePrompt(userId: string): void {
+  markProfilePromptShownThisSession(userId)
+}
+
+/** Call on login/logout so the prompt can appear again on the next portal open. */
+export function resetProfilePromptSession(userId: string): void {
+  try {
+    sessionStorage.removeItem(SHOWN_SESSION_KEY(userId))
+    localStorage.removeItem(LEGACY_DISMISSED_KEY(userId))
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearProfilePromptDismissal(userId: string): void {
+  resetProfilePromptSession(userId)
+}

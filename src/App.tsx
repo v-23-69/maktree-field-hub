@@ -25,6 +25,7 @@ function AppRoute({
 }
 import LoadingSpinner from "@/components/shared/LoadingSpinner";
 import InstallPrompt from "@/components/shared/InstallPrompt";
+import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
 import NotificationProvider from "@/components/shared/NotificationProvider";
 
@@ -48,12 +49,14 @@ const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
 const ManagerSelfLeave = lazy(() => import("@/pages/manager/ManagerSelfLeave"));
 const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency"));
 const MRAnalytics = lazy(() => import("@/pages/mr/Analytics"));
+const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
 const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
 const ManagerTerritories = lazy(() => import("@/pages/manager/ManagerTerritories"));
 const ManagerTeamHub = lazy(() => import("@/pages/manager/TeamHub"));
 const ManagerTeamMrDetail = lazy(() => import("@/pages/manager/TeamMrDetail"));
 const ManagerDcrImport = lazy(() => import("@/pages/manager/ManagerDcrImport"));
 const ManagerTerritoryAreas = lazy(() => import("@/pages/manager/ManagerTerritoryAreas"));
+const ManagerVacantAreas = lazy(() => import("@/pages/manager/ManagerVacantAreas"));
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/Users"));
 const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
@@ -107,6 +110,7 @@ const App = () => (
           <EmployeeBirthdayProvider>
           <NotificationProvider>
           <InstallPrompt />
+          <ProfileCompletionPrompt />
           <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/" element={<RootRedirect />} />
@@ -120,7 +124,7 @@ const App = () => (
             <Route path="/mr/report/new" element={<AppRoute scope="mr-report-new" allowedRoles={['mr']}><NewReport /></AppRoute>} />
             <Route path="/mr/master-list" element={<AppRoute scope="mr-master-list" allowedRoles={['mr']}><MasterList /></AppRoute>} />
             <Route path="/mr/analytics" element={<AppRoute scope="mr-analytics" allowedRoles={['mr']}><MRAnalytics /></AppRoute>} />
-            <Route path="/mr/visit-frequency" element={<Navigate to="/mr/analytics" replace />} />
+            <Route path="/mr/visit-frequency" element={<AppRoute scope="mr-visit-frequency" allowedRoles={['mr']}><MRVisitFrequency /></AppRoute>} />
             <Route path="/mr/leave" element={<AppRoute scope="mr-leave" allowedRoles={['mr']}><MRLeave /></AppRoute>} />
             <Route path="/mr/expense" element={<AppRoute scope="mr-expense" allowedRoles={['mr']}><MRExpense /></AppRoute>} />
             <Route path="/mr/tour-program" element={<AppRoute scope="mr-tour-program" allowedRoles={['mr']}><MRTourProgram /></AppRoute>} />
@@ -138,6 +142,7 @@ const App = () => (
             <Route path="/manager/team/visit-frequency" element={<AppRoute scope="manager-team-visit-frequency" allowedRoles={['manager']}><TeamVisitFrequency /></AppRoute>} />
             <Route path="/manager/holidays" element={<AppRoute scope="manager-holidays" allowedRoles={['manager']}><ManagerHolidays /></AppRoute>} />
             <Route path="/manager/territories" element={<AppRoute scope="manager-territories" allowedRoles={['manager']}><ManagerTerritories /></AppRoute>} />
+            <Route path="/manager/vacant-areas" element={<AppRoute scope="manager-vacant-areas-list" allowedRoles={['manager']}><ManagerVacantAreas /></AppRoute>} />
             <Route path="/manager/vacant-areas/:areaId" element={<AppRoute scope="manager-vacant-areas" allowedRoles={['manager']}><ManagerTerritoryAreas /></AppRoute>} />
             <Route path="/manager/team" element={<AppRoute scope="manager-team" allowedRoles={['manager']}><ManagerTeamHub /></AppRoute>} />
             <Route path="/manager/team/:mrId" element={<AppRoute scope="manager-team-mr" allowedRoles={['manager']}><ManagerTeamMrDetail /></AppRoute>} />

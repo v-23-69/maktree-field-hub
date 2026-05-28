@@ -1,25 +1,35 @@
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { Users } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import EmptyState from '@/components/shared/EmptyState';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import TeamFieldCallsChart from '@/components/charts/TeamFieldCallsChart';
+import ChartStatsSplit from '@/components/charts/ChartStatsSplit';
+import LazySpecialityBarChart from '@/components/charts/LazySpecialityBarChart';
+import { rollupSpecialityRows } from '@/lib/chartRollup';
+import { AnalyticsDateRangePicker } from '@/components/analytics/analytics-date-range-picker';
 import LazySpecialityPieChart from '@/components/charts/LazySpecialityPieChart';
 import {
-  LazyManagerAnalyticsAreaChart,
+  LazyDoctorLoyaltyCharts,
   LazyManagerAnalyticsIntelChart,
   LazyManagerAnalyticsOverviewCharts,
+  LazyTerritoryPerformanceCharts,
 } from '@/components/charts/LazyManagerAnalyticsRecharts';
+import { useManagerExpenseOverview } from '@/hooks/useManagerExpenseOverview';
 import { useAuth } from '@/hooks/useAuth';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
-import { useManagerAnalytics } from '@/hooks/useManagerAnalytics';
-import { useCallsAndSpecialityAnalytics, type PeriodPreset } from '@/hooks/useFieldActivityAnalytics';
-import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils';
-import { supabase } from '@/lib/supabase';
+import { useManagerAnalytics, type ManagerAnalyticsTab } from '@/hooks/useManagerAnalytics';
+import {
+  useCallsAndSpecialityAnalytics,
+  useCallsRangeComparison,
+  type PeriodPreset,
+} from '@/hooks/useFieldActivityAnalytics';
+import { buildDayComparisonChart, percentChange } from '@/lib/analyticsPeriodCompare';
+import { todayInputDate } from '@/lib/dateUtils';
 import { cn } from '@/lib/utils';
+import { dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 
 function defaultMonthRange(): { from: string; to: string } {
   const today = new Date()
@@ -35,7 +45,7 @@ export default function ManagerAnalytics() {
   const { user } = useAuth();
   const defaults = useMemo(() => defaultMonthRange(), []);
   const [includeSelf, setIncludeSelf] = useState(true);
-  const [rangePreset, setRangePreset] = useState<'daily' | 'weekly' | 'monthly' | 'custom'>('monthly');
+  const [rangePreset, setRangePreset] = useState<'weekly' | 'monthly' | 'yearly' | 'custom'>('monthly');
   const [fromDate, setFromDate] = useState(defaults.from);
   const [toDate, setToDate] = useState(defaults.to);
   const [run, setRun] = useState(true);
@@ -46,29 +56,59 @@ export default function ManagerAnalytics() {
 
   const { data: mrs = [], isLoading: mrsLoading } = useManagerMrs(user?.id ?? '');
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs]);
-  const { data: teamCallsOnly, isLoading: teamCallsLoading } = useCallsAndSpecialityAnalytics(
-    mrIds,
-    teamCallPreset,
-    todayInputDate(),
-    mrIds.length > 0,
-  );
   const effectiveMrIds = useMemo(() => {
     const ids = new Set(mrIds)
     if (includeSelf && user?.id) ids.add(user.id)
     return Array.from(ids)
   }, [mrIds, includeSelf, user?.id])
 
+  const analyticsTab: ManagerAnalyticsTab | null =
+    activeTab === 'calls' ? null : activeTab
+
+  const { data: teamCallsOnly, isLoading: teamCallsLoading } = useCallsAndSpecialityAnalytics(
+    mrIds,
+    teamCallPreset,
+    todayInputDate(),
+    activeTab === 'calls' && mrIds.length > 0,
+  );
+
   const { data: charts, isLoading: chartsLoading, isError } = useManagerAnalytics(
     effectiveMrIds,
     fromDate,
     toDate,
-    run,
+    run && analyticsTab !== null,
+    analyticsTab ?? 'overview',
+  );
+
+  const { data: rangeComparison } = useCallsRangeComparison(
+    effectiveMrIds,
+    fromDate,
+    toDate,
+    run && activeTab === 'overview' && effectiveMrIds.length > 0,
+  );
+
+  const teamComparisonChart = useMemo(
+    () =>
+      buildDayComparisonChart(
+        rangeComparison?.current.byDay ?? [],
+        rangeComparison?.previous.byDay ?? [],
+      ),
+    [rangeComparison?.current.byDay, rangeComparison?.previous.byDay],
+  );
+  const teamCallsChange = useMemo(
+    () =>
+      percentChange(
+        rangeComparison?.current.totalCalls ?? 0,
+        rangeComparison?.previous.totalCalls ?? 0,
+      ),
+    [rangeComparison?.current.totalCalls, rangeComparison?.previous.totalCalls],
   );
 
   const productData = charts?.productPromotions ?? [];
   const mrData = charts?.mrVisits ?? [];
   const competitorData = charts?.competitorBrands ?? [];
   const areaPerformance = charts?.areaPerformance ?? [];
+  const areaMonthlyTrend = charts?.areaMonthlyTrend ?? [];
   const doctorLoyalty = charts?.doctorLoyalty ?? [];
   const competitorIntel = charts?.competitorIntel ?? [];
   const maxCompetitor = competitorData.length
@@ -81,75 +121,14 @@ export default function ManagerAnalytics() {
   const hasAnyChart =
     productData.length > 0 || mrData.length > 0 || competitorData.length > 0 || areaPerformance.length > 0 || doctorLoyalty.length > 0 || competitorIntel.length > 0;
 
-  const applyPreset = (preset: 'daily' | 'weekly' | 'monthly' | 'custom') => {
-    setRangePreset(preset)
-    if (preset === 'custom') return
-    const today = new Date()
-    const y = today.getFullYear()
-    const m = String(today.getMonth() + 1).padStart(2, '0')
-    const d = String(today.getDate()).padStart(2, '0')
-    const to = `${y}-${m}-${d}`
-    let from = to
-    if (preset === 'weekly') {
-      const start = new Date(today)
-      start.setDate(today.getDate() - 6)
-      from = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`
-    }
-    if (preset === 'monthly') {
-      from = `${y}-${m}-01`
-    }
-    setFromDate(from)
-    setToDate(to)
-    setRun(true)
-  }
-
   const monthLabel = toDate ? toDate.slice(0, 7) : ''
-  const { data: expenseSummaryRows = [] } = useQuery({
-    queryKey: ['manager-expense-summary-overview', effectiveMrIds, monthLabel, run],
-    enabled: run && !!monthLabel && effectiveMrIds.length > 0 && !!supabase,
-    queryFn: async () => {
-      if (!supabase) return []
-      const { data, error } = await supabase
-        .from('v_expense_monthly_summary')
-        .select('mr_id, month, total_allotted, total_used')
-        .in('mr_id', effectiveMrIds)
-        .eq('month', `${monthLabel}-01`)
-      if (error) throw error
-      return data ?? []
-    },
-  })
-  const { data: expenseByCategoryRows = [] } = useQuery({
-    queryKey: ['manager-expense-category-overview', effectiveMrIds, monthLabel, run],
-    enabled: run && !!monthLabel && effectiveMrIds.length > 0 && !!supabase,
-    queryFn: async () => {
-      if (!supabase) return []
-      const { data, error } = await supabase
-        .from('v_expense_by_category')
-        .select('mr_id, month, category, total_amount')
-        .in('mr_id', effectiveMrIds)
-        .eq('month', `${monthLabel}-01`)
-      if (error) throw error
-      return data ?? []
-    },
-  })
-  const expenseTotals = useMemo(() => {
-    return expenseSummaryRows.reduce(
-      (acc: { allotted: number; used: number }, row: any) => {
-        acc.allotted += Number(row.total_allotted ?? 0)
-        acc.used += Number(row.total_used ?? 0)
-        return acc
-      },
-      { allotted: 0, used: 0 },
-    )
-  }, [expenseSummaryRows])
-  const expenseByCategory = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const row of expenseByCategoryRows as any[]) {
-      const key = String(row.category ?? 'Other')
-      m.set(key, (m.get(key) ?? 0) + Number(row.total_amount ?? 0))
-    }
-    return Array.from(m.entries()).map(([name, amount]) => ({ name, amount }))
-  }, [expenseByCategoryRows])
+  const { data: expenseOverview } = useManagerExpenseOverview(
+    effectiveMrIds,
+    monthLabel ? `${monthLabel}-01` : '',
+    run && activeTab === 'overview' && !!monthLabel && effectiveMrIds.length > 0,
+  )
+  const expenseTotals = expenseOverview?.totals ?? { allotted: 0, used: 0 }
+  const expenseByCategory = expenseOverview?.byCategory ?? []
 
   const loyaltyProducts = useMemo(
     () => Array.from(new Set(doctorLoyalty.map(d => d.product_name).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -159,6 +138,11 @@ export default function ManagerAnalytics() {
     () => Array.from(new Set(doctorLoyalty.map(d => d.area).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [doctorLoyalty],
   )
+  const teamSpecialityChart = useMemo(
+    () => rollupSpecialityRows(teamCallsOnly?.bySpeciality ?? [], 8),
+    [teamCallsOnly?.bySpeciality],
+  )
+
   const filteredDoctorLoyalty = useMemo(
     () =>
       doctorLoyalty.filter(d =>
@@ -172,24 +156,21 @@ export default function ManagerAnalytics() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Analytics" />
 
-      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-5xl mx-auto">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-xl bg-card p-3 shadow-sm space-y-1.5">
-            <Label className="text-xs text-muted-foreground">From</Label>
-            <Input type="date" value={fromDate} onChange={e => { setFromDate(e.target.value); setRun(false); }} className="rounded-lg text-sm h-10" />
-          </div>
-          <div className="rounded-xl bg-card p-3 shadow-sm space-y-1.5">
-            <Label className="text-xs text-muted-foreground">To</Label>
-            <Input type="date" value={toDate} onChange={e => { setToDate(e.target.value); setRun(false); }} className="rounded-lg text-sm h-10" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          <Button type="button" variant={rangePreset === 'daily' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('daily')}>Daily</Button>
-          <Button type="button" variant={rangePreset === 'weekly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('weekly')}>Weekly</Button>
-          <Button type="button" variant={rangePreset === 'monthly' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('monthly')}>Monthly</Button>
-          <Button type="button" variant={rangePreset === 'custom' ? 'default' : 'outline'} className="h-9 text-xs" onClick={() => applyPreset('custom')}>Custom</Button>
-        </div>
+      <div className={dashboardPageClass('py-4 space-y-4 md:space-y-5')}>
+        <AnalyticsDateRangePicker
+          fromDate={fromDate}
+          toDate={toDate}
+          preset={rangePreset}
+          onPresetChange={preset => {
+            setRangePreset(preset)
+            if (preset !== 'custom') setRun(true)
+          }}
+          onRangeChange={(from, to) => {
+            setFromDate(from)
+            setToDate(to)
+            setRun(false)
+          }}
+        />
 
         <label className="flex items-center gap-2 rounded-xl border bg-card px-3 py-2 text-xs">
           <input type="checkbox" checked={includeSelf} onChange={e => setIncludeSelf(e.target.checked)} />
@@ -204,7 +185,17 @@ export default function ManagerAnalytics() {
           {run && chartsLoading ? 'Loading…' : 'Generate Report'}
         </Button>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {run && activeTab === 'overview' && effectiveMrIds.length > 0 && !chartsLoading && (
+          <TeamFieldCallsChart
+            title="Team field calls"
+            icon={<Users className="h-5 w-5" />}
+            mainValue={String(rangeComparison?.current.totalCalls ?? totalVisits)}
+            changeValue={teamCallsChange}
+            chartData={teamComparisonChart}
+          />
+        )}
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 md:gap-3">
           <Button type="button" variant={activeTab === 'overview' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('overview')}>Overview</Button>
           <Button type="button" variant={activeTab === 'area' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('area')}>Territory Performance</Button>
           <Button type="button" variant={activeTab === 'loyalty' ? 'default' : 'outline'} className="text-xs h-9 px-2" onClick={() => setActiveTab('loyalty')}>Doctor Loyalty</Button>
@@ -218,24 +209,24 @@ export default function ManagerAnalytics() {
         )}
 
         {activeTab === 'calls' && (
-          <div className="rounded-xl border bg-card p-4 shadow-sm space-y-4 animate-fade-in">
-            <p className="text-xs text-muted-foreground">
-              MR team only: one doctor selected on a submitted field DCR counts as one call. Manager field reports are not included.
-            </p>
-            <div className="flex flex-wrap gap-1 justify-end">
-              {(['daily', 'weekly', 'monthly', 'all'] as const).map(p => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => setTeamCallPreset(p)}
-                  className={cn(
-                    'text-[10px] px-2 py-1 rounded-lg font-semibold border transition',
-                    teamCallPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background text-muted-foreground',
-                  )}
-                >
-                  {p === 'all' ? 'Till date' : p}
-                </button>
-              ))}
+          <div className={cn(dashboardPanelClass(), 'p-4 md:p-5 space-y-4 animate-fade-in')}>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-foreground">Team call volume</p>
+              <div className="flex flex-wrap gap-1">
+                {(['weekly', 'monthly', 'yearly'] as const).map(p => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => setTeamCallPreset(p)}
+                    className={cn(
+                      'text-[10px] px-2 py-1 rounded-lg font-semibold border transition capitalize',
+                      teamCallPreset === p ? 'bg-primary text-primary-foreground border-primary' : 'border-border bg-background text-muted-foreground',
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
             </div>
             {mrIds.length === 0 ? (
               <EmptyState message="No medical representatives are assigned to you yet." />
@@ -243,31 +234,40 @@ export default function ManagerAnalytics() {
               <LoadingSpinner />
             ) : (
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-[10px] text-muted-foreground font-medium">Total calls</p>
-                    <p className="text-xl font-bold tabular-nums">{teamCallsOnly?.totalCalls ?? 0}</p>
+                <ChartStatsSplit
+                  chart={
+                    teamSpecialityChart.length > 0 ? (
+                      <LazySpecialityBarChart data={teamSpecialityChart} heightPx={200} />
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-8 text-center">No calls in this period.</p>
+                    )
+                  }
+                  stats={
+                    <>
+                      <div className="rounded-lg bg-muted/40 px-3 py-2.5 flex-1 sm:w-full">
+                        <p className="text-[10px] text-muted-foreground">Total calls</p>
+                        <p className="text-xl font-bold tabular-nums">{teamCallsOnly?.totalCalls ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg bg-primary/5 border border-primary/15 px-3 py-2.5 flex-1 sm:w-full">
+                        <p className="text-[10px] text-muted-foreground">Avg / active day</p>
+                        <p className="text-xl font-bold text-primary tabular-nums">
+                          {teamCallsOnly && teamCallsOnly.daysWithReports > 0
+                            ? teamCallsOnly.avgPerDay.toFixed(1)
+                            : '—'}
+                        </p>
+                      </div>
+                    </>
+                  }
+                />
+                {teamSpecialityChart.length > 0 && (
+                  <div className="border-t border-border/60 pt-3 space-y-1 max-h-36 overflow-y-auto">
+                    {teamSpecialityChart.map(row => (
+                      <div key={row.speciality} className="flex justify-between gap-2 text-xs">
+                        <span className="text-muted-foreground truncate">{row.speciality}</span>
+                        <span className="font-semibold tabular-nums shrink-0">{row.visits}</span>
+                      </div>
+                    ))}
                   </div>
-                  <div className="rounded-lg bg-muted/50 px-3 py-2">
-                    <p className="text-[10px] text-muted-foreground font-medium">Average / active day</p>
-                    <p className="text-xl font-bold text-primary tabular-nums">
-                      {teamCallsOnly && teamCallsOnly.daysWithReports > 0 ? teamCallsOnly.avgPerDay.toFixed(1) : '—'}
-                    </p>
-                  </div>
-                </div>
-                {teamCallsOnly && teamCallsOnly.bySpeciality.length > 0 ? (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Visits by speciality</p>
-                    <LazySpecialityPieChart
-                      data={teamCallsOnly.bySpeciality}
-                      heightPx={240}
-                      outerRadius={80}
-                      showSliceLabels
-                      legendFontSize={11}
-                    />
-                  </div>
-                ) : (
-                  <EmptyState message="No submitted field DCR visits in this period yet." />
                 )}
               </>
             )}
@@ -301,14 +301,14 @@ export default function ManagerAnalytics() {
         )}
 
         {run && !chartsLoading && !isError && activeTab === 'area' && (
-          <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-              Territory Ranking by Quantity
-            </p>
-            {areaPerformance.length === 0 ? (
+          <div className="animate-fade-in">
+            {areaPerformance.length === 0 && areaMonthlyTrend.length === 0 ? (
               <EmptyState message="No territory performance data for selected period" />
             ) : (
-              <LazyManagerAnalyticsAreaChart areaPerformance={areaPerformance} />
+              <LazyTerritoryPerformanceCharts
+                areaPerformance={areaPerformance}
+                areaMonthlyTrend={areaMonthlyTrend}
+              />
             )}
           </div>
         )}
@@ -345,19 +345,7 @@ export default function ManagerAnalytics() {
             {filteredDoctorLoyalty.length === 0 ? (
               <EmptyState message="No doctor loyalty data matches selected filters." />
             ) : (
-              <div className="space-y-2">
-                {filteredDoctorLoyalty.map((row, idx) => (
-                  <div key={`${row.doctor_name}-${row.product_name}-${idx}`} className="rounded-lg border border-border bg-background p-3">
-                    <p className="text-sm font-medium text-foreground">{row.doctor_name}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {row.product_name} | {row.area || 'Territory'}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Months written: {row.months_written} | Total qty: {row.total_qty}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              <LazyDoctorLoyaltyCharts rows={filteredDoctorLoyalty} />
             )}
           </div>
         )}

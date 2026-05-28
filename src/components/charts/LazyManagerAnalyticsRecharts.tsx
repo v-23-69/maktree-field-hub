@@ -7,9 +7,14 @@ const OverviewCharts = lazy(async () => {
   return { default: mod.ManagerAnalyticsOverviewCharts }
 })
 
-const AreaChart = lazy(async () => {
-  const mod = await import('@/components/charts/ManagerAnalyticsRecharts')
-  return { default: mod.ManagerAnalyticsAreaChart }
+const TerritoryCharts = lazy(async () => {
+  const mod = await import('@/components/charts/TerritoryPerformanceCharts')
+  return { default: mod.default }
+})
+
+const LoyaltyCharts = lazy(async () => {
+  const mod = await import('@/components/charts/DoctorLoyaltyCharts')
+  return { default: mod.default }
 })
 
 const IntelChart = lazy(async () => {
@@ -33,10 +38,23 @@ export function LazyManagerAnalyticsOverviewCharts(props: ManagerAnalyticsOvervi
   )
 }
 
-export function LazyManagerAnalyticsAreaChart(props: { areaPerformance: { area: string; qty: number }[] }) {
+export function LazyTerritoryPerformanceCharts(props: {
+  areaPerformance: { area: string; qty: number }[]
+  areaMonthlyTrend: { month: string; label: string; qty: number }[]
+}) {
   return (
-    <Suspense fallback={<ChartFallback heightPx={256} />}>
-      <AreaChart {...props} />
+    <Suspense fallback={<ChartFallback heightPx={320} />}>
+      <TerritoryCharts {...props} />
+    </Suspense>
+  )
+}
+
+export function LazyDoctorLoyaltyCharts(props: {
+  rows: import('@/components/charts/DoctorLoyaltyCharts').DoctorLoyaltyRow[]
+}) {
+  return (
+    <Suspense fallback={<ChartFallback heightPx={320} />}>
+      <LoyaltyCharts {...props} />
     </Suspense>
   )
 }

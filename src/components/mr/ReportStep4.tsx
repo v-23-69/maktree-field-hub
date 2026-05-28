@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
+import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -29,26 +29,34 @@ import {
 } from '@/hooks/useManagers';
 import { supabase } from '@/lib/supabase';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
+import DcrExpenseSection from '@/components/mr/DcrExpenseSection';
+import {
+  useExpenseReport,
+  useExpenseItems,
+  useSubmitExpenseReport,
+  useGetOrCreateExpenseReport,
+} from '@/hooks/useExpense';
 
 interface Props {
   data: ReportFormData;
   onBack: () => void;
   onClearDraft: () => void;
   hideFooter?: boolean;
-  onDockedFooter?: (config: ReportStepFooterProps) => void;
 }
 
-export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, onDockedFooter }: Props) {
+export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: Props) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [openCards, setOpenCards] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [skipExpense, setSkipExpense] = useState(false);
 
-  // NOTE: We intentionally do not register a docked footer here.
-  // Parent-level docked footers can cause render loops when callbacks change across renders.
-  // This step renders its own Back/Submit controls when `hideFooter` is true.
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const { data: expenseReport } = useExpenseReport(user?.id ?? '', data.date);
+  const { data: expenseItems = [] } = useExpenseItems(expenseReport?.id);
+  const submitExpenseReport = useSubmitExpenseReport();
+  const getOrCreateExpense = useGetOrCreateExpenseReport();
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsBySubAreas(data.selectedSubAreaIds);
   const { data: subAreasFlat = [], isLoading: subAreasLoading } = useMrSubAreas(user?.id ?? '');
@@ -183,6 +191,23 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
       }
 
       await submitReport.mutateAsync(reportId);
+
+      if (!skipExpense && user.id && data.date) {
+        let expenseId = expenseReport?.id;
+        if (!expenseId) {
+          try {
+            const created = await getOrCreateExpense.mutateAsync({ mrId: user.id, date: data.date });
+            expenseId = created.id;
+          } catch {
+            expenseId = undefined;
+          }
+        }
+        const hasExpenseLines =
+          expenseItems.length > 0 || Number(expenseReport?.total_used ?? 0) > 0;
+        if (expenseId && expenseReport?.status !== 'submitted' && hasExpenseLines) {
+          await submitExpenseReport.mutateAsync(expenseId);
+        }
+      }
 
       await queryClient.invalidateQueries({ queryKey: ['mr-reports'] });
       await queryClient.invalidateQueries({ queryKey: ['daily-report'] });
@@ -361,6 +386,15 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter, on
           </div>
         )}
       </div>
+
+      {user?.id && (
+        <DcrExpenseSection
+          mrId={user.id}
+          reportDate={data.date}
+          skipExpense={skipExpense}
+          onSkipChange={setSkipExpense}
+        />
+      )}
 
       {hideFooter && (
         <div className="pt-3">

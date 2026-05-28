@@ -12,6 +12,7 @@ import {
   type TeamMrChemistRow,
 } from '@/hooks/useManagerTeamHub'
 import type { Doctor } from '@/types/database.types'
+import { formatDoctorLabel } from '@/lib/displayLabels'
 
 type DoctorRow = Doctor & { sub_area_name: string; area_name: string }
 
@@ -92,9 +93,8 @@ export default function TeamMrMasterTab({ mrId, mrName }: Props) {
                 {docs.map(d => (
                   <li key={d.id} className="flex items-center gap-2 px-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">{d.full_name}</p>
-                      <p className="text-[10px] text-muted-foreground truncate">
-                        {d.speciality || '—'} · {d.doctor_code}
+                      <p className="text-sm font-medium text-foreground truncate">
+                        {formatDoctorLabel(d.full_name, d.speciality)}
                       </p>
                     </div>
                     <Button

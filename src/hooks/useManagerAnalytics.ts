@@ -1,11 +1,15 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { ANALYTICS_QUERY_OPTIONS } from '@/lib/analyticsQueryOptions'
+
+export type ManagerAnalyticsTab = 'overview' | 'area' | 'loyalty' | 'intel'
 
 export interface ManagerAnalyticsCharts {
   productPromotions: { name: string; count: number }[]
   mrVisits: { name: string; visits: number }[]
   competitorBrands: { brand: string; count: number }[]
   areaPerformance: { area: string; qty: number }[]
+  areaMonthlyTrend: { month: string; label: string; qty: number }[]
   doctorLoyalty: {
     doctor_name: string
     product_name: string
@@ -76,15 +80,17 @@ function pick(
   return null
 }
 
-/** Aggregates analytics views for the manager's MR roster and date range. */
+/** Aggregates analytics views for the manager's MR roster and date range (tab-scoped queries). */
 export function useManagerAnalytics(
   mrIds: string[],
   fromDate: string,
   toDate: string,
   enabled: boolean,
+  activeTab: ManagerAnalyticsTab = 'overview',
 ) {
   return useQuery({
-    queryKey: ['manager-analytics', mrIds, fromDate, toDate],
+    queryKey: ['manager-analytics', mrIds, fromDate, toDate, activeTab],
+    ...ANALYTICS_QUERY_OPTIONS,
     queryFn: async (): Promise<ManagerAnalyticsCharts> => {
       if (!supabase) throw new Error('Supabase not configured')
       if (mrIds.length === 0) {
@@ -93,6 +99,7 @@ export function useManagerAnalytics(
           mrVisits: [],
           competitorBrands: [],
           areaPerformance: [],
+          areaMonthlyTrend: [],
           doctorLoyalty: [],
           competitorIntel: [],
           totalVisits: 0,
@@ -102,53 +109,66 @@ export function useManagerAnalytics(
 
       try {
         const { fromMonth, toMonth } = monthFilterBounds(fromDate, toDate)
+        const needOverview = activeTab === 'overview'
+        const needArea = activeTab === 'area'
+        const needLoyalty = activeTab === 'loyalty'
+        const needIntel = activeTab === 'intel'
+
         const [msRes, compRes, visitRes, areaRes, loyaltyRes, intelRes] = await Promise.all([
-          supabase
-            .from('v_monthly_support_summary')
-            .select(
-              'mr_id, mr_name, report_date, product_name, quantity',
-            )
-            .in('mr_id', mrIds)
-            .gte('report_date', fromDate)
-            .lte('report_date', toDate),
-          supabase
-            .from('v_competitor_summary')
-            .select(
-              'mr_id, mr_name, report_date, competitor_brand, quantity',
-            )
-            .in('mr_id', mrIds)
-            .gte('report_date', fromDate)
-            .lte('report_date', toDate),
-          supabase
-            .from('v_visit_detail')
-            .select(
-              'mr_id, mr_name, mr_code, report_date, visit_id, doctor_id, doctor_name, sub_area, area',
-            )
-            .in('mr_id', mrIds)
-            .gte('report_date', fromDate)
-            .lte('report_date', toDate),
-          supabase
-            .from('v_area_performance')
-            .select(
-              'mr_id, area_id, area, sub_area_id, sub_area, product_name, doctors_covered, total_quantity, month',
-            )
-            .in('mr_id', mrIds)
-            .gte('month', fromMonth)
-            .lte('month', toMonth),
-          supabase
-            .from('v_doctor_loyalty')
-            .select(
-              'mr_id, doctor_id, doctor_name, speciality, sub_area, area, product_name, months_written, total_quantity, last_written_date, first_written_date',
-            )
-            .in('mr_id', mrIds),
-          supabase
-            .from('v_competitor_intelligence')
-            .select(
-              'mr_id, competitor_brand, sub_area, area, doctor_speciality, doctor_count, total_quantity, month',
-            )
-            .in('mr_id', mrIds)
-            .gte('month', fromMonth)
-            .lte('month', toMonth),
+          needOverview
+            ? supabase
+                .from('v_monthly_support_summary')
+                .select('mr_id, mr_name, report_date, product_name, quantity')
+                .in('mr_id', mrIds)
+                .gte('report_date', fromDate)
+                .lte('report_date', toDate)
+            : Promise.resolve({ data: [], error: null }),
+          needOverview
+            ? supabase
+                .from('v_competitor_summary')
+                .select('mr_id, mr_name, report_date, competitor_brand, quantity')
+                .in('mr_id', mrIds)
+                .gte('report_date', fromDate)
+                .lte('report_date', toDate)
+            : Promise.resolve({ data: [], error: null }),
+          needOverview
+            ? supabase
+                .from('v_visit_detail')
+                .select(
+                  'mr_id, mr_name, mr_code, report_date, visit_id, doctor_id, doctor_name, sub_area, area',
+                )
+                .in('mr_id', mrIds)
+                .gte('report_date', fromDate)
+                .lte('report_date', toDate)
+            : Promise.resolve({ data: [], error: null }),
+          needOverview || needArea
+            ? supabase
+                .from('v_area_performance')
+                .select(
+                  'mr_id, area_id, area, sub_area_id, sub_area, product_name, doctors_covered, total_quantity, month',
+                )
+                .in('mr_id', mrIds)
+                .gte('month', fromMonth)
+                .lte('month', toMonth)
+            : Promise.resolve({ data: [], error: null }),
+          needLoyalty
+            ? supabase
+                .from('v_doctor_loyalty')
+                .select(
+                  'mr_id, doctor_id, doctor_name, speciality, sub_area, area, product_name, months_written, total_quantity, last_written_date, first_written_date',
+                )
+                .in('mr_id', mrIds)
+            : Promise.resolve({ data: [], error: null }),
+          needIntel
+            ? supabase
+                .from('v_competitor_intelligence')
+                .select(
+                  'mr_id, competitor_brand, sub_area, area, doctor_speciality, doctor_count, total_quantity, month',
+                )
+                .in('mr_id', mrIds)
+                .gte('month', fromMonth)
+                .lte('month', toMonth)
+            : Promise.resolve({ data: [], error: null }),
         ])
 
         if (msRes.error) throw msRes.error
@@ -202,14 +222,35 @@ export function useManagerAnalytics(
         const uniqueDoctorVisits = uniqueDoctorIds.size || totalVisits
 
         const areaMap = new Map<string, number>()
+        const monthTrendMap = new Map<string, number>()
         for (const raw of (areaRes.data ?? []) as Record<string, unknown>[]) {
           const area = str(pick(raw, ['area', 'area_name'])) || 'Area'
           const qty = num(pick(raw, ['total_quantity', 'quantity', 'total_qty', 'qty']))
           areaMap.set(area, (areaMap.get(area) ?? 0) + qty)
+
+          const monthRaw = pick(raw, ['month', 'month_date'])
+          let monthKey = ''
+          if (typeof monthRaw === 'string') {
+            monthKey = monthRaw.slice(0, 7)
+          } else if (monthRaw instanceof Date) {
+            monthKey = `${monthRaw.getUTCFullYear()}-${String(monthRaw.getUTCMonth() + 1).padStart(2, '0')}`
+          }
+          if (monthKey) {
+            monthTrendMap.set(monthKey, (monthTrendMap.get(monthKey) ?? 0) + qty)
+          }
         }
         const areaPerformance = Array.from(areaMap.entries())
           .map(([area, qty]) => ({ area, qty }))
           .sort((a, b) => b.qty - a.qty)
+        const areaMonthlyTrend = Array.from(monthTrendMap.entries())
+          .map(([month, qty]) => {
+            const d = new Date(`${month}-01T12:00:00`)
+            const label = Number.isNaN(d.getTime())
+              ? month
+              : d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
+            return { month, label, qty }
+          })
+          .sort((a, b) => a.month.localeCompare(b.month))
 
         const doctorLoyalty = ((loyaltyRes.data ?? []) as Record<string, unknown>[])
           .map(raw => ({
@@ -235,6 +276,7 @@ export function useManagerAnalytics(
           mrVisits,
           competitorBrands,
           areaPerformance,
+          areaMonthlyTrend,
           doctorLoyalty,
           competitorIntel,
           totalVisits,

@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter'
+import ReportStepFooter from '@/components/mr/ReportStepFooter'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -23,7 +23,6 @@ interface Props {
   onBack: () => void
   onClearDraft: () => void
   hideFooter?: boolean
-  onDockedFooter?: (config: ReportStepFooterProps) => void
 }
 
 export default function ReportLeaveDcrStep({
@@ -32,7 +31,6 @@ export default function ReportLeaveDcrStep({
   onBack,
   onClearDraft,
   hideFooter,
-  onDockedFooter,
 }: Props) {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -106,17 +104,6 @@ export default function ReportLeaveDcrStep({
     }
   }
 
-  useEffect(() => {
-    if (!hideFooter || !onDockedFooter) return
-    onDockedFooter({
-      onBack,
-      onNext: () => void handleSubmit(),
-      nextLabel: busy ? 'Submitting…' : 'Submit Leave DCR',
-      nextDisabled: busy,
-      showBack: true,
-    })
-  }, [hideFooter, onDockedFooter, onBack, busy, cat, remark, data.date])
-
   if (!user) return <LoadingSpinner />
 
   return (
@@ -161,7 +148,7 @@ export default function ReportLeaveDcrStep({
         />
       </div>
 
-      {!hideFooter && (
+      {hideFooter && (
         <ReportStepFooter
           onBack={onBack}
           onNext={() => void handleSubmit()}

@@ -35,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 lg:z-40 lg:w-60 lg:flex-col lg:border-r lg:border-border lg:bg-card">
         <div className="flex h-14 items-center gap-2 px-4 border-b border-border">
-          <AppLogo className="h-8 w-auto" />
+          <AppLogo className="h-11 w-11 shrink-0" alt="" />
           <span className="font-bold text-sm text-foreground tracking-tight">MakTree Admin</span>
         </div>
         <nav className="flex-1 p-3 space-y-1">
@@ -72,7 +72,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           >
             <div className="flex h-14 items-center justify-between px-4 border-b border-border">
               <div className="flex items-center gap-2">
-                <AppLogo className="h-8 w-auto" />
+                <AppLogo className="h-11 w-11 shrink-0" alt="" />
                 <span className="font-bold text-sm text-foreground tracking-tight">Admin</span>
               </div>
               <button onClick={() => setSidebarOpen(false)} className="p-1.5">

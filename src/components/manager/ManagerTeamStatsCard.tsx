@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, Stethoscope, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { dashboardPanelClass } from '@/components/dashboard/dashboard-shell'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { ManagerStatsFilter, ManagerTeamActivityData } from '@/hooks/useDashboardStats'
 import {
@@ -21,6 +22,7 @@ type Props = {
   activity: ManagerTeamActivityData | undefined
   loading: boolean
   mrCount: number
+  hideFilter?: boolean
 }
 
 const REPORT_LABEL: Record<ManagerStatsFilter, string> = {
@@ -41,6 +43,7 @@ export default function ManagerTeamStatsCard({
   activity,
   loading,
   mrCount,
+  hideFilter = false,
 }: Props) {
   const navigate = useNavigate()
   const [panel, setPanel] = useState<DetailPanel>(null)
@@ -52,26 +55,28 @@ export default function ManagerTeamStatsCard({
 
   return (
     <>
-      <div className="rounded-2xl border border-border/80 bg-card/60 p-4 space-y-3">
+      <div className={cn(dashboardPanelClass(), 'p-4 space-y-3')}>
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-semibold text-foreground">Team activity</p>
-          <div className="flex rounded-lg border border-border/80 bg-muted/40 p-0.5">
-            {FILTERS.map(f => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => onFilterChange(f)}
-                className={cn(
-                  'text-[10px] font-semibold px-2 py-1 rounded-md transition-colors',
-                  activeFilter === f
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground',
-                )}
-              >
-                {f === 'This Week' ? 'Week' : f === 'This Month' ? 'Month' : 'Today'}
-              </button>
-            ))}
-          </div>
+          <p className="text-xs font-semibold text-foreground">Team activity details</p>
+          {!hideFilter && (
+            <div className="flex rounded-lg border border-border/80 bg-muted/40 p-0.5">
+              {FILTERS.map(f => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => onFilterChange(f)}
+                  className={cn(
+                    'text-[10px] font-semibold px-2 py-1 rounded-md transition-colors',
+                    activeFilter === f
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground',
+                  )}
+                >
+                  {f === 'This Week' ? 'Week' : f === 'This Month' ? 'Month' : 'Today'}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

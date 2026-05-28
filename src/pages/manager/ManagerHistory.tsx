@@ -26,10 +26,11 @@ export default function ManagerHistory() {
       setSelectedMrId(mrIdParam)
       return
     }
-    if (selectedMrId && (selectedMrId === managerId || mrs.some(m => m.id === selectedMrId))) return
-    if (mrs.length > 0) setSelectedMrId(mrs[0].id)
-    else setSelectedMrId(managerId)
-  }, [managerId, mrIdParam, mrs, selectedMrId])
+    setSelectedMrId(prev => {
+      if (prev && (prev === managerId || mrs.some(m => m.id === prev))) return prev
+      return managerId
+    })
+  }, [managerId, mrIdParam, mrs])
 
   const selectMr = (id: string) => {
     setSelectedMrId(id)
@@ -51,7 +52,7 @@ export default function ManagerHistory() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="History" />
 
-      <div className="px-4 md:px-6 py-4 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
+      <div className="mx-auto w-full px-4 py-4 space-y-4 max-w-lg md:px-8 md:max-w-3xl md:space-y-5 lg:px-10 lg:max-w-5xl">
         <p className="text-sm text-muted-foreground -mt-1">
           Select a team member to view their DCR calendar, or choose yourself for your own field reports.
         </p>
@@ -101,11 +102,11 @@ export default function ManagerHistory() {
                   <p className="text-xs font-bold leading-snug line-clamp-2">{mr.full_name}</p>
                   <p
                     className={cn(
-                      'text-[10px] mt-0.5 tabular-nums',
+                      'text-[10px] mt-0.5',
                       selectedMrId === mr.id ? 'text-primary-foreground/75' : 'text-muted-foreground',
                     )}
                   >
-                    {mr.employee_code}
+                    Team MR
                   </p>
                 </button>
               ))}

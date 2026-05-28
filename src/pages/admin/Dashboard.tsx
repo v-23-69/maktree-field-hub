@@ -2,8 +2,10 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import AdminLayout from '@/components/admin/AdminLayout';
-import StatCard from '@/components/shared/StatCard';
+import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
+import DashboardRadialMetrics from '@/components/dashboard/dashboard-radial-metrics';
 import { Users, Stethoscope, MapPin, UserPlus, Plus, FileText, Clock, Lock, Play } from 'lucide-react';
+import { useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { useAdminDashboardStats } from '@/hooks/useDashboardStats';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
@@ -14,6 +16,8 @@ import { toast } from 'sonner';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
 import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
+import { DashboardSection, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
+import { cn } from '@/lib/utils';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -76,55 +80,94 @@ export default function AdminDashboard() {
     },
   })
 
+  const adminStatItems = useMemo(
+    () => [
+      {
+        name: 'Active MRs',
+        value: stats?.totalMrs ?? 0,
+        href: '/admin/users?filter=mr',
+        linkLabel: 'Manage MRs →',
+      },
+      {
+        name: 'Managers',
+        value: stats?.totalManagers ?? 0,
+        href: '/admin/users?filter=manager',
+        linkLabel: 'Manage managers →',
+      },
+      {
+        name: 'Doctors',
+        value: stats?.totalDoctors ?? 0,
+        href: '/admin/doctors',
+        linkLabel: 'Doctor master →',
+      },
+      {
+        name: 'Territories',
+        value: stats?.totalAreas ?? 0,
+        href: '/admin/areas',
+        linkLabel: 'View areas →',
+      },
+    ],
+    [stats],
+  )
+
+  const adminRadialItems = useMemo(() => {
+    const values = [
+      { name: 'MRs', count: stats?.totalMrs ?? 0, key: 'a' },
+      { name: 'Managers', count: stats?.totalManagers ?? 0, key: 'b' },
+      { name: 'Doctors', count: stats?.totalDoctors ?? 0, key: 'c' },
+      { name: 'Territories', count: stats?.totalAreas ?? 0, key: 'd' },
+    ]
+    const max = Math.max(...values.map(v => v.count), 1)
+    return values.map(v => ({
+      name: v.name,
+      percent: Math.round((v.count / max) * 100),
+      detail: `${v.count.toLocaleString()} registered`,
+      colorKey: v.key,
+    }))
+  }, [stats])
+
   return (
     <AdminLayout>
       <div className="space-y-5">
         <DashboardBirthdaySlot />
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navigate('/admin/users?filter=mr')} className="text-left active:scale-[0.97] transition-transform">
-            <StatCard icon={Users} value={stats?.totalMrs ?? 0} label="Total MRs" />
-          </button>
-          <button onClick={() => navigate('/admin/users?filter=manager')} className="text-left active:scale-[0.97] transition-transform">
-            <StatCard icon={Users} value={stats?.totalManagers ?? 0} label="Total Managers" />
-          </button>
-          <button onClick={() => navigate('/admin/doctors')} className="text-left active:scale-[0.97] transition-transform">
-            <StatCard icon={Stethoscope} value={stats?.totalDoctors ?? 0} label="Total Doctors" />
-          </button>
-          <button onClick={() => navigate('/admin/areas')} className="text-left active:scale-[0.97] transition-transform">
-            <StatCard icon={MapPin} value={stats?.totalAreas ?? 0} label="Total Territories" />
-          </button>
-        </div>
+        <DashboardSection title="Portal overview">
+          <DashboardStatLinkCards items={adminStatItems} columns={2} />
+          <DashboardRadialMetrics
+            title="Directory scale"
+            description="Relative size of each master list (largest = 100%)"
+            items={adminRadialItems}
+          />
+        </DashboardSection>
 
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Actions</p>
-          <div className="grid grid-cols-2 gap-3">
+        <DashboardSection title="Quick actions">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
             {[
-              { label: 'Add User', icon: UserPlus, to: '/admin/users' },
-              { label: 'Add Doctor', icon: Plus, to: '/admin/doctors' },
-              { label: 'Add Territory', icon: MapPin, to: '/admin/areas' },
-              { label: `Pending Complaints (${pendingComplaints})`, icon: FileText, to: '/admin/users?tab=complaints' },
+              { label: 'Add user', icon: UserPlus, to: '/admin/users' },
+              { label: 'Add doctor', icon: Plus, to: '/admin/doctors' },
+              { label: 'Territories', icon: MapPin, to: '/admin/areas' },
+              { label: `Complaints (${pendingComplaints})`, icon: FileText, to: '/admin/users?tab=complaints' },
             ].map(action => (
-              <Button
+              <button
                 key={action.label}
-                variant="outline"
+                type="button"
                 onClick={() => navigate(action.to)}
-                className="h-auto flex-col gap-2 rounded-xl py-4 touch-target active:scale-[0.97] transition-transform"
+                className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-3 active:scale-95 transition-all touch-target')}
               >
-                <action.icon className="h-5 w-5 text-primary" />
-                <span className="text-xs font-medium">{action.label}</span>
-              </Button>
+                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <action.icon className="h-4 w-4 text-primary" />
+                </div>
+                <span className="text-[10px] font-semibold text-foreground text-center leading-tight">{action.label}</span>
+              </button>
             ))}
           </div>
-        </div>
+        </DashboardSection>
 
-        {/* Paused Accounts */}
         {pausedUsers.length > 0 && (
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center gap-1.5">
-              <Lock className="h-3.5 w-3.5 text-destructive" />
-              Paused Accounts ({pausedUsers.length})
-            </p>
-            <div className="rounded-xl bg-card shadow-sm divide-y divide-border overflow-hidden">
+          <DashboardSection
+            title={`Paused accounts (${pausedUsers.length})`}
+            description="Accounts blocked until tour program is completed"
+          >
+            <div className={cn(dashboardPanelClass(), 'divide-y divide-border overflow-hidden p-0')}>
               {pausedUsers.map(pu => (
                 <div key={pu.id} className="flex items-center gap-3 p-3">
                   <div className="flex-1 min-w-0">
@@ -147,13 +190,11 @@ export default function AdminDashboard() {
                 </div>
               ))}
             </div>
-          </div>
+          </DashboardSection>
         )}
 
-        {/* Activity Feed */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Recent Activity</p>
-          <div className="rounded-xl bg-card shadow-sm divide-y divide-border overflow-hidden">
+        <DashboardSection title="Recent activity">
+          <div className={cn(dashboardPanelClass(), 'divide-y divide-border overflow-hidden p-0')}>
             {recentReports.length === 0 && (
               <div className="p-4 text-sm text-muted-foreground">No recent activity.</div>
             )}
@@ -167,7 +208,7 @@ export default function AdminDashboard() {
               </div>
             ))}
           </div>
-        </div>
+        </DashboardSection>
       </div>
     </AdminLayout>
   );

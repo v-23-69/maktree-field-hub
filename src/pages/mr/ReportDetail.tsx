@@ -411,7 +411,7 @@ export default function ReportDetail() {
         open={showDeleteConfirm}
         onOpenChange={setShowDeleteConfirm}
         title="Delete this DCR?"
-        description="This permanently removes the report and all doctor visits for this date. This cannot be undone."
+        description="This permanently removes the report and all doctor visits for this date. After deletion, a new DCR can be submitted for the same day."
         onConfirm={() => void handleDeleteReport()}
         confirmLabel={deleteReport.isPending ? 'Deleting…' : 'Delete'}
         destructive

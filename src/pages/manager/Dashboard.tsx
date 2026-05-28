@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FilePlus, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -17,11 +17,9 @@ import { useAllAreas } from '@/hooks/useAreas';
 import { toast } from 'sonner';
 import { useManagerDashboardStats, type ManagerStatsFilter } from '@/hooks/useDashboardStats';
 import { useDashboardRefresh } from '@/hooks/useDashboardRefresh';
-import ManagerDashboardTodayPanel from '@/components/manager/ManagerDashboardTodayPanel';
-import ManagerDcrImportStrip from '@/components/manager/ManagerDcrImportStrip';
-import ManagerVacantAreasStrip from '@/components/manager/ManagerVacantAreasStrip';
-import ManagerTeamStatsCard from '@/components/manager/ManagerTeamStatsCard';
-import TodayPlanFromTp from '@/components/shared/TodayPlanFromTp';
+import ManagerTeamDcrToday from '@/components/manager/ManagerTeamDcrToday';
+import { ManagerQuickAction, managerQuickActionGridClass } from '@/components/manager/ManagerQuickAction';
+import DashboardTodayCard from '@/components/shared/DashboardTodayCard';
 import { todayInputDate, formatDisplayDate, isSundayYmd } from '@/lib/dateUtils';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { useTpStatus, useTodayTpPlan } from '@/hooks/useTourProgram';
@@ -31,8 +29,13 @@ import { useAllowedReportDates } from '@/hooks/useReport';
 import MarkSundayDcrButton from '@/components/shared/MarkSundayDcrButton';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { useExpenseReport } from '@/hooks/useExpense';
+import { usePendingDcrImports } from '@/hooks/useDcrImport';
+import type { AllowedReportDate } from '@/types/database.types';
 import DashboardBirthdaySlot from '@/components/shared/employee-birthday/DashboardBirthdaySlot';
-import ProfileCompletionPrompt from '@/components/shared/ProfileCompletionPrompt';
+import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
+import { ActionToolbar } from '@/components/ui/action-toolbar';
+import { MANAGER_FILTER_OPTIONS } from '@/lib/dashboardDateRange';
+import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
 
@@ -40,11 +43,11 @@ export default function ManagerDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
   usePreventAccidentalBack(true);
-  const [activeFilter, setActiveFilter] = useState<ManagerStatsFilter>('Today');
+  const [activeFilter, setActiveFilter] = useState<ManagerStatsFilter>('This Week');
   const [action, setAction] = useState<QuickAction>(null);
 
   const [deferReady, setDeferReady] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setDeferReady(true), 100); return () => clearTimeout(t); }, []);
+  useEffect(() => { const t = setTimeout(() => setDeferReady(true), 250); return () => clearTimeout(t); }, []);
 
   // Critical queries
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');
@@ -92,6 +95,15 @@ export default function ManagerDashboard() {
   const mgrTodayDate = todayInputDate();
   const mgrTodayIsSunday = isSundayYmd(mgrTodayDate);
   const mgrTodayDcrDone = mgrAllowedDates.find(d => d.report_date === mgrTodayDate)?.already_submitted === true;
+  const mgrPendingAllDcrs = useMemo(
+    () =>
+      mgrAllowedDates
+        .filter(d => !d.already_submitted)
+        .sort((a, b) => a.report_date.localeCompare(b.report_date)),
+    [mgrAllowedDates],
+  );
+  const { data: pendingImports = [] } = usePendingDcrImports(deferReady ? (user?.id ?? '') : '');
+  const todayImport = pendingImports.find(p => p.report_date === mgrTodayDate);
   const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
   const [strikeReason, setStrikeReason] = useState('');
@@ -148,8 +160,49 @@ export default function ManagerDashboard() {
 
   const today = todayInputDate()
 
+  const managerStatItems = useMemo(() => {
+    const reports = teamActivity?.reportCount ?? 0
+    const doctors = teamActivity?.doctorCount ?? 0
+    return [
+      {
+        name:
+          activeFilter === 'This Week'
+            ? 'DCRs this week'
+            : activeFilter === 'This Year'
+              ? 'DCRs this year'
+              : 'DCRs this month',
+        value: reports,
+        href: '/manager/reports',
+        linkLabel: 'View reports →',
+      },
+      {
+        name: 'Doctors met',
+        value: doctors,
+        href: '/manager/analytics',
+        linkLabel: 'Analytics →',
+      },
+      {
+        name: 'Team MRs',
+        value: mrs.length,
+        href: '/manager/team',
+        linkLabel: 'Manage team →',
+      },
+    ]
+  }, [teamActivity?.reportCount, teamActivity?.doctorCount, mrs.length, activeFilter])
+
   const { data: mgrTodayExpenseReport } = useExpenseReport(deferReady ? (user?.id ?? '') : '', today);
   const mgrTodayExpenseDone = mgrTodayExpenseReport?.status === 'submitted';
+
+  const mgrOpenDcr = () => {
+    if (mgrDcrBlocked) return;
+    if (todayImport) navigate(`/manager/dcr-import/${todayImport.import_id}`);
+    else navigate('/manager/report/new');
+  };
+
+  const mgrOpenFieldReport = (d: AllowedReportDate) => {
+    const reportKind = d.day_type === 'leave' ? ('leave' as const) : ('field' as const);
+    navigate('/manager/report/new', { state: { date: d.report_date, reportKind } });
+  };
 
   const closeDrawer = () => {
     setAction(null);
@@ -175,7 +228,7 @@ export default function ManagerDashboard() {
               {user?.pause_reason ?? 'Your account has been paused due to non-compliance with Tour Program requirements.'}
             </p>
           </div>
-          <div className="glass-card p-4 text-left space-y-2">
+          <div className={cn(dashboardPanelClass(), 'p-4 text-left space-y-2')}>
             <p className="text-sm font-semibold text-foreground">What to do:</p>
             <ul className="text-sm text-muted-foreground space-y-1.5 list-disc pl-5">
               <li>Contact your Admin to unpause your account</li>
@@ -192,11 +245,11 @@ export default function ManagerDashboard() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Manager Dashboard" />
 
-      <div className="px-4 md:px-6 py-5 space-y-5 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
-        <DashboardBirthdaySlot />
+      <div className={cn(dashboardPageClass(), 'max-md:flex max-md:flex-col')}>
+        <DashboardBirthdaySlot className="max-md:order-[5]" />
 
         {/* Welcome hero */}
-        <div className="rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-background border border-primary/10 p-5 animate-fade-in-up">
+        <div className={cn(dashboardPanelClass(), 'bg-gradient-to-br from-primary/10 via-primary/5 to-background border-primary/15 p-5 animate-fade-in-up max-md:order-[10]')}>
           <div className="flex items-center gap-3.5">
             {user?.profile_photo_url ? (
               <img src={user.profile_photo_url} alt="" className="h-12 w-12 rounded-full object-cover ring-[3px] ring-primary/15 shadow" />
@@ -219,16 +272,16 @@ export default function ManagerDashboard() {
         </div>
 
         {!mgrHasSubAreaAccess && !!user?.id && (
-          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm">
+          <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm max-md:order-[11]">
             <p className="font-semibold text-foreground">We are setting up the portal for you</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Assign at least one area to yourself (Quick Actions â†’ Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
+              Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
             </p>
           </div>
         )}
 
         {mgrDcrBlocked && (
-          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm">
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/5 px-4 py-3 text-sm max-md:order-[12]">
             <p className="font-semibold text-foreground">Your own DCR is paused until your tour program is approved</p>
             <p className="text-xs text-muted-foreground mt-1">
               Complete and submit your tour program (managers are auto-approved). Open Team from the bottom nav to manage your MRs.
@@ -242,26 +295,26 @@ export default function ManagerDashboard() {
         {/* TP Deadline Alert */}
         {(nextMonthDeadlineApproaching || nextMonthOverdue) && (
           <div className={cn(
-            'rounded-2xl p-4 flex items-start gap-3 border',
+            'rounded-2xl p-4 max-md:p-3 flex items-start gap-3 max-md:gap-2 border max-md:order-[15]',
             nextMonthOverdue ? 'border-destructive/30 bg-destructive/5' : 'border-amber-500/30 bg-amber-500/5'
           )}>
-            <AlertTriangle className={cn('h-5 w-5 shrink-0 mt-0.5', nextMonthOverdue ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')} />
+            <AlertTriangle className={cn('h-5 w-5 max-md:h-4 max-md:w-4 shrink-0 mt-0.5', nextMonthOverdue ? 'text-destructive' : 'text-amber-600 dark:text-amber-400')} />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-foreground">
+              <p className="text-sm max-md:text-xs font-semibold text-foreground">
                 {nextMonthOverdue ? 'Tour Program Overdue!' : `TP Deadline in ${tpStatus!.days_to_deadline} day(s)`}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs max-md:text-[10px] text-muted-foreground mt-0.5 max-md:leading-snug">
                 Create next month's Tour Program to avoid account pause.
               </p>
             </div>
-            <Button size="sm" variant={nextMonthOverdue ? 'destructive' : 'outline'} className="shrink-0 text-xs rounded-xl" onClick={() => navigate('/manager/tour-program')}>
+            <Button size="sm" variant={nextMonthOverdue ? 'destructive' : 'outline'} className="shrink-0 text-xs max-md:text-[10px] max-md:h-7 max-md:px-2 rounded-xl" onClick={() => navigate('/manager/tour-program')}>
               Create TP
             </Button>
           </div>
         )}
 
         {showMgrSundayDcr && (
-          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3">
+          <div className="rounded-2xl border border-sky-500/35 bg-sky-500/10 p-4 space-y-3 max-md:order-[55]">
             <div className="flex items-start gap-2">
               <Calendar className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
               <div>
@@ -273,105 +326,139 @@ export default function ManagerDashboard() {
           </div>
         )}
 
-        {todayPlan?.sub_area_id && (
-          <TodayPlanFromTp
-            subAreaName={todayPlan.sub_area_name ?? ''}
-            areaName={todayPlan.area_name ?? ''}
-            dcrDone={mgrTodayDcrDone}
-            dcrBlocked={mgrDcrBlocked}
-            todayIsSunday={mgrTodayIsSunday}
-            onStartDcr={() => navigate('/manager/report/new')}
-          />
-        )}
-
-
-        {deferReady && user?.id && (
-          <ManagerDcrImportStrip managerId={user.id} />
-        )}
-
-        {deferReady && user?.id && (
-          <ManagerDashboardTodayPanel
-            managerId={user.id}
-            dcrDone={mgrTodayDcrDone}
-            dcrBlocked={mgrDcrBlocked}
-            expenseDone={mgrTodayExpenseDone}
-            expenseDraft={!!mgrTodayExpenseReport?.id && !mgrTodayExpenseDone}
-            todayIsSunday={mgrTodayIsSunday}
-          />
+        {deferReady && mgrHasSubAreaAccess && mgrTpApproved && user?.id && (
+          <div className="space-y-2.5 max-md:order-[20]">
+            <DashboardTodayCard
+              subAreaName={todayPlan?.sub_area_name ?? ''}
+              areaName={todayPlan?.area_name ?? ''}
+              dcrDone={mgrTodayDcrDone}
+              dcrBlocked={mgrDcrBlocked}
+              expenseDone={mgrTodayExpenseDone}
+              expenseDraft={!!mgrTodayExpenseReport?.id && !mgrTodayExpenseDone}
+              todayIsSunday={mgrTodayIsSunday}
+              pendingDcrs={mgrPendingAllDcrs}
+              dcrImports={pendingImports}
+              expenseHref="/manager/expense"
+              reportHref="/manager/report/new"
+              onStartDcr={() => navigate('/manager/report/new')}
+              onOpenDcr={mgrOpenDcr}
+              onOpenPendingDcr={mgrOpenFieldReport}
+              onOpenImport={id => navigate(`/manager/dcr-import/${id}`)}
+            />
+            <ManagerTeamDcrToday managerId={user.id} />
+          </div>
         )}
 
         {deferReady && teamMemberIds.length > 0 && (
-          <ManagerTeamStatsCard
-            activeFilter={activeFilter}
-            onFilterChange={setActiveFilter}
-            activity={teamActivity}
-            loading={statsLoading}
-            mrCount={mrs.length}
-          />
+          <DashboardSection
+            title="Overview"
+            description="Team performance for the selected period"
+            className="max-md:order-[30]"
+          >
+            <ActionToolbar
+              className="w-full"
+              activeId={activeFilter}
+              onActiveChange={id => setActiveFilter(id as ManagerStatsFilter)}
+              buttons={MANAGER_FILTER_OPTIONS.map(opt => ({
+                id: opt.id,
+                label: opt.label,
+              }))}
+            />
+            {!statsLoading && (
+              <DashboardStatLinkCards items={managerStatItems} columns={3} />
+            )}
+          </DashboardSection>
         )}
 
-        {deferReady && user?.id && (
-          <ManagerVacantAreasStrip managerId={user.id} />
-        )}
-
-        {/* Quick Actions â€” frequently used */}
-        <div className="space-y-3">
-          <p className="section-title">Quick Actions</p>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2.5">
-            <button
-              type="button"
+        <DashboardSection title="Quick actions" className="max-md:order-[35]">
+          <div className={managerQuickActionGridClass}>
+            <ManagerQuickAction
+              label="Add MR"
+              iconClassName="bg-sky-500/10"
               onClick={() => navigate('/manager/team', { state: { openManage: 'create-mr' } })}
-              className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all"
-            >
-              <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center"><Users className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Add MR</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/tour-program')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-blue-500/10 flex items-center justify-center"><CalendarDays className="h-4 w-4 text-blue-600 dark:text-blue-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Tour Plan</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/territories')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center"><MapPinned className="h-4 w-4 text-indigo-600 dark:text-indigo-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Territories</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/territories')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center"><Users className="h-4 w-4 text-violet-600 dark:text-violet-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign MR</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/expense')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center"><Receipt className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Expense</span>
-            </button>
-            <button type="button" onClick={() => setAction('strike')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all border border-destructive/15">
-              <div className="h-9 w-9 rounded-xl bg-destructive/10 flex items-center justify-center"><Zap className="h-4 w-4 text-destructive" /></div>
-              <span className="text-[10px] font-semibold text-destructive text-center leading-tight">Strike</span>
-            </button>
-            <button type="button" onClick={() => setAction('holiday')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Holiday</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/holidays')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-amber-500/10 flex items-center justify-center"><Calendar className="h-4 w-4 text-amber-600 dark:text-amber-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Manage Holidays</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/targets')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-violet-500/10 flex items-center justify-center"><Target className="h-4 w-4 text-violet-600 dark:text-violet-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Targets</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/leaves')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-sky-500/10 flex items-center justify-center"><ClipboardList className="h-4 w-4 text-sky-600 dark:text-sky-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Leaves</span>
-            </button>
-            <button type="button" onClick={() => navigate('/manager/my-leave')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-teal-500/10 flex items-center justify-center"><Umbrella className="h-4 w-4 text-teal-600 dark:text-teal-400" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">My leave</span>
-            </button>
-            <button type="button" onClick={() => setAction('assign-self')} className="flex flex-col items-center gap-1.5 glass-card p-3 active:scale-95 transition-all">
-              <div className="h-9 w-9 rounded-xl bg-primary/8 flex items-center justify-center"><UserPlus className="h-4 w-4 text-primary" /></div>
-              <span className="text-[10px] font-semibold text-foreground text-center leading-tight">Assign Self</span>
-            </button>
+              icon={<Users className="h-4 w-4 md:h-5 md:w-5 text-sky-600 dark:text-sky-400" />}
+            />
+            <ManagerQuickAction
+              label="Tour Plan"
+              iconClassName="bg-blue-500/10"
+              onClick={() => navigate('/manager/tour-program')}
+              icon={<CalendarDays className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-blue-400" />}
+            />
+            <ManagerQuickAction
+              label="Vacant areas"
+              iconClassName="bg-indigo-500/10"
+              onClick={() => navigate('/manager/vacant-areas')}
+              icon={<MapPinned className="h-4 w-4 md:h-5 md:w-5 text-indigo-600 dark:text-indigo-400" />}
+            />
+            <ManagerQuickAction
+              label="Assign areas"
+              iconClassName="bg-slate-500/10"
+              onClick={() => navigate('/manager/territories')}
+              icon={<MapPinned className="h-4 w-4 md:h-5 md:w-5 text-slate-600 dark:text-slate-400" />}
+            />
+            <ManagerQuickAction
+              label="Assign MR"
+              iconClassName="bg-violet-500/10"
+              onClick={() => navigate('/manager/territories')}
+              icon={<Users className="h-4 w-4 md:h-5 md:w-5 text-violet-600 dark:text-violet-400" />}
+            />
+            <ManagerQuickAction
+              label="Expense"
+              iconClassName="bg-emerald-500/10"
+              onClick={() => navigate('/manager/expense')}
+              icon={<Receipt className="h-4 w-4 md:h-5 md:w-5 text-emerald-600 dark:text-emerald-400" />}
+            />
+            <ManagerQuickAction
+              label="E detailing"
+              iconClassName="bg-cyan-500/10"
+              comingSoon
+              icon={<Tablet className="h-4 w-4 md:h-5 md:w-5 text-cyan-600 dark:text-cyan-400" />}
+            />
+            <ManagerQuickAction
+              label="Strike"
+              iconClassName="bg-destructive/10"
+              variant="destructive"
+              onClick={() => setAction('strike')}
+              icon={<Zap className="h-4 w-4 md:h-5 md:w-5 text-destructive" />}
+            />
+            <ManagerQuickAction
+              label="Holiday"
+              iconClassName="bg-amber-500/10"
+              onClick={() => setAction('holiday')}
+              icon={<CalendarOff className="h-4 w-4 md:h-5 md:w-5 text-amber-600 dark:text-amber-400" />}
+            />
+            <ManagerQuickAction
+              label="Manage Holidays"
+              iconClassName="bg-amber-500/10"
+              onClick={() => navigate('/manager/holidays')}
+              icon={<Calendar className="h-4 w-4 md:h-5 md:w-5 text-amber-600 dark:text-amber-400" />}
+            />
+            <ManagerQuickAction
+              label="Targets"
+              iconClassName="bg-violet-500/10"
+              comingSoon
+              icon={<Target className="h-4 w-4 md:h-5 md:w-5 text-violet-600 dark:text-violet-400" />}
+            />
+            <ManagerQuickAction
+              label="Leaves"
+              iconClassName="bg-sky-500/10"
+              onClick={() => navigate('/manager/leaves')}
+              icon={<ClipboardList className="h-4 w-4 md:h-5 md:w-5 text-sky-600 dark:text-sky-400" />}
+            />
+            <ManagerQuickAction
+              label="My leave"
+              iconClassName="bg-teal-500/10"
+              onClick={() => navigate('/manager/my-leave')}
+              icon={<Umbrella className="h-4 w-4 md:h-5 md:w-5 text-teal-600 dark:text-teal-400" />}
+            />
+            <ManagerQuickAction
+              label="Assign Self"
+              iconClassName="bg-primary/10"
+              onClick={() => setAction('assign-self')}
+              icon={<UserPlus className="h-4 w-4 md:h-5 md:w-5 text-primary" />}
+            />
           </div>
-        </div>
+        </DashboardSection>
 
       </div>
 
@@ -425,7 +512,7 @@ export default function ManagerDashboard() {
                             checked={selfSelectedSubAreas.has(sa.id)}
                             onChange={() => toggleSelfSubArea(sa.id)}
                           />
-                          <span className="flex-1">{sa.areaName} â€” {sa.name}</span>
+                          <span className="flex-1">{sa.areaName} — {sa.name}</span>
                           {selfServerSet.has(sa.id) && (
                             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0">
                               <Check className="h-3 w-3" />
@@ -455,7 +542,7 @@ export default function ManagerDashboard() {
                       .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save assignments'))
                   }}
                 >
-                  {saveMrSubAreaAccess.isPending ? 'Savingâ€¦' : 'Save assignments'}
+                  {saveMrSubAreaAccess.isPending ? 'Saving…' : 'Save assignments'}
                 </Button>
               </>
             )}
@@ -561,8 +648,6 @@ export default function ManagerDashboard() {
         destructive
         confirmDisabled={markStrike.isPending}
       />
-
-      <ProfileCompletionPrompt />
 
       <BottomNav role="manager" />
     </div>

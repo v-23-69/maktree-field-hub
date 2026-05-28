@@ -74,9 +74,9 @@ export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter
       <p className="text-sm font-semibold text-foreground">Select the areas you worked in today</p>
 
       {grouped.map(({ area, sub_areas }) => (
-        <div key={area.id} className="animate-fade-in min-w-0">
-          <p className="section-title mb-2.5">{area.name}</p>
-          <div className="flex flex-wrap gap-2 max-w-full">
+        <div key={area.id} className="animate-fade-in min-w-0 space-y-2">
+          <p className="text-sm font-bold text-foreground">{area.name}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {sub_areas.map(sa => {
               const selected = data.selectedSubAreaIds.includes(sa.id);
               return (
@@ -85,14 +85,24 @@ export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter
                   type="button"
                   onClick={() => toggleSubArea(sa.id)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold border-2 transition-all duration-150 active:scale-95',
+                    'flex items-start gap-2 rounded-xl border-2 p-3 text-left transition-all active:scale-[0.98]',
                     selected
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm shadow-primary/20'
-                      : 'bg-card text-foreground border-border/60 hover:border-primary/40'
+                      ? 'border-primary bg-primary/8 shadow-sm'
+                      : 'border-border/70 bg-card hover:border-primary/35',
                   )}
                 >
-                  {selected && <Check className="h-3 w-3" />}
-                  {sa.name}
+                  <div
+                    className={cn(
+                      'mt-0.5 h-5 w-5 rounded-md border flex items-center justify-center shrink-0',
+                      selected ? 'bg-primary border-primary text-primary-foreground' : 'border-border',
+                    )}
+                  >
+                    {selected && <Check className="h-3 w-3" />}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground leading-snug">{sa.name}</p>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">{area.name}</p>
+                  </div>
                 </button>
               );
             })}

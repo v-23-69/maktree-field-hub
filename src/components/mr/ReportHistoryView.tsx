@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 import DcrPdfDownloadCard from '@/components/mr/DcrPdfDownloadCard'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { useMrReportsWithVisitCounts, useReportVisitDaySummary } from '@/hooks/useReport'
+import ConfirmDialog from '@/components/shared/ConfirmDialog'
+import { useMrReportsWithVisitCounts, useDeleteReport, useReportVisitDaySummary } from '@/hooks/useReport'
 import { historyReportHref, type ReportHistoryLinkMode } from '@/lib/reportHistoryLinks'
-import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Stethoscope, Pill, Building2 } from 'lucide-react'
+import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate, isSundayYmd } from '@/lib/dateUtils'
 import { Button } from '@/components/ui/button'
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer'
+import DcrDaySummaryScreen from '@/components/mr/DcrDaySummaryScreen'
+import { toast } from 'sonner'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -42,6 +44,9 @@ export default function ReportHistoryView({
 }: Props) {
   const navigate = useNavigate()
   const { data: reports = [], isLoading, isError } = useMrReportsWithVisitCounts(subjectMrId)
+  const deleteReport = useDeleteReport()
+  const canManagerDelete = linkMode === 'manager-team' || linkMode === 'manager-self'
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date()
     return { year: now.getFullYear(), month: now.getMonth() }
@@ -97,104 +102,62 @@ export default function ReportHistoryView({
     navigate(historyReportHref(linkMode, report, subjectMrId))
   }
 
+  const openDaySummary = (report: { id: string; report_date: string }) => {
+    setSummaryReportId(report.id)
+    setSummaryDateLabel(formatDisplayDate(report.report_date))
+  }
+
+  const requestDelete = (reportId: string) => {
+    if (summaryReportId === reportId) closeSummary()
+    setDeleteTargetId(reportId)
+  }
+
+  const handleDeleteReport = async () => {
+    if (!deleteTargetId) return
+    const reportId = deleteTargetId
+    try {
+      await deleteReport.mutateAsync(reportId)
+      toast.success('DCR deleted — it can be filled again for this date')
+      if (summaryReportId === reportId) closeSummary()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not delete DCR')
+      throw e
+    }
+  }
+
   return (
     <>
-      <Drawer open={!!summaryReportId} onOpenChange={open => { if (!open) closeSummary() }}>
-        <DrawerContent className="max-h-[85dvh]">
-          <DrawerHeader className="border-b border-border">
-            <DrawerTitle className="text-base">DCR day summary</DrawerTitle>
-            <p className="text-xs text-muted-foreground">{summaryDateLabel}</p>
-          </DrawerHeader>
-          <div className="overflow-y-auto px-4 pb-6 pt-3 space-y-3">
-            {summaryLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-            {!summaryLoading && daySummary && summaryReportId && (
-              <>
-                <div className="rounded-xl border border-border/60 bg-gradient-to-br from-primary/5 to-background p-4 space-y-1">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Visits</p>
-                  <p className="text-2xl font-bold text-foreground tabular-nums">{daySummary.visit_count}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Doctor call{daySummary.visit_count === 1 ? '' : 's'} on this submitted report
-                  </p>
-                </div>
-                {daySummary.visits.length > 0 ? (
-                  <div className="space-y-2">
-                    {daySummary.visits.map(v => {
-                      const d = v.doctor
-                      const spec = d?.speciality?.trim() || '—'
-                      const territory = d?.sub_area?.area?.name?.trim() || '—'
-                      const area = d?.sub_area?.name?.trim() || '—'
-                      const promos = (v.promoted_products ?? [])
-                        .map(p => p.product?.name)
-                        .filter(Boolean) as string[]
-                      const monthly = v.monthly_support_entries ?? []
-                      const competitors = v.competitor_entries ?? []
-                      return (
-                        <div key={v.id} className="rounded-xl border border-border/70 bg-card shadow-sm p-3.5 space-y-2">
-                          <div className="flex items-start gap-2">
-                            <div className="h-9 w-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                              <Stethoscope className="h-4 w-4 text-primary" />
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-foreground leading-tight">{d?.full_name ?? 'Doctor'}</p>
-                              <p className="text-[11px] text-muted-foreground mt-0.5">{spec}</p>
-                              <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-1">
-                                <Building2 className="h-3 w-3 shrink-0" />
-                                Territory: {territory} · Area: {area}
-                              </p>
-                            </div>
-                          </div>
-                          {promos.length > 0 && (
-                            <div className="rounded-lg bg-muted/40 px-2.5 py-2 space-y-1">
-                              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
-                                <Pill className="h-3 w-3" /> Promotions
-                              </p>
-                              <p className="text-xs text-foreground">{promos.join(', ')}</p>
-                            </div>
-                          )}
-                          {monthly.length > 0 && (
-                            <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/15 px-2.5 py-2 space-y-1">
-                              <p className="text-[10px] font-semibold text-emerald-800 dark:text-emerald-300 uppercase tracking-wide">
-                                Monthly support
-                              </p>
-                              <ul className="text-xs text-foreground space-y-0.5">
-                                {monthly.map(m => (
-                                  <li key={m.id} className="flex justify-between gap-2">
-                                    <span className="truncate min-w-0">{m.product?.name ?? 'Product'}</span>
-                                    <span className="shrink-0 tabular-nums font-medium">Qty {m.quantity}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                          {competitors.length > 0 && (
-                            <div className="text-[11px] text-muted-foreground">
-                              <span className="font-semibold text-foreground">Competitors: </span>
-                              {competitors.map(c => `${c.brand_name} (${c.quantity})`).join(', ')}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No visit rows on this report.</p>
-                )}
-                <Button
-                  type="button"
-                  className="w-full touch-target rounded-xl"
-                  onClick={() => {
-                    const rep = reports.find(r => r.id === summaryReportId)
-                    if (rep) openReport(rep)
-                    closeSummary()
-                  }}
-                >
-                  Open full report
-                </Button>
-              </>
-            )}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      {summaryReportId && (
+        <DcrDaySummaryScreen
+          dateLabel={summaryDateLabel}
+          loading={summaryLoading}
+          summary={daySummary}
+          onBack={closeSummary}
+          onOpenFullReport={() => {
+            const rep = reports.find(r => r.id === summaryReportId)
+            if (rep) openReport(rep)
+            closeSummary()
+          }}
+          onDelete={
+            canManagerDelete && summaryReportId
+              ? () => requestDelete(summaryReportId)
+              : undefined
+          }
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!deleteTargetId}
+        onOpenChange={open => {
+          if (!open) setDeleteTargetId(null)
+        }}
+        title="Delete this DCR?"
+        description="Permanently removes this report and all visits for the date. The MR (or you, for your own DCR) can submit a new report for that day."
+        onConfirm={handleDeleteReport}
+        confirmLabel={deleteReport.isPending ? 'Deleting…' : 'Delete DCR'}
+        destructive
+        confirmDisabled={deleteReport.isPending || !deleteTargetId}
+      />
 
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
@@ -328,36 +291,56 @@ export default function ReportHistoryView({
             {!isLoading &&
               !isError &&
               reports.map((report, i) => (
-                <button
+                <div
                   key={report.id}
-                  type="button"
-                  onClick={() => openReport(report)}
-                  className="w-full rounded-xl bg-card p-4 shadow-sm text-left active:scale-[0.98] transition-transform animate-fade-in-up flex items-center gap-3 border border-border/60"
+                  className="w-full rounded-xl bg-card p-4 shadow-sm animate-fade-in-up flex items-center gap-3 border border-border/60"
                   style={{ animationDelay: `${i * 80}ms` }}
                 >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-foreground">{formatDisplayDate(report.report_date)}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {report.visit_count} doctor visit{report.visit_count === 1 ? '' : 's'}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      'flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 shrink-0',
-                      report.status === 'submitted'
-                        ? 'bg-emerald-600/15 text-emerald-800'
-                        : 'bg-amber-500/15 text-amber-900',
-                    )}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      report.status === 'submitted' ? openDaySummary(report) : openReport(report)
+                    }
+                    className="flex-1 min-w-0 text-left active:scale-[0.99] transition-transform flex items-center gap-3"
                   >
-                    {report.status === 'submitted' ? (
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                    ) : (
-                      <Clock className="h-3.5 w-3.5" />
-                    )}
-                    {report.status === 'submitted' ? 'Submitted' : 'Draft'}
-                  </span>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                </button>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground">{formatDisplayDate(report.report_date)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {report.visit_count} doctor visit{report.visit_count === 1 ? '' : 's'}
+                        {report.status === 'submitted' ? ' · Tap for day summary' : ''}
+                      </p>
+                    </div>
+                    <span
+                      className={cn(
+                        'flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 shrink-0',
+                        report.status === 'submitted'
+                          ? 'bg-emerald-600/15 text-emerald-800'
+                          : 'bg-amber-500/15 text-amber-900',
+                      )}
+                    >
+                      {report.status === 'submitted' ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <Clock className="h-3.5 w-3.5" />
+                      )}
+                      {report.status === 'submitted' ? 'Submitted' : 'Draft'}
+                    </span>
+                    <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
+                  </button>
+                  {canManagerDelete && (
+                    <button
+                      type="button"
+                      aria-label="Delete DCR"
+                      className="shrink-0 p-2 rounded-lg text-destructive hover:bg-destructive/10"
+                      onClick={e => {
+                        e.stopPropagation()
+                        requestDelete(report.id)
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               ))}
           </div>
         )}

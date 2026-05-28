@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
+import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +11,7 @@ import {
   Store,
   Banknote,
   Swords,
+  ArrowLeft,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Doctor, Product } from '@/types/database.types';
@@ -101,6 +102,15 @@ export default function DoctorVisitDrawer({
   const { data: areaChemists = [] } = useChemistsBySubArea(subAreaId);
 
   useEffect(() => {
+    if (!open) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (existingVisit) {
       setProductsPromoted(existingVisit.productsPromoted);
       setChemistName(existingVisit.chemistName);
@@ -140,7 +150,7 @@ export default function DoctorVisitDrawer({
     return merged;
   }, [linkedChemists, areaChemists]);
 
-  if (!doctor || !doctorId) return null;
+  if (!open || !doctor || !doctorId) return null;
 
   const initials = doctor.full_name
     .split(' ')
@@ -218,34 +228,55 @@ export default function DoctorVisitDrawer({
     toast.success('Visit saved');
   };
 
-  return (
-    <Drawer open={open} onOpenChange={v => { if (!v) onClose(); }}>
-      <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-2xl border bg-background p-0 gap-0 [&>div:first-child]:hidden">
-        <DrawerHeader className="shrink-0 border-b border-border/80 px-4 pb-4 pt-3 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 ring-2 ring-primary/10">
-              <span className="text-sm font-bold text-primary">{initials}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <DrawerTitle className="text-base font-bold text-left leading-tight break-words">
-                {doctor.full_name}
-              </DrawerTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">{doctor.speciality}</p>
-            </div>
+  return createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Visit — ${doctor.full_name}`}
+      className="fixed inset-0 z-[200] flex flex-col bg-background"
+      style={{
+        width: '100vw',
+        height: '100dvh',
+        maxHeight: '100dvh',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+      }}
+    >
+      <header className="shrink-0 border-b border-border bg-background px-3 py-3 space-y-3">
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 shrink-0 rounded-xl"
+            onClick={onClose}
+            aria-label="Back to visits"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/20 to-primary/5 ring-2 ring-primary/10">
+            <span className="text-sm font-bold text-primary">{initials}</span>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="text-[10px] font-medium text-muted-foreground bg-muted/60 rounded-full px-2.5 py-1">
-              {productsPromoted.length} product{productsPromoted.length === 1 ? '' : 's'}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-bold text-left leading-tight break-words">
+              {doctor.full_name}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5">{doctor.speciality}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2 pl-12">
+          <span className="text-[10px] font-medium text-muted-foreground bg-muted/60 rounded-full px-2.5 py-1">
+            {productsPromoted.length} product{productsPromoted.length === 1 ? '' : 's'}
+          </span>
+          {chemistName.trim() && (
+            <span className="text-[10px] font-medium text-muted-foreground bg-muted/60 rounded-full px-2.5 py-1 truncate max-w-[10rem]">
+              {chemistName.trim()}
             </span>
-            {chemistName.trim() && (
-              <span className="text-[10px] font-medium text-muted-foreground bg-muted/60 rounded-full px-2.5 py-1 truncate max-w-[10rem]">
-                {chemistName.trim()}
-              </span>
-            )}
-          </div>
-        </DrawerHeader>
+          )}
+        </div>
+      </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-4 max-w-lg md:max-w-2xl mx-auto w-full">
           <VisitSection
             icon={Package}
             title="Products promoted"
@@ -494,24 +525,16 @@ export default function DoctorVisitDrawer({
           </VisitSection>
         </div>
 
-        <div className="shrink-0 border-t border-border/80 bg-background/95 backdrop-blur-sm px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-            className="w-full h-11 rounded-xl font-medium"
-          >
-            Cancel
-          </Button>
-          <Button
-            type="button"
-            onClick={handleSave}
-            className="w-full h-12 touch-target rounded-xl font-bold text-base shadow-md"
-          >
-            Save visit
-          </Button>
-        </div>
-      </DrawerContent>
-    </Drawer>
+      <footer className="shrink-0 border-t border-border bg-background px-4 pt-3 pb-4 max-w-lg md:max-w-2xl mx-auto w-full">
+        <Button
+          type="button"
+          onClick={handleSave}
+          className="w-full h-12 touch-target rounded-xl font-bold text-base shadow-md"
+        >
+          Save visit
+        </Button>
+      </footer>
+    </div>,
+    document.body,
   );
 }

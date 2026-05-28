@@ -39,8 +39,8 @@ export function showBrowserNotification(payload: BrowserNotificationPayload): vo
       const n = new Notification(payload.title, {
         body: payload.body,
         tag,
-        icon: '/icons/icon-192-v2.png',
-        badge: '/icons/icon-192-v2.png',
+        icon: '/android-chrome-192x192.png',
+        badge: '/android-chrome-192x192.png',
         data: { url, id: payload.id },
         requireInteraction: false,
       })
@@ -61,8 +61,8 @@ export function showBrowserNotification(payload: BrowserNotificationPayload): vo
           return reg.showNotification(payload.title, {
             body: payload.body,
             tag,
-            icon: '/icons/icon-192-v2.png',
-            badge: '/icons/icon-192-v2.png',
+            icon: '/android-chrome-192x192.png',
+            badge: '/android-chrome-192x192.png',
             data: { url, id: payload.id },
           })
         }

@@ -7,12 +7,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
+import AnalyticsDonutPie from '@/components/charts/AnalyticsDonutPie'
 import { analyticsTooltipContent, barTooltipCursor } from '@/components/charts/analyticsChartTheme'
 import { formatDisplayDate } from '@/lib/dateUtils'
 
 type CountRow = { name: string; count: number }
 type VisitRow = { name: string; visits: number }
-type AreaRow = { area: string; qty: number }
 type CompetitorIntelRow = { area: string; brand: string; month: string; qty: number }
 type ExpenseCategoryRow = { name: string; amount: number }
 
@@ -54,73 +54,74 @@ export function ManagerAnalyticsOverviewCharts({
         </p>
       </div>
 
-      {productData.length > 0 && (
-        <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Product-wise Promotions
-          </p>
-          <div className="overflow-x-auto -mx-2">
-            <div className="min-w-[340px] h-56">
+      <div className="md:grid md:grid-cols-2 md:gap-5 lg:gap-6 space-y-5 md:space-y-0">
+        {productData.length > 0 && (
+          <div className="rounded-xl bg-card p-4 md:p-5 shadow-sm animate-fade-in">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Product-wise Promotions
+            </p>
+            <div className="h-52 md:h-56">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={productData} layout="vertical" margin={{ left: 0, right: 16 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} />
                   <XAxis type="number" tick={{ fontSize: 11 }} />
-                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={75} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 10 }} width={80} />
                   <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
                   <Bar dataKey="count" fill="hsl(150, 62%, 26%)" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {mrData.length > 0 && (
-        <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            MR-wise Visit Count
-          </p>
-          <div className="h-44">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mrData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                <Bar dataKey="visits" fill="hsl(37, 90%, 55%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+        {mrData.length > 0 && (
+          <div className="rounded-xl bg-card p-4 md:p-5 shadow-sm animate-fade-in">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              MR-wise Visit Count
+            </p>
+            <div className="h-52 md:h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={mrData}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
+                  <Bar dataKey="visits" fill="hsl(37, 90%, 55%)" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {competitorData.length > 0 && (
-        <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            Top Competitor Brands
-          </p>
-          <div className="space-y-2.5">
-            {competitorData.map((c, i) => (
-              <div key={c.brand} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-foreground font-medium">
-                    {i + 1}. {c.brand}
-                  </span>
-                  <span className="text-xs font-semibold text-muted-foreground">{c.count}</span>
+      <div className="md:grid md:grid-cols-2 md:gap-5 lg:gap-6 space-y-5 md:space-y-0">
+        {competitorData.length > 0 && (
+          <div className="rounded-xl bg-card p-4 md:p-5 shadow-sm animate-fade-in">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+              Top Competitor Brands
+            </p>
+            <div className="space-y-2.5">
+              {competitorData.map((c, i) => (
+                <div key={c.brand} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-foreground font-medium">
+                      {i + 1}. {c.brand}
+                    </span>
+                    <span className="text-xs font-semibold text-muted-foreground">{c.count}</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-destructive/60 transition-all"
+                      style={{ width: `${(c.count / maxCompetitor) * 100}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-destructive/60 transition-all"
-                    style={{ width: `${(c.count / maxCompetitor) * 100}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="rounded-xl bg-card p-4 shadow-sm animate-fade-in">
+        <div className="rounded-xl bg-card p-4 md:p-5 shadow-sm animate-fade-in">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Expense Overview ({monthLabel || 'month'})
         </p>
@@ -129,36 +130,21 @@ export function ManagerAnalyticsOverviewCharts({
           {(expenseTotals.allotted - expenseTotals.used).toFixed(0)}
         </p>
         {expenseByCategory.length > 0 && (
-          <div className="h-44 mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={expenseByCategory}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-                <Bar dataKey="amount" fill="hsl(210, 80%, 55%)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <div className="mt-3">
+            <AnalyticsDonutPie
+              data={expenseByCategory.map(row => ({
+                key: row.name,
+                label: row.name,
+                value: row.amount,
+              }))}
+              valueLabel="Amount"
+              maxHeightPx={220}
+            />
           </div>
         )}
+        </div>
       </div>
     </>
-  )
-}
-
-export function ManagerAnalyticsAreaChart({ areaPerformance }: { areaPerformance: AreaRow[] }) {
-  return (
-    <div className="min-w-[340px] h-64 overflow-x-auto">
-      <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={areaPerformance} layout="vertical" margin={{ left: 0, right: 16 }}>
-          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 11 }} />
-          <YAxis dataKey="area" type="category" tick={{ fontSize: 10 }} width={85} />
-          <Tooltip {...analyticsTooltipContent} cursor={barTooltipCursor} />
-          <Bar dataKey="qty" fill="hsl(210, 90%, 45%)" radius={[0, 4, 4, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
   )
 }
 
