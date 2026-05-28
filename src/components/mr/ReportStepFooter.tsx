@@ -31,7 +31,7 @@ export default function ReportStepFooter({
         <Button
           onClick={onNext}
           disabled={nextDisabled}
-          className="flex-1 touch-target rounded-lg min-h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+          className="flex-1 touch-target rounded-lg min-h-11 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold border border-primary/60 shadow-sm"
         >
           {nextLabel}
         </Button>
@@ -41,9 +41,12 @@ export default function ReportStepFooter({
 
   if (docked) {
     return (
-      <div className="shrink-0 border-t border-border bg-background px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-2px_12px_-4px_rgba(0,0,0,0.08)]">
-        {buttons}
-      </div>
+      <>
+        <div className="w-full shrink-0 h-20" aria-hidden />
+        <div className="fixed left-0 right-0 bottom-0 z-50 border-t border-border bg-background/95 backdrop-blur-md px-4 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_24px_-8px_rgba(0,0,0,0.12)]">
+          {buttons}
+        </div>
+      </>
     )
   }
 
