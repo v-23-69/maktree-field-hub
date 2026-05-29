@@ -111,7 +111,15 @@ export function useResolveDoctorAddRequest() {
         p_status: p.status,
         p_manager_note: p.managerNote?.trim() || null,
       })
-      if (error) throw error
+      if (error) {
+        const msg = error.message ?? 'Could not resolve doctor request'
+        if (error.code === '23505' || msg.includes('chemists_sub_area_id_name_key')) {
+          throw new Error(
+            'Could not approve: a chemist with this name already exists in the area. Please try again.',
+          )
+        }
+        throw new Error(msg)
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['doctor-add-requests-mgr'] })
