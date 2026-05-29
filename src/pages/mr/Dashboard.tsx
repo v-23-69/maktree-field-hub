@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDisplayDate, todayInputDate, isSundayYmd, formatIstTimeNow } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3, Store } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import { Button } from '@/components/ui/button';
@@ -36,10 +36,7 @@ import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 import { useMrLeaves } from '@/hooks/useLeaves';
-import { useStockists } from '@/hooks/useStockists';
-import { useUpsertStockistMeet } from '@/hooks/useStockistMeets';
-import { useMyHqAreas } from '@/hooks/useMyHq';
-type DrawerAction = 'strike' | 'holiday' | 'stockist' | null;
+type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
   const { user } = useAuth();
@@ -73,11 +70,6 @@ export default function MRDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
-  const [stockistDate, setStockistDate] = useState(todayInputDate());
-  const [stockistTime, setStockistTime] = useState<string>(formatIstTimeNow());
-  const [stockistId, setStockistId] = useState<string>('');
-  const [stockistHqAreaId, setStockistHqAreaId] = useState<string>('');
-  const [stockistNotes, setStockistNotes] = useState('');
 
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
@@ -197,18 +189,7 @@ export default function MRDashboard() {
     setStrikeReason('');
     setHolidayDate(todayInputDate());
     setHolidayReason('');
-    setStockistDate(todayInputDate());
-    setStockistTime(formatIstTimeNow());
-    setStockistId('');
-    setStockistHqAreaId('');
-    setStockistNotes('');
   };
-
-  const { data: myHqs = [] } = useMyHqAreas(userId);
-  const hasMultipleHqs = myHqs.length > 1;
-  const effectiveHq = hasMultipleHqs ? (stockistHqAreaId || myHqs[0]?.area_id || '') : (myHqs[0]?.area_id || '');
-  const { data: stockists = [] } = useStockists(effectiveHq || undefined);
-  const upsertStockistMeet = useUpsertStockistMeet();
 
   if (isPaused) {
     return (
@@ -448,27 +429,6 @@ export default function MRDashboard() {
               <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Leave</span>
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setAction('stockist')}
-            className={cn(
-              dashboardPanelClass(),
-              'mt-2 w-full flex items-center justify-between gap-3 px-3 py-2.5 active:scale-[0.99] transition-all',
-            )}
-          >
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                <Store className="h-4 w-4 text-primary" />
-              </div>
-              <div className="min-w-0 text-left">
-                <p className="text-sm font-semibold text-foreground truncate">Stockist meet</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
-                  Mark a stockist meeting for a date
-                </p>
-              </div>
-            </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-          </button>
           <div className="flex gap-2">
             <div className={cn(dashboardPanelClass(), 'flex-1 px-3 py-2 flex items-center justify-between')}>
               <span className="text-[11px] text-muted-foreground font-medium">Strikes this year</span>
@@ -574,7 +534,6 @@ export default function MRDashboard() {
             <DrawerTitle className="text-[15px] font-bold tracking-tight">
               {action === 'strike' && 'Mark Strike Day'}
               {action === 'holiday' && 'Mark Holiday'}
-              {action === 'stockist' && 'Stockist meet'}
             </DrawerTitle>
           </DrawerHeader>
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 space-y-4">
@@ -645,115 +604,6 @@ export default function MRDashboard() {
                     ))}
                   </div>
                 )}
-              </>
-            )}
-
-            {action === 'stockist' && (
-              <>
-                {hasMultipleHqs && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      HQ (Territory)
-                    </label>
-                    <select
-                      value={stockistHqAreaId}
-                      onChange={e => {
-                        setStockistHqAreaId(e.target.value)
-                        setStockistId('')
-                      }}
-                      className="w-full rounded-xl border border-border/70 bg-background px-3 py-3 text-sm"
-                    >
-                      {myHqs.map(a => (
-                        <option key={a.area_id} value={a.area_id}>
-                          {a.area_name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Stockist
-                  </label>
-                  <select
-                    value={stockistId}
-                    onChange={e => setStockistId(e.target.value)}
-                    disabled={stockists.length === 0}
-                    className="w-full rounded-xl border border-border/70 bg-background px-3 py-3 text-sm disabled:opacity-60"
-                  >
-                    <option value="">Select stockist</option>
-                    {stockists.map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Date
-                    </label>
-                    <Input
-                      type="date"
-                      value={stockistDate}
-                      onChange={e => setStockistDate(e.target.value)}
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      Time (optional)
-                    </label>
-                    <Input
-                      type="time"
-                      value={stockistTime}
-                      onChange={e => setStockistTime(e.target.value)}
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Notes (optional)
-                  </label>
-                  <Textarea
-                    value={stockistNotes}
-                    onChange={e => setStockistNotes(e.target.value)}
-                    placeholder="Optional notes…"
-                    className="rounded-xl min-h-[90px]"
-                  />
-                </div>
-
-                <Button
-                  className="w-full rounded-2xl h-12 text-sm font-bold"
-                  disabled={!userId || !stockistId || upsertStockistMeet.isPending}
-                  onClick={() => {
-                    if (!userId) return
-                    if (!stockistId) {
-                      toast.error('Select stockist')
-                      return
-                    }
-                    void upsertStockistMeet
-                      .mutateAsync({
-                        userId,
-                        meetDate: stockistDate,
-                        meetTime: stockistTime?.trim() ? stockistTime : null,
-                        stockistId,
-                        notes: stockistNotes?.trim() ? stockistNotes.trim() : null,
-                      })
-                      .then(() => {
-                        toast.success('Stockist meet saved')
-                        closeDrawer()
-                      })
-                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not save'))
-                  }}
-                >
-                  Save
-                </Button>
               </>
             )}
           </div>

@@ -24,10 +24,12 @@ export function useManagerPendingRequestsCount(managerId: string): number {
         supabase
           .from('doctor_deletion_requests')
           .select('id', { count: 'exact', head: true })
+          .eq('manager_id', managerId)
           .eq('status', 'pending'),
         supabase
           .from('doctor_add_requests')
           .select('id', { count: 'exact', head: true })
+          .eq('manager_id', managerId)
           .eq('status', 'pending'),
         supabase.rpc('list_mrs_for_manager'),
       ])

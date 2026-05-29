@@ -29,6 +29,10 @@ export const DASHBOARD_QUERY_PREFIXES_BY_TABLE = {
     'tp-deletion-requests-manager',
   ],
   report_unlock_requests: ['manager-unlock-requests', 'manager-pending-counts'],
+  user_notifications: ['user-notifications', 'manager-pending-counts'],
+  doctor_add_requests: ['doctor-add-requests-mgr', 'doctor-add-requests-mr', 'manager-pending-counts'],
+  doctor_deletion_requests: ['doctor-deletion-requests-mgr', 'doctor-deletion-requests-mr', 'manager-pending-counts'],
+  stockist_meets: ['stockist-meets', 'mr-performance'],
   block_complaints: ['admin-pending-complaints-count'],
   birthday_wishes: ['employees-birthday-today', 'birthday-wishes-today'],
 } as const satisfies Record<string, readonly string[]>
@@ -37,7 +41,6 @@ export const DASHBOARD_QUERY_PREFIXES_BY_TABLE = {
 const SHARED_DASHBOARD_QUERY_PREFIXES = [
   'admin-dashboard-stats',
   'admin-paused-users',
-  'doctor-deletion-requests-mgr',
 ] as const
 
 const ALL_TABLE_NAMES = Object.keys(

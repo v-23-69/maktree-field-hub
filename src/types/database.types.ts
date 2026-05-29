@@ -147,6 +147,8 @@ export interface DailyReport {
     | 'holiday'
     | 'meeting'
     | 'admin_day'
+    | 'stockist_visit'
+    | 'sales_closing'
   leave_dcr_category?: 'casual' | 'sick' | 'without_pay' | null
   leave_dcr_remark?: string | null
   meeting_duration_type?: 'full_day' | 'half_day' | null
@@ -158,6 +160,7 @@ export interface DailyReport {
   admin_day_start_time?: string | null
   admin_day_end_time?: string | null
   admin_day_notes?: string | null
+  stockist_id?: string | null
   is_late_submission?: boolean
   mr?: User
   manager?: User

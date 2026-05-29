@@ -143,7 +143,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return
-        if (event === 'TOKEN_REFRESHED') return
+        if (event === 'TOKEN_REFRESHED') {
+          if (!session) {
+            await supabase.auth.signOut({ scope: 'local' })
+            setUser(null)
+            setAuthReady(true)
+            sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          }
+          return
+        }
         try {
           if (session?.user) {
             const sameUser = lastLoadedAuthUserIdRef.current === session.user.id

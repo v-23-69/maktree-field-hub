@@ -78,13 +78,15 @@ interface Props {
 }
 
 const DCR_TYPE_OPTIONS: { value: ReportKind; label: string; mrOnly?: boolean; managerOnly?: boolean }[] = [
-  { value: 'field', label: 'Normal DCR' },
+  { value: 'field', label: 'Field work' },
+  { value: 'stockist_visit', label: 'Stockist visit' },
   { value: 'meeting', label: 'Meeting DCR' },
   { value: 'sunday', label: 'Sunday DCR' },
   { value: 'strike', label: 'Strike DCR' },
   { value: 'holiday', label: 'Holiday DCR' },
   { value: 'leave', label: 'Leave DCR', mrOnly: true },
   { value: 'admin_day', label: 'Admin day', managerOnly: true },
+  { value: 'sales_closing', label: 'Sales & closing', managerOnly: true },
 ];
 
 export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanProceedChange }: Props) {
@@ -176,11 +178,19 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
             meetingNotes: '',
           }
         : {}),
-      ...(kind === 'admin_day'
+      ...(kind === 'admin_day' || kind === 'sales_closing'
         ? {
             adminDayStartTime: '09:00',
             adminDayEndTime: '18:00',
             adminDayNotes: '',
+          }
+        : {}),
+      ...(kind === 'stockist_visit'
+        ? {
+            stockistId: '',
+            stockistHqAreaId: '',
+            stockistMeetTime: '10:00',
+            stockistNotes: '',
           }
         : {}),
     });
@@ -294,7 +304,7 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
       </div>
 
       <div className="space-y-2">
-        <Label>DCR type</Label>
+        <Label>Working mode</Label>
         <Select value={reportKind} onValueChange={v => setReportKind(v as ReportKind)}>
           <SelectTrigger className="h-11 rounded-xl">
             <SelectValue placeholder="Choose DCR type" />

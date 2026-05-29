@@ -43,6 +43,7 @@ import { cn } from '@/lib/utils'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { DoctorAddRequest, DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
 import { leaveCategoryLabel } from '@/lib/leaveLabels'
+import RequestTimestamps from '@/components/manager/RequestTimestamps'
 
 type RequestKind =
   | 'unlock'
@@ -269,6 +270,7 @@ export default function UnlockRequests() {
           {statusBadge(req.status)}
         </div>
         <p className="text-sm font-semibold text-foreground">{req.mr_full_name ?? 'MR'}</p>
+        <RequestTimestamps sentAt={req.requested_date ?? req.created_at} resolvedAt={req.resolved_at} />
         <p className="text-xs text-muted-foreground">
           {(req.requested_dates ?? []).length} day(s): {datesLabel}
         </p>
@@ -322,6 +324,8 @@ export default function UnlockRequests() {
     id: string
     mr_full_name?: string | null
     requested_date?: string | null
+    created_at?: string | null
+    resolved_at?: string | null
     status: string
     reason?: string | null
     manager_comment?: string | null
@@ -339,9 +343,7 @@ export default function UnlockRequests() {
               {statusBadge(req.status)}
             </div>
             <p className="text-sm font-semibold text-foreground truncate">{mrName || 'MR'}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Requested: {req.requested_date ? String(req.requested_date) : '—'}
-            </p>
+            <RequestTimestamps sentAt={req.created_at ?? req.requested_date} resolvedAt={req.resolved_at} />
           </div>
         </div>
 
@@ -703,6 +705,7 @@ export default function UnlockRequests() {
       </div>
       <div className="space-y-1">
         <p className="text-sm font-bold text-foreground">{req.mr?.full_name ?? 'MR'}</p>
+        <RequestTimestamps sentAt={req.created_at} resolvedAt={req.resolved_at} />
         <p className="text-xs text-muted-foreground">
           New doctor:{' '}
           <span className="font-medium text-destructive">{doc?.full_name ?? '—'}</span>
@@ -779,6 +782,7 @@ export default function UnlockRequests() {
       </div>
       <div className="space-y-1">
         <p className="text-sm font-bold text-foreground">{req.mr?.full_name ?? 'MR'}</p>
+        <RequestTimestamps sentAt={req.created_at} resolvedAt={req.resolved_at} />
         <p className="text-xs text-muted-foreground">
           Doctor: <span className="font-medium text-foreground">{req.doctor?.full_name ?? '—'}</span>
           {req.doctor?.speciality ? ` · ${req.doctor.speciality}` : ''}

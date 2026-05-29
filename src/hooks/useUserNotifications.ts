@@ -5,11 +5,20 @@ import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import { showBrowserNotification } from '@/lib/notifications/showBrowserNotification'
 import type { UserNotification } from '@/types/database.types'
 
+const NOTIFICATION_QUERY_OPTIONS = {
+  staleTime: 5_000,
+  refetchInterval: 12_000,
+  refetchOnWindowFocus: true,
+  refetchOnReconnect: true,
+} as const
+
 export function useUserNotifications(userId: string) {
-  return useQuery({
+  const queryClient = useQueryClient()
+
+  const query = useQuery({
     queryKey: ['user-notifications', userId],
     enabled: !!userId && !!supabase,
-    ...LIVE_QUERY_OPTIONS,
+    ...NOTIFICATION_QUERY_OPTIONS,
     queryFn: async (): Promise<UserNotification[]> => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase
@@ -22,6 +31,33 @@ export function useUserNotifications(userId: string) {
       return (data ?? []) as UserNotification[]
     },
   })
+
+  useEffect(() => {
+    if (!userId || !supabase) return
+
+    const channel = supabase
+      .channel(`user-notifications-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ['user-notifications', userId] })
+          void queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
+        },
+      )
+      .subscribe()
+
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [userId, queryClient])
+
+  return query
 }
 
 export function useUnreadNotificationCount(userId: string): number {

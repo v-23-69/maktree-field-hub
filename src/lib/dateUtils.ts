@@ -156,3 +156,22 @@ export function formatIstTimeNow(): string {
     hour12: true,
   }).format(new Date()) + ' IST'
 }
+
+/** ISO timestamp → readable IST datetime for request cards. */
+export function formatDisplayDateTime(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  try {
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: IST,
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}

@@ -41,6 +41,8 @@ export function useManagerDoctorDeletionRequests(managerId: string) {
           doctor:doctors(id, full_name, speciality, sub_area_id)
         `,
         )
+        .eq('manager_id', managerId)
+        .eq('status', 'pending')
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as DoctorDeletionRequest[]

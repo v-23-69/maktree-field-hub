@@ -6,6 +6,8 @@ export type ReportKind =
   | 'holiday'
   | 'meeting'
   | 'admin_day'
+  | 'stockist_visit'
+  | 'sales_closing'
 
 export type MeetingDurationType = 'full_day' | 'half_day'
 export type MeetingTypeKind = 'cycle' | 'sales_review' | 'weekly'
@@ -28,7 +30,7 @@ export function meetingTypeLabel(t: string | null | undefined): string {
 export function reportKindLabel(kind: string | null | undefined): string {
   switch (kind) {
     case 'field':
-      return 'Field DCR'
+      return 'Field work'
     case 'leave':
       return 'Leave DCR'
     case 'sunday':
@@ -41,6 +43,10 @@ export function reportKindLabel(kind: string | null | undefined): string {
       return 'Meeting DCR'
     case 'admin_day':
       return 'Admin day'
+    case 'stockist_visit':
+      return 'Stockist visit'
+    case 'sales_closing':
+      return 'Sales & closing'
     default:
       return 'DCR'
   }

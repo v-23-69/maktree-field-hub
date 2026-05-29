@@ -401,6 +401,8 @@ export function useCreateReport() {
         | 'holiday'
         | 'meeting'
         | 'admin_day'
+        | 'stockist_visit'
+        | 'sales_closing'
       leaveDcrCategory?: 'casual' | 'sick' | 'without_pay' | null
       leaveDcrRemark?: string | null
       meetingDurationType?: 'full_day' | 'half_day' | null
@@ -412,6 +414,7 @@ export function useCreateReport() {
       adminDayStartTime?: string | null
       adminDayEndTime?: string | null
       adminDayNotes?: string | null
+      stockistId?: string | null
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
@@ -435,6 +438,7 @@ export function useCreateReport() {
             admin_day_start_time: p.adminDayStartTime || null,
             admin_day_end_time: p.adminDayEndTime || null,
             admin_day_notes: p.adminDayNotes?.trim() || null,
+            stockist_id: p.stockistId ?? null,
           })
           .select()
           .single()

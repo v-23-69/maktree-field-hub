@@ -37,7 +37,6 @@ import { ActionToolbar } from '@/components/ui/action-toolbar';
 import { MANAGER_FILTER_OPTIONS } from '@/lib/dashboardDateRange';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 import { useCreateStockist } from '@/hooks/useStockists';
-import StockistMeetDrawer from '@/components/stockist/StockistMeetDrawer';
 
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | 'add-stockist' | null
 
@@ -47,7 +46,6 @@ export default function ManagerDashboard() {
   usePreventAccidentalBack(true);
   const [activeFilter, setActiveFilter] = useState<ManagerStatsFilter>('This Week');
   const [action, setAction] = useState<QuickAction>(null);
-  const [stockistMeetOpen, setStockistMeetOpen] = useState(false);
 
   const [deferReady, setDeferReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setDeferReady(true), 250); return () => clearTimeout(t); }, []);
@@ -423,12 +421,6 @@ export default function ManagerDashboard() {
               icon={<Store className="h-4 w-4 md:h-5 md:w-5 text-primary" />}
             />
             <ManagerQuickAction
-              label="Stockist meet"
-              iconClassName="bg-teal-500/10"
-              onClick={() => setStockistMeetOpen(true)}
-              icon={<Store className="h-4 w-4 md:h-5 md:w-5 text-teal-700 dark:text-teal-300" />}
-            />
-            <ManagerQuickAction
               label="E detailing"
               iconClassName="bg-cyan-500/10"
               comingSoon
@@ -723,12 +715,6 @@ export default function ManagerDashboard() {
         confirmLabel={markStrike.isPending ? 'Marking...' : 'Yes, Mark Strike'}
         destructive
         confirmDisabled={markStrike.isPending}
-      />
-
-      <StockistMeetDrawer
-        open={stockistMeetOpen}
-        onOpenChange={setStockistMeetOpen}
-        userId={user?.id ?? ''}
       />
 
       <BottomNav role="manager" />

@@ -56,6 +56,7 @@ export function useManagerDoctorAddRequests(managerId: string) {
         `,
         )
         .eq('status', 'pending')
+        .eq('manager_id', managerId)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as DoctorAddRequest[]

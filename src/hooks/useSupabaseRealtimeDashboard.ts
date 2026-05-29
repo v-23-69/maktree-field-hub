@@ -11,6 +11,10 @@ const WATCH_TABLES = [
   'report_unlock_requests',
   'block_complaints',
   'birthday_wishes',
+  'user_notifications',
+  'doctor_add_requests',
+  'doctor_deletion_requests',
+  'stockist_meets',
 ] as const
 
 const REALTIME_DEBOUNCE_MS = 350

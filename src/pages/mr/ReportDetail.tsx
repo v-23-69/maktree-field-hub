@@ -67,7 +67,8 @@ export default function ReportDetail() {
   const isLeaveDetail = reportKind === 'leave';
   const isSundayDetail = reportKind === 'sunday';
   const isMeetingDetail = reportKind === 'meeting';
-  const isAdminDayDetail = reportKind === 'admin_day';
+  const isAdminDayDetail = reportKind === 'admin_day' || reportKind === 'sales_closing';
+  const isStockistVisitDetail = reportKind === 'stockist_visit';
 
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -272,17 +273,24 @@ export default function ReportDetail() {
               </div>
             ) : isAdminDayDetail ? (
               <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-2">
-                <p className="text-sm font-semibold text-foreground">{reportKindLabel('admin_day')}</p>
+                <p className="text-sm font-semibold text-foreground">{reportKindLabel(reportKind)}</p>
                 <p className="text-xs text-muted-foreground">
                   {report.admin_day_start_time && report.admin_day_end_time
                     ? `${String(report.admin_day_start_time).slice(0, 5)} – ${String(report.admin_day_end_time).slice(0, 5)}`
-                    : 'Admin / office work'}
+                    : 'Time not recorded'}
                 </p>
                 {report.admin_day_notes?.trim() ? (
                   <p className="text-sm text-foreground whitespace-pre-wrap border-t border-border pt-3 mt-1">
                     {report.admin_day_notes.trim()}
                   </p>
                 ) : null}
+              </div>
+            ) : isStockistVisitDetail ? (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground">{reportKindLabel('stockist_visit')}</p>
+                <p className="text-xs text-muted-foreground">
+                  Stockist visit logged for this date. See History for meet details.
+                </p>
               </div>
             ) : (
             <div>

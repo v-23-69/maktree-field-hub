@@ -13,6 +13,8 @@ import ReportStrikeDcrStep from '@/components/mr/ReportStrikeDcrStep';
 import ReportHolidayDcrStep from '@/components/mr/ReportHolidayDcrStep';
 import ReportMeetingDcrStep from '@/components/mr/ReportMeetingDcrStep';
 import ReportAdminDayDcrStep from '@/components/mr/ReportAdminDayDcrStep';
+import ReportStockistVisitDcrStep from '@/components/mr/ReportStockistVisitDcrStep';
+import ReportSalesClosingDcrStep from '@/components/mr/ReportSalesClosingDcrStep';
 import type { ReportKind } from '@/lib/dcrLabels';
 import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
 import { cn } from '@/lib/utils';
@@ -60,6 +62,10 @@ export interface ReportFormData {
   adminDayStartTime?: string
   adminDayEndTime?: string
   adminDayNotes?: string
+  stockistId?: string
+  stockistHqAreaId?: string
+  stockistMeetTime?: string
+  stockistNotes?: string
 }
 
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
@@ -103,7 +109,11 @@ function migrateDraft(raw: unknown): ReportFormData | null {
                 ? 'meeting'
                 : o.reportKind === 'admin_day'
                   ? 'admin_day'
-                  : 'field',
+                  : o.reportKind === 'stockist_visit'
+                    ? 'stockist_visit'
+                    : o.reportKind === 'sales_closing'
+                      ? 'sales_closing'
+                      : 'field',
     leaveDcrCategory:
       o.leaveDcrCategory === 'sick' || o.leaveDcrCategory === 'casual' || o.leaveDcrCategory === 'without_pay'
         ? o.leaveDcrCategory
@@ -121,6 +131,10 @@ function migrateDraft(raw: unknown): ReportFormData | null {
     adminDayStartTime: typeof o.adminDayStartTime === 'string' ? o.adminDayStartTime : '09:00',
     adminDayEndTime: typeof o.adminDayEndTime === 'string' ? o.adminDayEndTime : '18:00',
     adminDayNotes: typeof o.adminDayNotes === 'string' ? o.adminDayNotes : '',
+    stockistId: typeof o.stockistId === 'string' ? o.stockistId : '',
+    stockistHqAreaId: typeof o.stockistHqAreaId === 'string' ? o.stockistHqAreaId : '',
+    stockistMeetTime: typeof o.stockistMeetTime === 'string' ? o.stockistMeetTime : '10:00',
+    stockistNotes: typeof o.stockistNotes === 'string' ? o.stockistNotes : '',
   }
 }
 
@@ -199,7 +213,9 @@ export default function NewReport() {
   const holidayFlow = formData.reportKind === 'holiday';
   const meetingFlow = formData.reportKind === 'meeting';
   const adminDayFlow = user?.role === 'manager' && formData.reportKind === 'admin_day';
-  const altDcrFlow = leaveFlow || sundayFlow || strikeFlow || holidayFlow || meetingFlow || adminDayFlow;
+  const stockistFlow = formData.reportKind === 'stockist_visit';
+  const salesClosingFlow = user?.role === 'manager' && formData.reportKind === 'sales_closing';
+  const altDcrFlow = leaveFlow || sundayFlow || strikeFlow || holidayFlow || meetingFlow || adminDayFlow || stockistFlow || salesClosingFlow;
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
@@ -220,7 +236,9 @@ export default function NewReport() {
         reportKind === 'strike' ||
         reportKind === 'holiday' ||
         reportKind === 'meeting' ||
-        reportKind === 'admin_day'
+        reportKind === 'admin_day' ||
+        reportKind === 'stockist_visit' ||
+        reportKind === 'sales_closing'
           ? {
               selectedSubAreaIds: [],
               visits: {},
@@ -236,6 +254,8 @@ export default function NewReport() {
     else if (navState.reportKind === 'holiday') setStep(7)
     else if (navState.reportKind === 'meeting') setStep(8)
     else if (navState.reportKind === 'admin_day') setStep(9)
+    else if (navState.reportKind === 'stockist_visit') setStep(10)
+    else if (navState.reportKind === 'sales_closing') setStep(11)
     else if (navState.reportKind === 'leave') setStep(2)
   }, [navState?.date, navState?.reportKind])
 
@@ -260,7 +280,9 @@ export default function NewReport() {
         formData.reportKind === 'holiday' ||
         formData.reportKind === 'leave' ||
         formData.reportKind === 'meeting' ||
-        formData.reportKind === 'admin_day'
+        formData.reportKind === 'admin_day' ||
+        formData.reportKind === 'stockist_visit' ||
+        formData.reportKind === 'sales_closing'
       )
         return
       const { data, error } = await supabase.rpc('get_tour_plan_for_date', {
@@ -326,7 +348,11 @@ export default function NewReport() {
             ? ['Date', 'Meeting DCR']
             : adminDayFlow
               ? ['Date', 'Admin day']
-              : STEPS;
+              : stockistFlow
+                ? ['Date', 'Stockist visit']
+                : salesClosingFlow
+                  ? ['Date', 'Sales & closing']
+                  : STEPS;
 
   const dockedFooter = useMemo((): ReportStepFooterProps | null => {
     if (step === 1 && !altDcrFlow) {
@@ -345,6 +371,8 @@ export default function NewReport() {
           else if (holidayFlow) setStep(7)
           else if (meetingFlow) setStep(8)
           else if (adminDayFlow) setStep(9)
+          else if (stockistFlow) setStep(10)
+          else if (salesClosingFlow) setStep(11)
           else if (leaveFlow) setStep(2)
         },
         nextDisabled: !step1CanProceed,
@@ -366,7 +394,7 @@ export default function NewReport() {
       }
     }
     return null
-  }, [step, altDcrFlow, leaveFlow, sundayFlow, strikeFlow, holidayFlow, meetingFlow, adminDayFlow, step1CanProceed, step2CanProceed])
+  }, [step, altDcrFlow, leaveFlow, sundayFlow, strikeFlow, holidayFlow, meetingFlow, adminDayFlow, stockistFlow, salesClosingFlow, step1CanProceed, step2CanProceed])
 
   if (blockLoading || tpLoading) {
     return (
@@ -535,7 +563,7 @@ export default function NewReport() {
         <div
           className={cn(
             "px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full",
-            (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow) || (step === 8 && meetingFlow) || (step === 9 && adminDayFlow)) && "pb-28 md:pb-32",
+            (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow) || (step === 8 && meetingFlow) || (step === 9 && adminDayFlow) || (step === 10 && stockistFlow) || (step === 11 && salesClosingFlow)) && "pb-28 md:pb-32",
           )}
         >
           {step === 1 && (
@@ -550,6 +578,8 @@ export default function NewReport() {
                 else if (holidayFlow) setStep(7)
                 else if (meetingFlow) setStep(8)
                 else if (adminDayFlow) setStep(9)
+                else if (stockistFlow) setStep(10)
+                else if (salesClosingFlow) setStep(11)
                 else if (leaveFlow) setStep(2)
                 else setStep(2)
               }}
@@ -599,6 +629,24 @@ export default function NewReport() {
           )}
           {step === 9 && adminDayFlow && (
             <ReportAdminDayDcrStep
+              data={formData}
+              onChange={updateData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+            />
+          )}
+          {step === 10 && stockistFlow && (
+            <ReportStockistVisitDcrStep
+              data={formData}
+              onChange={updateData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+            />
+          )}
+          {step === 11 && salesClosingFlow && (
+            <ReportSalesClosingDcrStep
               data={formData}
               onChange={updateData}
               onBack={() => setStep(1)}
