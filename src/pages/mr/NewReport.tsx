@@ -31,6 +31,8 @@ import { toast } from 'sonner'
 import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { coerceQuantity } from '@/lib/quantityInput';
+import { intersectSubAreaIds } from '@/hooks/useDoctors';
+import { useMrSubAreas } from '@/hooks/useAreas';
 
 /** One saved doctor visit (local form state). */
 export interface VisitFormEntry {
@@ -187,6 +189,7 @@ export default function NewReport() {
   const { goBack: safeGoBack } = usePreventAccidentalBack(true)
   const { data: tpStatus, isLoading: tpLoading } = useTpStatus(mrId)
   const { data: wwSanitizeOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role)
+  const { data: assignedSubAreas = [] } = useMrSubAreas(mrId)
 
   const [step, setStep] = useState(1);
   const [step1CanProceed, setStep1CanProceed] = useState(false);
@@ -271,6 +274,20 @@ export default function NewReport() {
   }, [user?.role, wwSanitizeOpts])
 
   useEffect(() => {
+    if (assignedSubAreas.length === 0) return
+    setFormData(prev => {
+      const sanitized = intersectSubAreaIds(prev.selectedSubAreaIds, assignedSubAreas)
+      if (
+        sanitized.length === prev.selectedSubAreaIds.length &&
+        sanitized.every((id, i) => id === prev.selectedSubAreaIds[i])
+      ) {
+        return prev
+      }
+      return { ...prev, selectedSubAreaIds: sanitized }
+    })
+  }, [assignedSubAreas])
+
+  useEffect(() => {
     const applyTourPlanAutofill = async () => {
       if (!supabase || !mrId || !formData.date) return
       if (
@@ -292,6 +309,7 @@ export default function NewReport() {
       if (error) return
       const row = Array.isArray(data) ? data[0] : data
       if (!row) return
+      const assignedIds = new Set(assignedSubAreas.map(sa => sa.id))
       setFormData(prev => {
         const next = { ...prev }
         let changed = false
@@ -307,17 +325,20 @@ export default function NewReport() {
         }
         if (row.sub_area_id) {
           const sid = row.sub_area_id as string
-          if (!next.selectedSubAreaIds.includes(sid)) {
+          if (assignedIds.has(sid) && !next.selectedSubAreaIds.includes(sid)) {
             next.selectedSubAreaIds = [sid, ...next.selectedSubAreaIds]
             changed = true
           }
         }
-        if (changed) next.tpAutoFilled = true
+        if (changed) {
+          next.selectedSubAreaIds = intersectSubAreaIds(next.selectedSubAreaIds, assignedSubAreas)
+          next.tpAutoFilled = true
+        }
         return next
       })
     }
     void applyTourPlanAutofill()
-  }, [mrId, formData.date])
+  }, [mrId, formData.date, assignedSubAreas])
 
   const updateData = useCallback((partial: Partial<ReportFormData>) => {
     setFormData(prev => ({ ...prev, ...partial }));

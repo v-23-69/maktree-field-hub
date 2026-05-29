@@ -46,6 +46,30 @@ export function useManagerDoctorAddRequests(managerId: string) {
     ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<DoctorAddRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
+      const { data: teamMrs, error: teamErr } = await supabase.rpc('list_mrs_for_manager')
+      if (teamErr) throw teamErr
+      const mrIds = ((teamMrs ?? []) as { id: string }[]).map(m => m.id)
+      if (mrIds.length === 0) return []
+
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('list_doctor_add_requests_for_manager')
+      if (!rpcErr && Array.isArray(rpcRows)) {
+        const ids = (rpcRows as DoctorAddRequest[]).map(r => r.id)
+        if (ids.length === 0) return []
+        const { data, error } = await supabase
+          .from('doctor_add_requests')
+          .select(
+            `
+            *,
+            mr:users!doctor_add_requests_mr_id_fkey(id, full_name, employee_code),
+            sub_area:sub_areas(id, name, code, area:areas(id, name))
+          `,
+          )
+          .in('id', ids)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        return (data ?? []) as DoctorAddRequest[]
+      }
+
       const { data, error } = await supabase
         .from('doctor_add_requests')
         .select(
@@ -56,7 +80,7 @@ export function useManagerDoctorAddRequests(managerId: string) {
         `,
         )
         .eq('status', 'pending')
-        .eq('manager_id', managerId)
+        .in('mr_id', mrIds)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as DoctorAddRequest[]

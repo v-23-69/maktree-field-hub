@@ -13,7 +13,7 @@ import { formatDisplayDate } from '@/lib/dateUtils';
 import type { ReportFormData } from '@/pages/mr/NewReport';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts } from '@/hooks/useProducts';
-import { useDoctorsBySubAreas } from '@/hooks/useDoctors';
+import { useDoctorsForMrDcr } from '@/hooks/useDoctors';
 import { useAllAreas, useMrSubAreas } from '@/hooks/useAreas';
 import {
   findExistingDailyReport,
@@ -58,7 +58,10 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
   const submitExpenseReport = useSubmitExpenseReport();
   const getOrCreateExpense = useGetOrCreateExpenseReport();
   const { data: products = [], isLoading: productsLoading } = useProducts();
-  const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsBySubAreas(data.selectedSubAreaIds);
+  const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsForMrDcr(
+    user?.id ?? '',
+    data.selectedSubAreaIds,
+  );
   const { data: subAreasFlat = [], isLoading: subAreasLoading } = useMrSubAreas(user?.id ?? '');
   const { data: allAreas = [] } = useAllAreas();
   const { data: workingOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role);

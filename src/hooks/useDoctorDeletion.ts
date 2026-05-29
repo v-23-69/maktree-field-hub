@@ -32,6 +32,30 @@ export function useManagerDoctorDeletionRequests(managerId: string) {
     ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<DoctorDeletionRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
+      const { data: teamMrs, error: teamErr } = await supabase.rpc('list_mrs_for_manager')
+      if (teamErr) throw teamErr
+      const mrIds = ((teamMrs ?? []) as { id: string }[]).map(m => m.id)
+      if (mrIds.length === 0) return []
+
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc('list_doctor_deletion_requests_for_manager')
+      if (!rpcErr && Array.isArray(rpcRows)) {
+        const ids = (rpcRows as DoctorDeletionRequest[]).map(r => r.id)
+        if (ids.length === 0) return []
+        const { data, error } = await supabase
+          .from('doctor_deletion_requests')
+          .select(
+            `
+            *,
+            mr:users!doctor_deletion_requests_mr_id_fkey(id, full_name, employee_code),
+            doctor:doctors(id, full_name, speciality, sub_area_id)
+          `,
+          )
+          .in('id', ids)
+          .order('created_at', { ascending: false })
+        if (error) throw error
+        return (data ?? []) as DoctorDeletionRequest[]
+      }
+
       const { data, error } = await supabase
         .from('doctor_deletion_requests')
         .select(
@@ -41,8 +65,8 @@ export function useManagerDoctorDeletionRequests(managerId: string) {
           doctor:doctors(id, full_name, speciality, sub_area_id)
         `,
         )
-        .eq('manager_id', managerId)
         .eq('status', 'pending')
+        .in('mr_id', mrIds)
         .order('created_at', { ascending: false })
       if (error) throw error
       return (data ?? []) as DoctorDeletionRequest[]

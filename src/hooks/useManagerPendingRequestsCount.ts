@@ -11,7 +11,7 @@ export function useManagerPendingRequestsCount(managerId: string): number {
     queryFn: async (): Promise<number> => {
       if (!supabase) return 0
 
-      const [unlockRpc, lateDcrRpc, tpDelRpc, leavesRes, docDelRes, docAddRes, mrsRpc] =
+      const [unlockRpc, lateDcrRpc, tpDelRpc, leavesRes, mrsRpc] =
         await Promise.all([
         supabase.rpc('list_unlock_requests_for_manager'),
         supabase.rpc('list_late_dcr_fill_requests_for_manager'),
@@ -21,18 +21,31 @@ export function useManagerPendingRequestsCount(managerId: string): number {
           .select('id', { count: 'exact', head: true })
           .eq('manager_id', managerId)
           .eq('status', 'pending'),
-        supabase
-          .from('doctor_deletion_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('manager_id', managerId)
-          .eq('status', 'pending'),
-        supabase
-          .from('doctor_add_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('manager_id', managerId)
-          .eq('status', 'pending'),
         supabase.rpc('list_mrs_for_manager'),
       ])
+
+      const mrIds = mrsRpc.error
+        ? []
+        : ((mrsRpc.data ?? []) as Array<{ id: string }>).map(m => m.id)
+
+      let docPending = 0
+      let docAddPending = 0
+      if (mrIds.length > 0) {
+        const [docDelRes, docAddRes] = await Promise.all([
+          supabase
+            .from('doctor_deletion_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending')
+            .in('mr_id', mrIds),
+          supabase
+            .from('doctor_add_requests')
+            .select('id', { count: 'exact', head: true })
+            .eq('status', 'pending')
+            .in('mr_id', mrIds),
+        ])
+        docPending = docDelRes.error ? 0 : docDelRes.count ?? 0
+        docAddPending = docAddRes.error ? 0 : docAddRes.count ?? 0
+      }
 
       const unlockPending = unlockRpc.error
         ? 0
@@ -49,8 +62,6 @@ export function useManagerPendingRequestsCount(managerId: string): number {
       const tpDelPending = tpDelRpc.error ? 0 : (tpDelRpc.data ?? []).length
 
       const leavePending = leavesRes.error ? 0 : leavesRes.count ?? 0
-      const docPending = docDelRes.error ? 0 : docDelRes.count ?? 0
-      const docAddPending = docAddRes.error ? 0 : docAddRes.count ?? 0
 
       let tpSubmitPending = 0
       if (!mrsRpc.error) {

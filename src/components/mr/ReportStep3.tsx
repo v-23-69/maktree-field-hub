@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { useDoctorsBySubAreas } from '@/hooks/useDoctors';
+import { useDoctorsForMrDcr } from '@/hooks/useDoctors';
 import { CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import DoctorVisitDrawer from '@/components/mr/DoctorVisitDrawer';
 import ReportStepFooter from '@/components/mr/ReportStepFooter';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import type { ReportFormData, VisitFormEntry } from '@/pages/mr/NewReport';
 import type { Doctor } from '@/types/database.types';
 import { useProducts } from '@/hooks/useProducts';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 interface Props {
@@ -22,14 +23,20 @@ interface Props {
 }
 
 export default function ReportStep3({ data, onChange, onNext, onBack, hideFooter }: Props) {
+  const { user } = useAuth();
   const [activeDoctorId, setActiveDoctorId] = useState<string | null>(null);
   const [deleteDoctorId, setDeleteDoctorId] = useState<string | null>(null);
-  const { data: doctors = [], isLoading, isError } = useDoctorsBySubAreas(data.selectedSubAreaIds);
+  const {
+    data: doctors = [],
+    isLoading,
+    isError,
+    allowedSubAreaIds,
+  } = useDoctorsForMrDcr(user?.id ?? '', data.selectedSubAreaIds);
   const { data: products = [] } = useProducts();
 
   const visitCount = Object.keys(data.visits).length;
 
-  const grouped = data.selectedSubAreaIds.map(saId => {
+  const grouped = allowedSubAreaIds.map(saId => {
     const subAreaName =
       doctors.find(d => d.sub_area_id === saId)?.sub_area?.name ?? 'Area';
     const docs = doctors.filter(d => d.sub_area_id === saId);
@@ -60,6 +67,15 @@ export default function ReportStep3({ data, onChange, onNext, onBack, hideFooter
 
   if (isLoading) {
     return <LoadingSpinner />;
+  }
+
+  if (allowedSubAreaIds.length === 0) {
+    return (
+      <div className="space-y-4">
+        <EmptyState message="Select at least one assigned area you worked in today." />
+        <Button variant="outline" onClick={onBack} className="w-full touch-target rounded-lg">Back</Button>
+      </div>
+    );
   }
 
   if (isError) {

@@ -212,6 +212,10 @@ export default function DoctorMasterDrawer({
       }
 
       const managerId = managers[0]?.id ?? null
+      if (!managerId) {
+        toast.error('No manager is assigned to your account. Contact admin before adding doctors.')
+        return
+      }
       await submitDoctorAdd.mutateAsync({
         mr_id: mrId,
         sub_area_id: subAreaId,
@@ -513,11 +517,16 @@ export default function DoctorMasterDrawer({
                     disabled={requestDeletion.isPending}
                     onClick={() =>
                       void (async () => {
+                        const managerId = managers[0]?.id ?? null
+                        if (!managerId) {
+                          toast.error('No manager is assigned to your account. Contact admin.')
+                          return
+                        }
                         try {
                           await requestDeletion.mutateAsync({
                             mr_id: mrId,
                             doctor_id: doctorId,
-                            manager_id: managers[0]?.id ?? null,
+                            manager_id: managerId,
                             reason: removalReason,
                           })
                           toastMrPendingManagerApproval('Removal request sent')
