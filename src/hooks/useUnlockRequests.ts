@@ -47,23 +47,19 @@ export function useResolveUnlockRequest() {
     }): Promise<void> => {
       if (!supabase) throw new Error('Supabase not configured')
 
-      const { error } = await supabase
-        .from('report_unlock_requests')
-        .update({
-          status: p.action,
-          manager_comment:
-            p.action === 'rejected'
-              ? p.managerComment?.trim() || null
-              : null,
-          resolved_at: new Date().toISOString(),
-        })
-        .eq('id', p.requestId)
+      const { error } = await supabase.rpc('resolve_report_unlock_request', {
+        p_request_id: p.requestId,
+        p_action: p.action,
+        p_manager_comment: p.managerComment?.trim() || null,
+      })
 
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-unlock-requests'] })
       queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
     },
   })
 }

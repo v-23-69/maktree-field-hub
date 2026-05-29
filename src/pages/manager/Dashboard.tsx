@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -36,8 +36,10 @@ import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-c
 import { ActionToolbar } from '@/components/ui/action-toolbar';
 import { MANAGER_FILTER_OPTIONS } from '@/lib/dashboardDateRange';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
+import { useCreateStockist } from '@/hooks/useStockists';
+import StockistMeetDrawer from '@/components/stockist/StockistMeetDrawer';
 
-type QuickAction = 'assign-self' | 'strike' | 'holiday' | null
+type QuickAction = 'assign-self' | 'strike' | 'holiday' | 'add-stockist' | null
 
 export default function ManagerDashboard() {
   const { user } = useAuth();
@@ -45,6 +47,7 @@ export default function ManagerDashboard() {
   usePreventAccidentalBack(true);
   const [activeFilter, setActiveFilter] = useState<ManagerStatsFilter>('This Week');
   const [action, setAction] = useState<QuickAction>(null);
+  const [stockistMeetOpen, setStockistMeetOpen] = useState(false);
 
   const [deferReady, setDeferReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setDeferReady(true), 250); return () => clearTimeout(t); }, []);
@@ -110,6 +113,9 @@ export default function ManagerDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
+  const [stockistAreaId, setStockistAreaId] = useState('');
+  const [stockistName, setStockistName] = useState('');
+  const createStockist = useCreateStockist();
 
   const [selfPickAreaId, setSelfPickAreaId] = useState('');
   const [selfSelectedSubAreas, setSelfSelectedSubAreas] = useState<Set<string>>(new Set());
@@ -212,6 +218,8 @@ export default function ManagerDashboard() {
     setStrikeReason('');
     setHolidayDate(todayInputDate());
     setHolidayReason('');
+    setStockistAreaId('');
+    setStockistName('');
   };
 
   if (isPaused) {
@@ -409,6 +417,18 @@ export default function ManagerDashboard() {
               icon={<Receipt className="h-4 w-4 md:h-5 md:w-5 text-emerald-600 dark:text-emerald-400" />}
             />
             <ManagerQuickAction
+              label="Add stockist"
+              iconClassName="bg-primary/10"
+              onClick={() => setAction('add-stockist')}
+              icon={<Store className="h-4 w-4 md:h-5 md:w-5 text-primary" />}
+            />
+            <ManagerQuickAction
+              label="Stockist meet"
+              iconClassName="bg-teal-500/10"
+              onClick={() => setStockistMeetOpen(true)}
+              icon={<Store className="h-4 w-4 md:h-5 md:w-5 text-teal-700 dark:text-teal-300" />}
+            />
+            <ManagerQuickAction
               label="E detailing"
               iconClassName="bg-cyan-500/10"
               comingSoon
@@ -469,6 +489,7 @@ export default function ManagerDashboard() {
               {action === 'assign-self' && 'Assign Area to Self'}
               {action === 'strike' && 'Mark Strike Day'}
               {action === 'holiday' && 'Mark Holiday'}
+              {action === 'add-stockist' && 'Add stockist'}
             </DrawerTitle>
           </DrawerHeader>
 
@@ -624,6 +645,61 @@ export default function ManagerDashboard() {
                 )}
               </>
             )}
+
+            {action === 'add-stockist' && (
+              <>
+                <div className="space-y-2">
+                  <Label className="text-xs">HQ (Territory)</Label>
+                  <select
+                    value={stockistAreaId}
+                    onChange={e => setStockistAreaId(e.target.value)}
+                    className="flex h-11 w-full rounded-lg border border-input bg-background px-3 text-sm touch-target"
+                  >
+                    <option value="">Select HQ</option>
+                    {areas.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-xs">Stockist name</Label>
+                  <Input
+                    value={stockistName}
+                    onChange={e => setStockistName(e.target.value)}
+                    placeholder="Enter stockist name"
+                    className="rounded-xl"
+                  />
+                </div>
+
+                <Button
+                  className="w-full rounded-2xl h-12 text-sm font-bold"
+                  disabled={!stockistAreaId || !stockistName.trim() || createStockist.isPending}
+                  onClick={() => {
+                    if (!stockistAreaId) {
+                      toast.error('Select HQ')
+                      return
+                    }
+                    const name = stockistName.trim()
+                    if (!name) {
+                      toast.error('Enter stockist name')
+                      return
+                    }
+                    void createStockist
+                      .mutateAsync({ areaId: stockistAreaId, name })
+                      .then(() => {
+                        toast.success('Stockist added')
+                        closeDrawer()
+                      })
+                      .catch(e => toast.error(e instanceof Error ? e.message : 'Could not add stockist'))
+                  }}
+                >
+                  {createStockist.isPending ? 'Saving…' : 'Save'}
+                </Button>
+              </>
+            )}
           </div>
         </DrawerContent>
       </Drawer>
@@ -647,6 +723,12 @@ export default function ManagerDashboard() {
         confirmLabel={markStrike.isPending ? 'Marking...' : 'Yes, Mark Strike'}
         destructive
         confirmDisabled={markStrike.isPending}
+      />
+
+      <StockistMeetDrawer
+        open={stockistMeetOpen}
+        onOpenChange={setStockistMeetOpen}
+        userId={user?.id ?? ''}
       />
 
       <BottomNav role="manager" />

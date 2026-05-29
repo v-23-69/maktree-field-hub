@@ -65,7 +65,7 @@ export function useApplyLeave() {
       manager_id: string | null
       leave_date: string
       leave_type: 'full' | 'half_morning' | 'half_afternoon'
-      leave_category: 'casual' | 'sick'
+      leave_category: 'casual' | 'sick' | 'without_pay'
       reason: string
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
@@ -139,7 +139,7 @@ export function useUpsertManagerOwnLeave() {
     mutationFn: async (p: {
       manager_id: string
       leave_date: string
-      leave_category: 'casual' | 'sick'
+      leave_category: 'casual' | 'sick' | 'without_pay'
       remark: string
     }) => {
       if (!supabase) throw new Error('Supabase not configured')

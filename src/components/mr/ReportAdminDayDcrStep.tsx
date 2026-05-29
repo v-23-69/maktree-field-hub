@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import ReportStepFooter from '@/components/mr/ReportStepFooter'
-import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { ReportFormData } from '@/pages/mr/NewReport'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,7 +16,6 @@ import {
 } from '@/hooks/useReport'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { LEAVE_CATEGORY_OPTIONS, type LeaveCategory } from '@/lib/leaveLabels'
 
 interface Props {
   data: ReportFormData
@@ -26,7 +25,7 @@ interface Props {
   hideFooter?: boolean
 }
 
-export default function ReportLeaveDcrStep({
+export default function ReportAdminDayDcrStep({
   data,
   onChange,
   onBack,
@@ -40,24 +39,21 @@ export default function ReportLeaveDcrStep({
   const submitReport = useSubmitReport()
   const [busy, setBusy] = useState(false)
 
-  const cat = (
-    data.leaveDcrCategory === 'sick' || data.leaveDcrCategory === 'without_pay'
-      ? data.leaveDcrCategory
-      : 'casual'
-  ) as LeaveCategory
-  const remark = data.leaveDcrRemark ?? ''
+  const startTime = data.adminDayStartTime ?? '09:00'
+  const endTime = data.adminDayEndTime ?? '18:00'
+  const notes = data.adminDayNotes ?? ''
 
   const handleSubmit = async () => {
-    if (!supabase || !user?.id) {
-      toast.error('Not signed in')
+    if (!supabase || !user?.id || user.role !== 'manager') {
+      toast.error('Admin day is for managers only')
       return
     }
     if (!data.date) {
       toast.error('Pick a date first')
       return
     }
-    if (!remark.trim()) {
-      toast.error('Please enter a remark')
+    if (!notes.trim()) {
+      toast.error('Describe what you did on this admin day')
       return
     }
     setBusy(true)
@@ -67,6 +63,7 @@ export default function ReportLeaveDcrStep({
         toast.error('A report for this date is already submitted.')
         return
       }
+
       let reportId = existing?.id
       if (!reportId) {
         const row = await createReport.mutateAsync({
@@ -74,18 +71,20 @@ export default function ReportLeaveDcrStep({
           managerId: null,
           workingWithIds: [],
           reportDate: data.date,
-          reportKind: 'leave',
-          leaveDcrCategory: cat,
-          leaveDcrRemark: remark.trim(),
+          reportKind: 'admin_day',
+          adminDayStartTime: startTime,
+          adminDayEndTime: endTime,
+          adminDayNotes: notes.trim(),
         })
         reportId = row.id
       } else {
         const { error: upErr } = await supabase
           .from('daily_reports')
           .update({
-            report_kind: 'leave',
-            leave_dcr_category: cat,
-            leave_dcr_remark: remark.trim(),
+            report_kind: 'admin_day',
+            admin_day_start_time: startTime,
+            admin_day_end_time: endTime,
+            admin_day_notes: notes.trim(),
             working_with_ids: [],
             manager_id: null,
           })
@@ -95,12 +94,9 @@ export default function ReportLeaveDcrStep({
 
       await submitReport.mutateAsync(reportId)
       await queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
-      await queryClient.invalidateQueries({ queryKey: ['daily-report'] })
-      await queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
-      toast.success('Leave DCR submitted')
+      toast.success('Admin day DCR submitted')
       onClearDraft()
-      const historyPath = user.role === 'manager' ? '/manager/history' : '/mr/report/history'
-      navigate(historyPath)
+      navigate('/manager/history')
     } catch (e) {
       console.error(e)
       toast.error(e instanceof Error ? e.message : 'Submit failed')
@@ -113,43 +109,41 @@ export default function ReportLeaveDcrStep({
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
-        <p className="text-xs font-semibold text-primary">Leave DCR</p>
+      <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-3">
+        <p className="text-xs font-semibold text-violet-900 dark:text-violet-100">Admin day</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-          For approved full-day leave you still submit a short Leave DCR (type + remark). No doctor visits are required.
+          Manager-only: office / admin work on {formatDisplayDate(data.date)}. MRs do not see this option.
         </p>
       </div>
 
-      <div className="glass-card p-3 space-y-1">
-        <p className="text-xs text-muted-foreground">Date</p>
-        <p className="text-sm font-semibold text-foreground">{formatDisplayDate(data.date)}</p>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Leave type</Label>
-        <div className="grid grid-cols-1 gap-2">
-          {LEAVE_CATEGORY_OPTIONS.map(o => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange({ leaveDcrCategory: o.value })}
-              className={`rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-all active:scale-[0.98] ${
-                cat === o.value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2">
+          <Label>From time</Label>
+          <Input
+            type="time"
+            value={startTime}
+            onChange={e => onChange({ adminDayStartTime: e.target.value })}
+            className="rounded-xl"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>To time</Label>
+          <Input
+            type="time"
+            value={endTime}
+            onChange={e => onChange({ adminDayEndTime: e.target.value })}
+            className="rounded-xl"
+          />
         </div>
       </div>
 
       <div className="space-y-2">
-        <Label>Remark</Label>
+        <Label>What did you do?</Label>
         <Textarea
-          value={remark}
-          onChange={e => onChange({ leaveDcrRemark: e.target.value })}
-          placeholder="Brief remark for this leave day"
-          className="min-h-[100px] rounded-xl"
+          value={notes}
+          onChange={e => onChange({ adminDayNotes: e.target.value })}
+          placeholder="Describe admin / office work for this day"
+          className="min-h-[120px] rounded-xl"
         />
       </div>
 
@@ -157,7 +151,7 @@ export default function ReportLeaveDcrStep({
         <ReportStepFooter
           onBack={onBack}
           onNext={() => void handleSubmit()}
-          nextLabel={busy ? 'Submitting…' : 'Submit Leave DCR'}
+          nextLabel={busy ? 'Submitting…' : 'Submit Admin day'}
           nextDisabled={busy}
         />
       )}

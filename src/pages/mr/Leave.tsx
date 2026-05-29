@@ -12,6 +12,7 @@ import { useManagersForMr } from '@/hooks/useManagers'
 import { useApplyLeave, useMrLeaves } from '@/hooks/useLeaves'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
+import { LEAVE_CATEGORY_OPTIONS, leaveCategoryLabel } from '@/lib/leaveLabels'
 
 export default function MRLeave() {
   const { user } = useAuth()
@@ -27,7 +28,7 @@ export default function MRLeave() {
   const [selectedManagerId, setSelectedManagerId] = useState<string | null>(null)
   const [leaveDate, setLeaveDate] = useState('')
   const [leaveType, setLeaveType] = useState<'full' | 'half_morning' | 'half_afternoon'>('full')
-  const [leaveCategory, setLeaveCategory] = useState<'casual' | 'sick'>('casual')
+  const [leaveCategory, setLeaveCategory] = useState<'casual' | 'sick' | 'without_pay'>('casual')
   const [reason, setReason] = useState('')
 
   useEffect(() => {
@@ -49,8 +50,7 @@ export default function MRLeave() {
       <PageHeader title="Leave" showBack />
       <div className="p-4 md:px-6 space-y-4 max-w-2xl lg:max-w-4xl mx-auto">
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Choose the date, duration, leave type (casual or sick), and remarks. Your manager will approve or reject the
-          request.
+          Choose the date, duration, leave type, and remarks. Your manager will approve or reject the request.
         </p>
         <div className="rounded-xl border border-border p-3 space-y-3">
           {managersLoading && <p className="text-xs text-muted-foreground">Loading approvers…</p>}
@@ -95,17 +95,17 @@ export default function MRLeave() {
           </div>
           <div className="space-y-1">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Leave type</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {(['casual', 'sick'] as const).map(k => (
+            <div className="grid grid-cols-1 gap-2">
+              {LEAVE_CATEGORY_OPTIONS.map(o => (
                 <button
-                  key={k}
+                  key={o.value}
                   type="button"
-                  onClick={() => setLeaveCategory(k)}
-                  className={`rounded-lg border px-2 py-2 text-sm font-medium ${
-                    leaveCategory === k ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
+                  onClick={() => setLeaveCategory(o.value)}
+                  className={`rounded-lg border px-2 py-2 text-sm font-medium text-left ${
+                    leaveCategory === o.value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
                   }`}
                 >
-                  {k === 'casual' ? 'Casual leave' : 'Sick leave'}
+                  {o.label}
                 </button>
               ))}
             </div>
@@ -172,7 +172,7 @@ export default function MRLeave() {
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {(leave.leave_category ?? 'casual') === 'sick' ? 'Sick leave' : 'Casual leave'} ·{' '}
+                  {leaveCategoryLabel(leave.leave_category)} ·{' '}
                   {leave.leave_type.replace('_', ' ')}
                 </p>
                 <p className="text-xs text-foreground">{leave.reason}</p>

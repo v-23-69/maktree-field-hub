@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ArrowLeft, Building2, Pill, Stethoscope, Trash2 } from 'lucide-react'
+import { ArrowLeft, Building2, Pill, Stethoscope, Store, Trash2 } from 'lucide-react'
+import type { StockistMeet } from '@/types/database.types'
 import { Button } from '@/components/ui/button'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { formatDoctorLabel } from '@/lib/displayLabels'
@@ -13,6 +14,7 @@ type Props = {
   onBack: () => void
   onOpenFullReport?: () => void
   onDelete?: () => void
+  stockistMeets?: StockistMeet[]
 }
 
 export default function DcrDaySummaryScreen({
@@ -22,6 +24,7 @@ export default function DcrDaySummaryScreen({
   onBack,
   onOpenFullReport,
   onDelete,
+  stockistMeets = [],
 }: Props) {
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
@@ -147,6 +150,29 @@ export default function DcrDaySummaryScreen({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">No visit rows on this report.</p>
+            )}
+
+            {stockistMeets.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  Stockist meets ({stockistMeets.length})
+                </p>
+                {stockistMeets.map(m => (
+                  <div key={m.id} className="rounded-xl border border-border/70 bg-card p-3 space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Store className="h-4 w-4 text-primary shrink-0" />
+                      <p className="text-sm font-semibold text-foreground">{m.stockist?.name ?? 'Stockist'}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground pl-6">
+                      {m.area?.name ?? '—'}
+                      {m.meet_time ? ` · ${String(m.meet_time).slice(0, 5)}` : ''}
+                    </p>
+                    {m.notes?.trim() ? (
+                      <p className="text-xs text-foreground pl-6 whitespace-pre-wrap">{m.notes.trim()}</p>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             )}
 
             <div className="space-y-2 pt-2">

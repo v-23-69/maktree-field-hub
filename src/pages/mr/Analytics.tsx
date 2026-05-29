@@ -8,8 +8,11 @@ import LazySpecialityBarChart from '@/components/charts/LazySpecialityBarChart'
 import { rollupSpecialityRows } from '@/lib/chartRollup'
 import LazyMrCallsDayChart from '@/components/charts/LazyMrCallsDayChart'
 import TeamFieldCallsChart from '@/components/charts/TeamFieldCallsChart'
+import PerformanceMetricsGrid from '@/components/performance/PerformanceMetricsGrid'
+import DashboardRadialMetrics from '@/components/dashboard/dashboard-radial-metrics'
 import { useAuth } from '@/hooks/useAuth'
 import { useMrDashboardStats } from '@/hooks/useDashboardStats'
+import { useMrPerformanceMetrics } from '@/hooks/usePerformance'
 import {
   useCallsComparisonAnalytics,
   type PeriodPreset,
@@ -36,6 +39,7 @@ export default function MRAnalyticsPage() {
   }, [])
 
   const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferHeavy ? mrId : '')
+  const { data: perf, isLoading: perfLoading, isError: perfError } = useMrPerformanceMetrics(mrId)
   const compareEnabled = !!mrId
   const { data: callsBundle, isLoading: callsLoading } = useCallsComparisonAnalytics(
     [mrId],
@@ -64,20 +68,46 @@ export default function MRAnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title="Analytics" />
+      <PageHeader title="Performance" />
       <div className="mx-auto w-full px-4 py-4 space-y-5 max-w-lg md:px-8 md:max-w-3xl md:space-y-6 lg:px-10 lg:max-w-5xl">
         <p className="text-sm text-muted-foreground -mt-2">
-          Your field performance — calls, visit targets, and doctor coverage for this account only.
+          Your field performance — accurate counts from the database plus call trends and coverage charts.
         </p>
+
+        {perfLoading && <LoadingSpinner />}
+        {perfError && (
+          <EmptyState message="Could not load performance metrics. Pull to refresh or try again later." />
+        )}
+        {!perfLoading && perf && (
+          <>
+            <PerformanceMetricsGrid metrics={perf} />
+            <DashboardRadialMetrics
+              title="Doctor call average"
+              description="Average doctor calls per field work day for the selected period."
+              items={[
+                {
+                  name: 'Calls/day',
+                  percent: Math.max(0, Math.min(100, Math.round((perf.doctor_call_avg / 12) * 100))),
+                  detail: `${perf.doctor_call_avg} avg · ${perf.field_work_days} field days`,
+                  colorKey: 'a',
+                },
+              ]}
+            />
+          </>
+        )}
 
         {!statsLoading && stats && (
           <div className="grid grid-cols-2 gap-2">
             <div className="glass-card p-3 rounded-xl">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">DCRs this month</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                DCRs this month
+              </p>
               <p className="text-xl font-bold tabular-nums text-foreground mt-1">{stats.reportsThisMonth}</p>
             </div>
             <div className="glass-card p-3 rounded-xl">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Doctors this week</p>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Doctors this week
+              </p>
               <p className="text-xl font-bold tabular-nums text-foreground mt-1">{stats.doctorsThisWeek}</p>
             </div>
           </div>
@@ -152,13 +182,15 @@ export default function MRAnalyticsPage() {
                   <p className="text-[10px] text-muted-foreground leading-snug">
                     Top specialties shown; smaller ones grouped as Others for clarity.
                   </p>
-                  <LazySpecialityBarChart data={specialityChartData} heightPx={Math.min(320, specialityChartData.length * 36 + 32)} />
+                  <LazySpecialityBarChart
+                    data={specialityChartData}
+                    heightPx={Math.min(320, specialityChartData.length * 36 + 32)}
+                  />
                 </div>
               )}
             </>
           )}
         </section>
-
       </div>
       <BottomNav role="mr" />
     </div>

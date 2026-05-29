@@ -393,9 +393,25 @@ export function useCreateReport() {
       managerId: string | null
       workingWithIds?: string[]
       reportDate: string
-      reportKind?: 'field' | 'leave' | 'sunday'
-      leaveDcrCategory?: 'casual' | 'sick' | null
+      reportKind?:
+        | 'field'
+        | 'leave'
+        | 'sunday'
+        | 'strike'
+        | 'holiday'
+        | 'meeting'
+        | 'admin_day'
+      leaveDcrCategory?: 'casual' | 'sick' | 'without_pay' | null
       leaveDcrRemark?: string | null
+      meetingDurationType?: 'full_day' | 'half_day' | null
+      meetingStartTime?: string | null
+      meetingEndTime?: string | null
+      meetingType?: 'cycle' | 'sales_review' | 'weekly' | null
+      meetingAttendeeIds?: string[]
+      meetingNotes?: string | null
+      adminDayStartTime?: string | null
+      adminDayEndTime?: string | null
+      adminDayNotes?: string | null
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
@@ -410,10 +426,21 @@ export function useCreateReport() {
             report_kind: p.reportKind ?? 'field',
             leave_dcr_category: p.leaveDcrCategory ?? null,
             leave_dcr_remark: p.leaveDcrRemark?.trim() || null,
+            meeting_duration_type: p.meetingDurationType ?? null,
+            meeting_start_time: p.meetingStartTime || null,
+            meeting_end_time: p.meetingEndTime || null,
+            meeting_type: p.meetingType ?? null,
+            meeting_attendee_ids: p.meetingAttendeeIds ?? [],
+            meeting_notes: p.meetingNotes?.trim() || null,
+            admin_day_start_time: p.adminDayStartTime || null,
+            admin_day_end_time: p.adminDayEndTime || null,
+            admin_day_notes: p.adminDayNotes?.trim() || null,
           })
           .select()
           .single()
-        if (error) throw error
+        if (error) {
+          throw new Error(error.message || 'Could not create report')
+        }
         return data as DailyReport
       } catch (e) {
         const message =

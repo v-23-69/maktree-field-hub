@@ -13,13 +13,12 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import { useManagers, useWorkingWithReportOptions } from '@/hooks/useManagers';
 import { useManagerMrs } from '@/hooks/useManagerTeam';
 import type { ReportFormData } from '@/pages/mr/NewReport';
+import type { ReportKind } from '@/lib/dcrLabels';
 import { useAuth } from '@/hooks/useAuth';
 import { useAllowedReportDates } from '@/hooks/useReport';
 import { cn } from '@/lib/utils';
 import { useEffect, useCallback, useMemo } from 'react';
 import { formatShortDateIst } from '@/lib/dateUtils';
-
-type ReportKind = NonNullable<ReportFormData['reportKind']>;
 
 function Avatar({ src, name, size = 'md' }: { src?: string | null; name: string; size?: 'sm' | 'md' }) {
   const px = size === 'md' ? 'h-10 w-10' : 'h-8 w-8';
@@ -78,12 +77,14 @@ interface Props {
   onCanProceedChange?: (canProceed: boolean) => void;
 }
 
-const DCR_TYPE_OPTIONS: { value: ReportKind; label: string; mrOnly?: boolean }[] = [
+const DCR_TYPE_OPTIONS: { value: ReportKind; label: string; mrOnly?: boolean; managerOnly?: boolean }[] = [
   { value: 'field', label: 'Normal DCR' },
+  { value: 'meeting', label: 'Meeting DCR' },
   { value: 'sunday', label: 'Sunday DCR' },
   { value: 'strike', label: 'Strike DCR' },
   { value: 'holiday', label: 'Holiday DCR' },
   { value: 'leave', label: 'Leave DCR', mrOnly: true },
+  { value: 'admin_day', label: 'Admin day', managerOnly: true },
 ];
 
 export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanProceedChange }: Props) {
@@ -144,7 +145,11 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
     return null;
   }, [selectedDateRow, user?.role]);
 
-  const dcrTypeOptions = DCR_TYPE_OPTIONS.filter(o => !o.mrOnly || user?.role === 'mr');
+  const dcrTypeOptions = DCR_TYPE_OPTIONS.filter(o => {
+    if (o.mrOnly && user?.role !== 'mr') return false
+    if (o.managerOnly && user?.role !== 'manager') return false
+    return true
+  });
 
   const setReportKind = (kind: ReportKind) => {
     onChange({
@@ -161,6 +166,23 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
       ...(kind === 'leave'
         ? { leaveDcrCategory: 'casual', leaveDcrRemark: '' }
         : { leaveDcrCategory: '', leaveDcrRemark: '' }),
+      ...(kind === 'meeting'
+        ? {
+            meetingDurationType: 'full_day',
+            meetingStartTime: '09:00',
+            meetingEndTime: '18:00',
+            meetingType: 'weekly',
+            meetingAttendeeIds: user?.id ? [user.id] : [],
+            meetingNotes: '',
+          }
+        : {}),
+      ...(kind === 'admin_day'
+        ? {
+            adminDayStartTime: '09:00',
+            adminDayEndTime: '18:00',
+            adminDayNotes: '',
+          }
+        : {}),
     });
   };
 

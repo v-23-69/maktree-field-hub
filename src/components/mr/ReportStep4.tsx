@@ -14,7 +14,7 @@ import type { ReportFormData } from '@/pages/mr/NewReport';
 import { useAuth } from '@/hooks/useAuth';
 import { useProducts } from '@/hooks/useProducts';
 import { useDoctorsBySubAreas } from '@/hooks/useDoctors';
-import { useMrSubAreas } from '@/hooks/useAreas';
+import { useAllAreas, useMrSubAreas } from '@/hooks/useAreas';
 import {
   findExistingDailyReport,
   saveReportVisit,
@@ -60,40 +60,59 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
   const { data: products = [], isLoading: productsLoading } = useProducts();
   const { data: doctors = [], isLoading: doctorsLoading } = useDoctorsBySubAreas(data.selectedSubAreaIds);
   const { data: subAreasFlat = [], isLoading: subAreasLoading } = useMrSubAreas(user?.id ?? '');
+  const { data: allAreas = [] } = useAllAreas();
   const { data: workingOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role);
   const { data: managers = [] } = useManagers();
 
   const createReport = useCreateReport();
   const submitReport = useSubmitReport();
 
-  const subAreaNameById = useMemo(() => {
-    const m = new Map<string, string>();
+  const { subAreaNameById, areaNameById, areaNameBySubAreaId } = useMemo(() => {
+    const subNames = new Map<string, string>();
+    const areaNames = new Map<string, string>();
+    const areaBySub = new Map<string, string>();
     for (const sa of subAreasFlat) {
-      m.set(sa.id, sa.name);
+      subNames.set(sa.id, sa.name);
+      if (sa.area?.name) areaBySub.set(sa.id, sa.area.name);
+      if (sa.area_id) areaNames.set(sa.area_id, sa.area?.name ?? '');
     }
-    return m;
-  }, [subAreasFlat]);
-
-  const areaNameBySubAreaId = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const sa of subAreasFlat) {
-      m.set(sa.id, sa.area?.name ?? '');
+    for (const area of allAreas) {
+      areaNames.set(area.id, area.name);
+      for (const sa of area.sub_areas ?? []) {
+        subNames.set(sa.id, sa.name);
+        areaBySub.set(sa.id, area.name);
+      }
     }
-    return m;
-  }, [subAreasFlat]);
+    return {
+      subAreaNameById: subNames,
+      areaNameById: areaNames,
+      areaNameBySubAreaId: areaBySub,
+    };
+  }, [subAreasFlat, allAreas]);
 
   const areaLabels = useMemo(() => {
     const names = new Set<string>();
     for (const id of data.selectedSubAreaIds) {
-      const n = areaNameBySubAreaId.get(id);
-      if (n) names.add(n);
+      const fromSub = areaNameBySubAreaId.get(id);
+      const fromArea = areaNameById.get(id);
+      if (fromSub) names.add(fromSub);
+      else if (fromArea) names.add(fromArea);
     }
     return [...names].sort((a, b) => a.localeCompare(b));
-  }, [data.selectedSubAreaIds, areaNameBySubAreaId]);
+  }, [data.selectedSubAreaIds, areaNameBySubAreaId, areaNameById]);
 
-  const subAreasLabels = data.selectedSubAreaIds.map(
-    id => subAreaNameById.get(id) ?? id,
-  );
+  const subAreasLabels = useMemo(() => {
+    const labels: string[] = [];
+    for (const id of data.selectedSubAreaIds) {
+      const sub = subAreaNameById.get(id);
+      if (sub) {
+        labels.push(sub);
+        continue;
+      }
+      if (areaNameById.has(id)) continue;
+    }
+    return labels;
+  }, [data.selectedSubAreaIds, subAreaNameById, areaNameById]);
 
   const colleagues = useMemo((): Array<WorkingWithOption | ManagerRow> => {
     const ids = data.workingWithIds?.length
@@ -160,6 +179,17 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
       let reportId: string;
       if (existing?.status === 'draft') {
         reportId = existing.id;
+        if (existing.report_kind && existing.report_kind !== 'field') {
+          const { error: kindErr } = await supabase
+            .from('daily_reports')
+            .update({
+              report_kind: 'field',
+              leave_dcr_category: null,
+              leave_dcr_remark: null,
+            })
+            .eq('id', reportId);
+          if (kindErr) throw kindErr;
+        }
       } else {
         const row = await createReport.mutateAsync({
           mrId: user.id,

@@ -43,6 +43,29 @@ export interface Area {
   created_at: string
 }
 
+export interface Stockist {
+  id: string
+  area_id: string
+  name: string
+  is_active: boolean
+  created_at: string
+  created_by?: string | null
+}
+
+export interface StockistMeet {
+  id: string
+  user_id: string
+  meet_date: string
+  meet_time?: string | null
+  area_id: string
+  stockist_id: string
+  notes?: string | null
+  created_at: string
+  updated_at: string
+  stockist?: { id: string; name: string } | null
+  area?: { id: string; name: string } | null
+}
+
 export interface SubArea {
   id: string
   area_id: string
@@ -116,10 +139,25 @@ export interface DailyReport {
   status: ReportStatus
   submitted_at: string | null
   created_at: string
-  /** 'field' = normal DCR; 'leave' = Leave DCR; 'sunday' = Sunday DCR (no visits) */
-  report_kind?: 'field' | 'leave' | 'sunday'
-  leave_dcr_category?: 'casual' | 'sick' | null
+  report_kind?:
+    | 'field'
+    | 'leave'
+    | 'sunday'
+    | 'strike'
+    | 'holiday'
+    | 'meeting'
+    | 'admin_day'
+  leave_dcr_category?: 'casual' | 'sick' | 'without_pay' | null
   leave_dcr_remark?: string | null
+  meeting_duration_type?: 'full_day' | 'half_day' | null
+  meeting_start_time?: string | null
+  meeting_end_time?: string | null
+  meeting_type?: 'cycle' | 'sales_review' | 'weekly' | null
+  meeting_attendee_ids?: string[]
+  meeting_notes?: string | null
+  admin_day_start_time?: string | null
+  admin_day_end_time?: string | null
+  admin_day_notes?: string | null
   is_late_submission?: boolean
   mr?: User
   manager?: User
@@ -490,7 +528,7 @@ export interface LeaveRequest {
   manager_id: string | null
   leave_date: string
   leave_type: 'full' | 'half_morning' | 'half_afternoon'
-  leave_category?: 'casual' | 'sick'
+  leave_category?: 'casual' | 'sick' | 'without_pay'
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   manager_note: string | null

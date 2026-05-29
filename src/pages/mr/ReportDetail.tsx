@@ -14,12 +14,15 @@ import type { ReportVisit } from '@/types/database.types';
 import { ChevronDown, Pill, Download, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatDisplayDate } from '@/lib/dateUtils';
+import { leaveCategoryLabel } from '@/lib/leaveLabels';
+import { meetingTypeLabel, reportKindLabel } from '@/lib/dcrLabels';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 import { withPdfGenerationProgress } from '@/lib/dcrPdfAsync';
 import { doctorTerritoryLabels } from '@/lib/doctorTerritory';
+import { useUsersByIds } from '@/hooks/useUsersByIds';
 
 export default function ReportDetail() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +39,20 @@ export default function ReportDetail() {
   const { data: report, isLoading, isError } = useDailyReport(id ?? '');
   const deleteReport = useDeleteReport();
 
+  const attendeeIds = useMemo(() => {
+    if (!report || report.report_kind !== 'meeting') return []
+    const ids = report.meeting_attendee_ids?.length
+      ? report.meeting_attendee_ids
+      : report.working_with_ids ?? []
+    return [...new Set(ids.filter(Boolean))]
+  }, [report])
+
+  const { data: attendeeUsers = [] } = useUsersByIds(attendeeIds)
+  const attendeeNameById = useMemo(
+    () => new Map(attendeeUsers.map(u => [u.id, u.full_name?.trim() || 'Unknown'])),
+    [attendeeUsers],
+  )
+
   const visits: ReportVisit[] = report?.visits ?? [];
   const sortedVisits = useMemo(
     () => [...visits].sort((a, b) => {
@@ -46,9 +63,11 @@ export default function ReportDetail() {
     [visits],
   );
 
-  const reportKind = (report?.report_kind ?? 'field') as 'field' | 'leave' | 'sunday';
+  const reportKind = report?.report_kind ?? 'field';
   const isLeaveDetail = reportKind === 'leave';
   const isSundayDetail = reportKind === 'sunday';
+  const isMeetingDetail = reportKind === 'meeting';
+  const isAdminDayDetail = reportKind === 'admin_day';
 
   const toggleCard = (id: string) => setOpenCards(prev => ({ ...prev, [id]: !prev[id] }));
 
@@ -195,7 +214,7 @@ export default function ReportDetail() {
                 </p>
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Badge variant="outline" className="text-xs">
-                    {(report.leave_dcr_category ?? '') === 'sick' ? 'Sick leave' : 'Casual leave'}
+                    {leaveCategoryLabel(report.leave_dcr_category)}
                   </Badge>
                 </div>
                 {report.leave_dcr_remark?.trim() ? (
@@ -212,6 +231,58 @@ export default function ReportDetail() {
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Non-field day recorded for Sunday. No doctor visits are listed for this date.
                 </p>
+              </div>
+            ) : isMeetingDetail ? (
+              <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground">{reportKindLabel('meeting')}</p>
+                <p className="text-xs text-muted-foreground">
+                  {report.meeting_duration_type === 'half_day' ? 'Half day' : 'Full day'}
+                  {report.meeting_start_time && report.meeting_end_time
+                    ? ` · ${String(report.meeting_start_time).slice(0, 5)} – ${String(report.meeting_end_time).slice(0, 5)}`
+                    : ''}
+                </p>
+                <Badge variant="outline" className="text-xs w-fit">
+                  {meetingTypeLabel(report.meeting_type)}
+                </Badge>
+                {attendeeIds.length > 0 && (
+                  <div className="border-t border-border pt-3 mt-1 space-y-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                      Attendees
+                    </p>
+                    <ul className="flex flex-wrap gap-1.5">
+                      {attendeeIds.map(aid => {
+                        const u = attendeeUsers.find(x => x.id === aid)
+                        const roleLabel =
+                          u?.role === 'manager' ? 'Mgr' : u?.role === 'mr' ? 'MR' : ''
+                        return (
+                          <Badge key={aid} variant="secondary" className="text-[10px] font-medium">
+                            {attendeeNameById.get(aid) ?? '…'}
+                            {roleLabel ? ` (${roleLabel})` : ''}
+                          </Badge>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                )}
+                {report.meeting_notes?.trim() ? (
+                  <p className="text-sm text-foreground whitespace-pre-wrap border-t border-border pt-3 mt-1">
+                    {report.meeting_notes.trim()}
+                  </p>
+                ) : null}
+              </div>
+            ) : isAdminDayDetail ? (
+              <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-2">
+                <p className="text-sm font-semibold text-foreground">{reportKindLabel('admin_day')}</p>
+                <p className="text-xs text-muted-foreground">
+                  {report.admin_day_start_time && report.admin_day_end_time
+                    ? `${String(report.admin_day_start_time).slice(0, 5)} – ${String(report.admin_day_end_time).slice(0, 5)}`
+                    : 'Admin / office work'}
+                </p>
+                {report.admin_day_notes?.trim() ? (
+                  <p className="text-sm text-foreground whitespace-pre-wrap border-t border-border pt-3 mt-1">
+                    {report.admin_day_notes.trim()}
+                  </p>
+                ) : null}
               </div>
             ) : (
             <div>

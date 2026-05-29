@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerOwnLeaves, useUpsertManagerOwnLeave } from '@/hooks/useLeaves'
 import { formatDisplayDate } from '@/lib/dateUtils'
+import { LEAVE_CATEGORY_OPTIONS, leaveCategoryLabel } from '@/lib/leaveLabels'
 
 export default function ManagerSelfLeavePage() {
   const { user } = useAuth()
@@ -16,7 +17,7 @@ export default function ManagerSelfLeavePage() {
   const { data: rows = [] } = useManagerOwnLeaves(managerId)
   const upsert = useUpsertManagerOwnLeave()
   const [leaveDate, setLeaveDate] = useState('')
-  const [leaveCategory, setLeaveCategory] = useState<'casual' | 'sick'>('casual')
+  const [leaveCategory, setLeaveCategory] = useState<'casual' | 'sick' | 'without_pay'>('casual')
   const [remark, setRemark] = useState('')
 
   const sorted = useMemo(() => [...rows].sort((a, b) => b.leave_date.localeCompare(a.leave_date)), [rows])
@@ -31,17 +32,17 @@ export default function ManagerSelfLeavePage() {
         <div className="rounded-xl border border-border p-3 space-y-3">
           <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add / update day</Label>
           <Input type="date" value={leaveDate} onChange={e => setLeaveDate(e.target.value)} className="rounded-lg" />
-          <div className="grid grid-cols-2 gap-2">
-            {(['casual', 'sick'] as const).map(k => (
+          <div className="grid grid-cols-1 gap-2">
+            {LEAVE_CATEGORY_OPTIONS.map(o => (
               <button
-                key={k}
+                key={o.value}
                 type="button"
-                onClick={() => setLeaveCategory(k)}
-                className={`rounded-lg border px-2 py-2 text-sm font-medium ${
-                  leaveCategory === k ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
+                onClick={() => setLeaveCategory(o.value)}
+                className={`rounded-lg border px-2 py-2 text-sm font-medium text-left ${
+                  leaveCategory === o.value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
                 }`}
               >
-                {k === 'casual' ? 'Casual' : 'Sick'}
+                {o.label}
               </button>
             ))}
           </div>
@@ -76,7 +77,7 @@ export default function ManagerSelfLeavePage() {
               <div key={r.id} className="rounded-xl border border-border p-3 flex justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-foreground">{formatDisplayDate(r.leave_date)}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{r.leave_category} leave</p>
+                  <p className="text-xs text-muted-foreground">{leaveCategoryLabel(r.leave_category)}</p>
                   {r.remark && <p className="text-xs text-foreground mt-1">{r.remark}</p>}
                 </div>
               </div>

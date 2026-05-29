@@ -11,6 +11,9 @@ import ReportSundayDcrStep from '@/components/mr/ReportSundayDcrStep';
 import ReportLeaveDcrStep from '@/components/mr/ReportLeaveDcrStep';
 import ReportStrikeDcrStep from '@/components/mr/ReportStrikeDcrStep';
 import ReportHolidayDcrStep from '@/components/mr/ReportHolidayDcrStep';
+import ReportMeetingDcrStep from '@/components/mr/ReportMeetingDcrStep';
+import ReportAdminDayDcrStep from '@/components/mr/ReportAdminDayDcrStep';
+import type { ReportKind } from '@/lib/dcrLabels';
 import ReportStepFooter, { type ReportStepFooterProps } from '@/components/mr/ReportStepFooter';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -45,9 +48,18 @@ export interface ReportFormData {
   visits: Record<string, VisitFormEntry>
   tpAutoFilled?: boolean
   /** DCR type chosen on step 1 before filling the form. */
-  reportKind?: 'field' | 'leave' | 'sunday' | 'strike' | 'holiday'
-  leaveDcrCategory?: 'casual' | 'sick' | ''
+  reportKind?: ReportKind
+  leaveDcrCategory?: 'casual' | 'sick' | 'without_pay' | ''
   leaveDcrRemark?: string
+  meetingDurationType?: 'full_day' | 'half_day'
+  meetingStartTime?: string
+  meetingEndTime?: string
+  meetingType?: 'cycle' | 'sales_review' | 'weekly'
+  meetingAttendeeIds?: string[]
+  meetingNotes?: string
+  adminDayStartTime?: string
+  adminDayEndTime?: string
+  adminDayNotes?: string
 }
 
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
@@ -56,7 +68,7 @@ const DRAFT_KEY = 'maktree_report_draft';
 
 type ReportNavState = {
   date?: string
-  reportKind?: 'field' | 'leave' | 'sunday' | 'strike' | 'holiday'
+  reportKind?: ReportKind
 }
 
 function migrateDraft(raw: unknown): ReportFormData | null {
@@ -87,9 +99,28 @@ function migrateDraft(raw: unknown): ReportFormData | null {
             ? 'strike'
             : o.reportKind === 'holiday'
               ? 'holiday'
-              : 'field',
-    leaveDcrCategory: o.leaveDcrCategory === 'sick' || o.leaveDcrCategory === 'casual' ? o.leaveDcrCategory : '',
+              : o.reportKind === 'meeting'
+                ? 'meeting'
+                : o.reportKind === 'admin_day'
+                  ? 'admin_day'
+                  : 'field',
+    leaveDcrCategory:
+      o.leaveDcrCategory === 'sick' || o.leaveDcrCategory === 'casual' || o.leaveDcrCategory === 'without_pay'
+        ? o.leaveDcrCategory
+        : '',
     leaveDcrRemark: typeof o.leaveDcrRemark === 'string' ? o.leaveDcrRemark : '',
+    meetingDurationType: o.meetingDurationType === 'half_day' ? 'half_day' : 'full_day',
+    meetingStartTime: typeof o.meetingStartTime === 'string' ? o.meetingStartTime : '09:00',
+    meetingEndTime: typeof o.meetingEndTime === 'string' ? o.meetingEndTime : '18:00',
+    meetingType:
+      o.meetingType === 'cycle' || o.meetingType === 'sales_review' || o.meetingType === 'weekly'
+        ? o.meetingType
+        : 'weekly',
+    meetingAttendeeIds: Array.isArray(o.meetingAttendeeIds) ? (o.meetingAttendeeIds as string[]) : [],
+    meetingNotes: typeof o.meetingNotes === 'string' ? o.meetingNotes : '',
+    adminDayStartTime: typeof o.adminDayStartTime === 'string' ? o.adminDayStartTime : '09:00',
+    adminDayEndTime: typeof o.adminDayEndTime === 'string' ? o.adminDayEndTime : '18:00',
+    adminDayNotes: typeof o.adminDayNotes === 'string' ? o.adminDayNotes : '',
   }
 }
 
@@ -166,7 +197,9 @@ export default function NewReport() {
   const sundayFlow = formData.reportKind === 'sunday';
   const strikeFlow = formData.reportKind === 'strike';
   const holidayFlow = formData.reportKind === 'holiday';
-  const altDcrFlow = leaveFlow || sundayFlow || strikeFlow || holidayFlow;
+  const meetingFlow = formData.reportKind === 'meeting';
+  const adminDayFlow = user?.role === 'manager' && formData.reportKind === 'admin_day';
+  const altDcrFlow = leaveFlow || sundayFlow || strikeFlow || holidayFlow || meetingFlow || adminDayFlow;
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
@@ -185,7 +218,9 @@ export default function NewReport() {
         ...(reportKind === 'sunday' ||
         reportKind === 'leave' ||
         reportKind === 'strike' ||
-        reportKind === 'holiday'
+        reportKind === 'holiday' ||
+        reportKind === 'meeting' ||
+        reportKind === 'admin_day'
           ? {
               selectedSubAreaIds: [],
               visits: {},
@@ -199,6 +234,8 @@ export default function NewReport() {
     if (navState.reportKind === 'sunday') setStep(5)
     else if (navState.reportKind === 'strike') setStep(6)
     else if (navState.reportKind === 'holiday') setStep(7)
+    else if (navState.reportKind === 'meeting') setStep(8)
+    else if (navState.reportKind === 'admin_day') setStep(9)
     else if (navState.reportKind === 'leave') setStep(2)
   }, [navState?.date, navState?.reportKind])
 
@@ -221,7 +258,9 @@ export default function NewReport() {
         formData.reportKind === 'sunday' ||
         formData.reportKind === 'strike' ||
         formData.reportKind === 'holiday' ||
-        formData.reportKind === 'leave'
+        formData.reportKind === 'leave' ||
+        formData.reportKind === 'meeting' ||
+        formData.reportKind === 'admin_day'
       )
         return
       const { data, error } = await supabase.rpc('get_tour_plan_for_date', {
@@ -283,7 +322,11 @@ export default function NewReport() {
         ? ['Date', 'Strike DCR']
         : holidayFlow
           ? ['Date', 'Holiday DCR']
-          : STEPS;
+          : meetingFlow
+            ? ['Date', 'Meeting DCR']
+            : adminDayFlow
+              ? ['Date', 'Admin day']
+              : STEPS;
 
   const dockedFooter = useMemo((): ReportStepFooterProps | null => {
     if (step === 1 && !altDcrFlow) {
@@ -300,6 +343,8 @@ export default function NewReport() {
           if (sundayFlow) setStep(5)
           else if (strikeFlow) setStep(6)
           else if (holidayFlow) setStep(7)
+          else if (meetingFlow) setStep(8)
+          else if (adminDayFlow) setStep(9)
           else if (leaveFlow) setStep(2)
         },
         nextDisabled: !step1CanProceed,
@@ -321,7 +366,7 @@ export default function NewReport() {
       }
     }
     return null
-  }, [step, altDcrFlow, leaveFlow, sundayFlow, strikeFlow, holidayFlow, step1CanProceed, step2CanProceed])
+  }, [step, altDcrFlow, leaveFlow, sundayFlow, strikeFlow, holidayFlow, meetingFlow, adminDayFlow, step1CanProceed, step2CanProceed])
 
   if (blockLoading || tpLoading) {
     return (
@@ -490,7 +535,7 @@ export default function NewReport() {
         <div
           className={cn(
             "px-4 md:px-6 py-3 max-w-lg md:max-w-2xl lg:max-w-3xl mx-auto w-full",
-            (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow)) && "pb-28 md:pb-32",
+            (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow) || (step === 8 && meetingFlow) || (step === 9 && adminDayFlow)) && "pb-28 md:pb-32",
           )}
         >
           {step === 1 && (
@@ -503,6 +548,8 @@ export default function NewReport() {
                 if (sundayFlow) setStep(5)
                 else if (strikeFlow) setStep(6)
                 else if (holidayFlow) setStep(7)
+                else if (meetingFlow) setStep(8)
+                else if (adminDayFlow) setStep(9)
                 else if (leaveFlow) setStep(2)
                 else setStep(2)
               }}
@@ -534,6 +581,24 @@ export default function NewReport() {
           )}
           {step === 2 && leaveFlow && (
             <ReportLeaveDcrStep
+              data={formData}
+              onChange={updateData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+            />
+          )}
+          {step === 8 && meetingFlow && (
+            <ReportMeetingDcrStep
+              data={formData}
+              onChange={updateData}
+              onBack={() => setStep(1)}
+              onClearDraft={clearDraft}
+              hideFooter
+            />
+          )}
+          {step === 9 && adminDayFlow && (
+            <ReportAdminDayDcrStep
               data={formData}
               onChange={updateData}
               onBack={() => setStep(1)}

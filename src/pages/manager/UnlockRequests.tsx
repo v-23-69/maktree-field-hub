@@ -42,6 +42,7 @@ import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { DoctorAddRequest, DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
+import { leaveCategoryLabel } from '@/lib/leaveLabels'
 
 type RequestKind =
   | 'unlock'
@@ -190,12 +191,16 @@ export default function UnlockRequests() {
     () => doctorRemovalReqs.filter(r => r.status === 'pending'),
     [doctorRemovalReqs],
   )
+  const pendingTpDeletions = useMemo(
+    () => tpDeletionReqs.filter(r => r.status === 'pending'),
+    [tpDeletionReqs],
+  )
 
   const pendingActionCount =
     pending.length +
     pendingLateDcr.length +
     pendingTp.length +
-    tpDeletionReqs.length +
+    pendingTpDeletions.length +
     pendingLeaves.length +
     pendingDocRemovals.length +
     doctorAddReqs.length
@@ -627,7 +632,7 @@ export default function UnlockRequests() {
         <p className="text-sm font-bold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
         <p className="text-xs text-muted-foreground">
           {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')} ·{' '}
-          {(leave.leave_category ?? 'casual') === 'sick' ? 'Sick' : 'Casual'}
+          {leaveCategoryLabel(leave.leave_category)}
         </p>
         <p className="text-sm text-foreground">{leave.reason}</p>
       </div>
@@ -864,7 +869,7 @@ export default function UnlockRequests() {
                   {pending.map(req => renderUnlockCard(req))}
                   {pendingLateDcr.map(req => renderLateDcrCard(req))}
                   {pendingTp.map(tp => renderTourProgramCard(tp))}
-                  {tpDeletionReqs.map(req => renderTpDeletionCard(req))}
+                  {pendingTpDeletions.map(req => renderTpDeletionCard(req))}
                   {pendingLeaves.map(leave => renderLeaveCard(leave))}
                   {pendingDocRemovals.map(req => renderDoctorRemovalCard(req))}
                   {doctorAddReqs.map(req => renderDoctorAddCard(req))}

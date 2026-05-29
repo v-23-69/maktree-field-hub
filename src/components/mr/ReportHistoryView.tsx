@@ -11,13 +11,19 @@ import {
   useRequestLateDcrFill,
 } from '@/hooks/useLateDcr'
 import { historyReportHref, type ReportHistoryLinkMode } from '@/lib/reportHistoryLinks'
-import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2, Send } from 'lucide-react'
+import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2, Send, Store, Receipt } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate, isOutsideDefaultDcrWindow, isSundayYmd, todayInputDate } from '@/lib/dateUtils'
 import { isDateInLateRequestPool, MAX_LATE_DCR_BATCH } from '@/lib/lateDcrEligibility'
 import { Button } from '@/components/ui/button'
 import DcrDaySummaryScreen from '@/components/mr/DcrDaySummaryScreen'
 import { toast } from 'sonner'
+import { useStockistMeetsByMonth } from '@/hooks/useStockistMeets'
+import StockistMeetDayScreen from '@/components/stockist/StockistMeetDayScreen'
+import type { StockistMeet } from '@/types/database.types'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -73,6 +79,9 @@ export default function ReportHistoryView({
   const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [summaryReportId, setSummaryReportId] = useState<string | null>(null)
   const [summaryDateLabel, setSummaryDateLabel] = useState('')
+  const [stockistDay, setStockistDay] = useState<{ date: string; label: string; meets: StockistMeet[] } | null>(
+    null,
+  )
 
   const { data: daySummary, isFetching: summaryLoading } = useReportVisitDaySummary(summaryReportId)
 
@@ -147,6 +156,59 @@ export default function ReportHistoryView({
     return reports.filter(r => r.report_date.startsWith(prefix))
   }, [reports, viewMonth])
 
+  const { data: stockistMeets = [] } = useStockistMeetsByMonth(
+    subjectMrId,
+    viewMonth.year,
+    viewMonth.month,
+  )
+  const stockistMeetDates = useMemo(() => {
+    const set = new Set<string>()
+    for (const m of stockistMeets) set.add(m.meet_date)
+    return set
+  }, [stockistMeets])
+
+  const stockistMeetsByDate = useMemo(() => {
+    const map = new Map<string, StockistMeet[]>()
+    for (const m of stockistMeets) {
+      const list = map.get(m.meet_date) ?? []
+      list.push(m)
+      map.set(m.meet_date, list)
+    }
+    return map
+  }, [stockistMeets])
+
+  const monthRange = useMemo(() => {
+    const from = `${viewMonth.year}-${String(viewMonth.month + 1).padStart(2, '0')}-01`
+    const end = new Date(Date.UTC(viewMonth.year, viewMonth.month + 1, 0, 12, 0, 0))
+    const to = `${end.getUTCFullYear()}-${String(end.getUTCMonth() + 1).padStart(2, '0')}-${String(
+      end.getUTCDate(),
+    ).padStart(2, '0')}`
+    return { from, to }
+  }, [viewMonth.year, viewMonth.month])
+
+  const { data: expenseSubmittedDates = [] } = useQuery({
+    queryKey: ['expense-submitted-dates', subjectMrId, monthRange.from, monthRange.to],
+    enabled: !!subjectMrId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
+    queryFn: async (): Promise<string[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase
+        .from('expense_reports')
+        .select('report_date, status')
+        .eq('mr_id', subjectMrId)
+        .gte('report_date', monthRange.from)
+        .lte('report_date', monthRange.to)
+      if (error) throw error
+      const rows = (data ?? []) as Array<{ report_date: string; status: string }>
+      return rows.filter(r => r.status === 'submitted').map(r => r.report_date)
+    },
+  })
+
+  const expenseSubmittedSet = useMemo(
+    () => new Set(expenseSubmittedDates),
+    [expenseSubmittedDates],
+  )
+
   const submittedCount = monthReports.filter(r => r.status === 'submitted').length
   const workingDays = days.filter(d => !d.isSunday && d.date <= todayStr).length
 
@@ -154,6 +216,19 @@ export default function ReportHistoryView({
     setSummaryReportId(null)
     setSummaryDateLabel('')
   }
+
+  const openStockistDay = (date: string) => {
+    const meets = stockistMeetsByDate.get(date) ?? []
+    if (meets.length === 0) return
+    setStockistDay({ date, label: formatDisplayDate(date), meets })
+  }
+
+  const summaryStockistMeets = useMemo(() => {
+    if (!summaryReportId) return []
+    const rep = reports.find(r => r.id === summaryReportId)
+    if (!rep) return []
+    return stockistMeetsByDate.get(rep.report_date) ?? []
+  }, [summaryReportId, reports, stockistMeetsByDate])
 
   const openReport = (report: { id: string; report_date: string }) => {
     navigate(historyReportHref(linkMode, report, subjectMrId))
@@ -228,6 +303,7 @@ export default function ReportHistoryView({
           dateLabel={summaryDateLabel}
           loading={summaryLoading}
           summary={daySummary}
+          stockistMeets={summaryStockistMeets}
           onBack={closeSummary}
           onOpenFullReport={() => {
             const rep = reports.find(r => r.id === summaryReportId)
@@ -239,6 +315,15 @@ export default function ReportHistoryView({
               ? () => requestDelete(summaryReportId)
               : undefined
           }
+        />
+      )}
+
+      {stockistDay && (
+        <StockistMeetDayScreen
+          dateLabel={stockistDay.label}
+          subjectName={subjectName}
+          meets={stockistDay.meets}
+          onBack={() => setStockistDay(null)}
         />
       )}
 
@@ -371,6 +456,9 @@ export default function ReportHistoryView({
                   const isPast = d.date <= todayStr
                   const isToday = d.date === todayStr
                   const isFuture = d.date > todayStr
+                  const hasStockistMeet = stockistMeetDates.has(d.date)
+                  const expenseDone = expenseSubmittedSet.has(d.date)
+                  const expensePending = isSubmitted && isPast && !expenseDone && !d.isSunday
                   const notSubmitted = isPast && !isSubmitted && !d.isSunday
                   const requestable =
                     enableLateRequest &&
@@ -384,25 +472,41 @@ export default function ReportHistoryView({
                     <button
                       key={d.date}
                       type="button"
-                      disabled={isFuture || (selectMode && !requestable && !isSubmitted)}
+                      disabled={
+                        isFuture ||
+                        (selectMode && !requestable && !isSubmitted) ||
+                        (!selectMode &&
+                          !isSubmitted &&
+                          !stockistMeetsByDate.has(d.date) &&
+                          !reports.some(r => r.report_date === d.date))
+                      }
                       onClick={() => {
                         if (selectMode && requestable) {
                           toggleSelectDate(d.date)
                           return
                         }
+                        const dayStockist = stockistMeetsByDate.get(d.date) ?? []
                         const rep = reports.find(r => r.report_date === d.date)
-                        if (!rep) return
-                        if (rep.status === 'submitted') {
+                        if (rep?.status === 'submitted') {
                           setSummaryReportId(rep.id)
                           setSummaryDateLabel(formatDisplayDate(d.date))
-                        } else {
+                          return
+                        }
+                        if (rep) {
                           openReport(rep)
+                          return
+                        }
+                        if (dayStockist.length > 0) {
+                          openStockistDay(d.date)
                         }
                       }}
                       className={cn(
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
                         isToday && !selectMode && 'ring-2 ring-primary/50',
-                        isSubmitted && 'bg-emerald-600/15 text-emerald-800 font-semibold',
+                        isSubmitted &&
+                          (expensePending
+                            ? 'bg-amber-500/15 text-amber-900 font-semibold'
+                            : 'bg-emerald-600/15 text-emerald-800 font-semibold'),
                         notSubmitted && 'bg-red-500/10 text-red-700',
                         isSelected && 'ring-2 ring-primary bg-primary/15',
                         d.isSunday && !isSubmitted && 'text-muted-foreground/50',
@@ -412,22 +516,63 @@ export default function ReportHistoryView({
                       )}
                     >
                       <span>{d.day}</span>
-                      {isSubmitted && <CheckCircle2 className="h-2.5 w-2.5 mt-0.5" />}
+                      <div className="flex items-center gap-0.5 mt-0.5">
+                        {isSubmitted && <CheckCircle2 className="h-2.5 w-2.5" />}
+                        {expensePending && <Receipt className="h-2.5 w-2.5 text-muted-foreground" />}
+                        {hasStockistMeet && <Store className="h-2.5 w-2.5 text-primary" />}
+                      </div>
                     </button>
                   )
                 })}
               </div>
             </div>
 
+            {stockistMeets.length > 0 && (
+              <div className="rounded-xl border border-border/60 bg-card p-3 space-y-2">
+                <p className="text-xs font-semibold text-foreground">
+                  Stockist meets this month ({stockistMeets.length})
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {linkMode === 'manager-team' || linkMode === 'manager-self'
+                    ? `Logged by ${subjectName}. Tap a day with the store icon on the calendar.`
+                    : 'Tap a day with the store icon to view details.'}
+                </p>
+                <ul className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {stockistMeets.map(m => (
+                    <li key={m.id}>
+                      <button
+                        type="button"
+                        className="w-full text-left text-xs rounded-lg px-2 py-1.5 hover:bg-muted/60 flex justify-between gap-2"
+                        onClick={() => openStockistDay(m.meet_date)}
+                      >
+                        <span className="font-medium text-foreground truncate">
+                          {m.stockist?.name ?? 'Stockist'}
+                        </span>
+                        <span className="text-muted-foreground shrink-0">
+                          {formatDisplayDate(m.meet_date)}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground justify-center">
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-emerald-600/15" /> Submitted (tap for summary)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-3 h-3 rounded bg-amber-500/15" /> Expense pending
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-red-500/10" /> Not Submitted
               </span>
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-muted/50" /> Sunday
+              </span>
+              <span className="flex items-center gap-1">
+                <Store className="h-3 w-3 text-muted-foreground" /> Stockist meet
               </span>
             </div>
           </div>
