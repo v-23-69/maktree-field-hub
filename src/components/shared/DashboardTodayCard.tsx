@@ -448,6 +448,7 @@ export default function DashboardTodayCard({
                           : formatShortDateIst(d.report_date)}
                     </p>
                     <p className="text-[9px] max-md:text-[10px] text-muted-foreground capitalize">
+                      {d.is_late_slot ? 'Late DCR · ' : ''}
                       {d.day_type === 'leave' ? 'Leave' : isSunday ? 'Sunday' : 'Field'}
                     </p>
                   </div>

@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  Headphones,
 } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -54,6 +55,7 @@ export default function ProfilePage() {
   const effectiveUserId = userId || user?.id
   const isReadOnly = !!userId && user?.role === 'manager'
   const canEdit = !isReadOnly || user?.role === 'admin'
+  const showSupportLink = !userId && (user?.role === 'mr' || user?.role === 'manager')
 
   const { data: profile, isLoading } = useProfile(effectiveUserId)
   const updateProfile = useUpdateProfile()
@@ -248,6 +250,21 @@ export default function ProfilePage() {
               {updateProfile.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
+        )}
+
+        {showSupportLink && (
+          <button
+            type="button"
+            onClick={() => navigate('/profile/support')}
+            className="w-full glass-card !rounded-xl px-4 py-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+          >
+            <Headphones className="h-4 w-4 text-primary shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-foreground">Contact Support</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Portal help · Vishal</p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+          </button>
         )}
 
         {/* Theme */}

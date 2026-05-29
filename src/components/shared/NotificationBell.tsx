@@ -42,7 +42,8 @@ function shouldKeepUnread(n: UserNotification): boolean {
     kind.includes('approval') ||
     kind.includes('leave') ||
     kind.includes('unlock') ||
-    kind.includes('complaint')
+    kind.includes('complaint') ||
+    kind.includes('late_dcr')
   if (!isRequestLike) return false
   if (!status) return true
   return !TERMINAL_REQUEST_STATUSES.has(status)

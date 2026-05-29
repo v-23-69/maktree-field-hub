@@ -6,6 +6,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
+import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import InstallPrompt from "@/components/shared/InstallPrompt";
+import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
+import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
+import NotificationProvider from "@/components/shared/NotificationProvider";
 import type { UserRole } from "@/types/database.types";
 
 function AppRoute({
@@ -23,11 +28,6 @@ function AppRoute({
     </ProtectedRoute>
   );
 }
-import LoadingSpinner from "@/components/shared/LoadingSpinner";
-import InstallPrompt from "@/components/shared/InstallPrompt";
-import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
-import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
-import NotificationProvider from "@/components/shared/NotificationProvider";
 
 const Login = lazy(() => import("@/pages/auth/Login"));
 const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
@@ -43,6 +43,7 @@ const ManagerDashboard = lazy(() => import("@/pages/manager/Dashboard"));
 const ManagerReports = lazy(() => import("@/pages/manager/Reports"));
 const ManagerAnalytics = lazy(() => import("@/pages/manager/Analytics"));
 const ManagerHistory = lazy(() => import("@/pages/manager/ManagerHistory"));
+const ManagerLateDcrGrant = lazy(() => import("@/pages/manager/ManagerLateDcrGrant"));
 const UnlockRequests = lazy(() => import("@/pages/manager/UnlockRequests"));
 const ManagerTargets = lazy(() => import("@/pages/manager/Targets"));
 const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
@@ -66,6 +67,7 @@ const AdminTargets = lazy(() => import("@/pages/admin/Targets"));
 const AdminHolidays = lazy(() => import("@/pages/admin/Holidays"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
 const ProfilePage = lazy(() => import("@/pages/profile/Profile"));
+const ContactSupport = lazy(() => import("@/pages/profile/ContactSupport"));
 
 function PageLoader() {
   return (
@@ -117,6 +119,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/blocked-complaint" element={<BlockedComplaint />} />
             <Route path="/profile" element={<AppRoute scope="profile" allowedRoles={['mr', 'manager', 'admin']}><ProfilePage /></AppRoute>} />
+            <Route path="/profile/support" element={<AppRoute scope="profile-support" allowedRoles={['mr', 'manager']}><ContactSupport /></AppRoute>} />
             <Route path="/profile/:userId" element={<AppRoute scope="profile-view" allowedRoles={['manager', 'admin']}><ProfilePage /></AppRoute>} />
 
             {/* MR Routes */}
@@ -147,6 +150,7 @@ const App = () => (
             <Route path="/manager/team" element={<AppRoute scope="manager-team" allowedRoles={['manager']}><ManagerTeamHub /></AppRoute>} />
             <Route path="/manager/team/:mrId" element={<AppRoute scope="manager-team-mr" allowedRoles={['manager']}><ManagerTeamMrDetail /></AppRoute>} />
             <Route path="/manager/history" element={<AppRoute scope="manager-history" allowedRoles={['manager']}><ManagerHistory /></AppRoute>} />
+            <Route path="/manager/late-dcr-grant" element={<AppRoute scope="manager-late-dcr-grant" allowedRoles={['manager']}><ManagerLateDcrGrant /></AppRoute>} />
             <Route path="/manager/report/history" element={<Navigate to="/manager/history" replace />} />
             <Route path="/manager/report/new" element={<AppRoute scope="manager-report-new" allowedRoles={['manager']}><NewReport /></AppRoute>} />
             <Route path="/manager/dcr-import/:importId" element={<AppRoute scope="manager-dcr-import" allowedRoles={['manager']}><ManagerDcrImport /></AppRoute>} />

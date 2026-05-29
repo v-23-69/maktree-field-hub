@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
 import {
   AlertTriangle,
+  CalendarClock,
   CalendarDays,
   CalendarOff,
   CheckCircle2,
@@ -26,6 +27,8 @@ import {
   UserRoundPlus,
   XCircle,
 } from 'lucide-react'
+import { useManagerLateDcrRequests, useResolveLateDcrRequest } from '@/hooks/useLateDcr'
+import type { LateDcrFillRequest } from '@/types/database.types'
 import {
   useManagerPendingTourPrograms,
   useResolveTourProgram,
@@ -40,7 +43,14 @@ import { cn } from '@/lib/utils'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { DoctorAddRequest, DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
 
-type RequestKind = 'unlock' | 'tour-program' | 'tp-deletion' | 'leave' | 'doctor-removal' | 'doctor-add'
+type RequestKind =
+  | 'unlock'
+  | 'late-dcr'
+  | 'tour-program'
+  | 'tp-deletion'
+  | 'leave'
+  | 'doctor-removal'
+  | 'doctor-add'
 
 const KIND_META: Record<
   RequestKind,
@@ -50,6 +60,11 @@ const KIND_META: Record<
     label: 'DCR unlock',
     className: 'bg-indigo-500/10 text-indigo-800 border-indigo-500/30 dark:text-indigo-200',
     icon: KeyRound,
+  },
+  'late-dcr': {
+    label: 'Late DCR',
+    className: 'bg-blue-500/10 text-blue-900 border-blue-500/30 dark:text-blue-200',
+    icon: CalendarClock,
   },
   'tour-program': {
     label: 'Tour program',
@@ -95,6 +110,8 @@ export default function UnlockRequests() {
 
   const { data, isLoading: unlockLoading, isError } = useManagerUnlockRequests(managerId)
   const resolve = useResolveUnlockRequest()
+  const { data: lateDcrReqs = [], isLoading: lateDcrLoading } = useManagerLateDcrRequests(managerId)
+  const resolveLateDcr = useResolveLateDcrRequest()
 
   const pending = data?.pending ?? []
   const resolved = data?.resolved ?? []
@@ -164,6 +181,10 @@ export default function UnlockRequests() {
   const [docRemovalNoteById, setDocRemovalNoteById] = useState<Record<string, string>>({})
   const [docAddNoteById, setDocAddNoteById] = useState<Record<string, string>>({})
 
+  const pendingLateDcr = useMemo(
+    () => lateDcrReqs.filter(r => r.status === 'pending'),
+    [lateDcrReqs],
+  )
   const pendingLeaves = useMemo(() => leaves.filter(l => l.status === 'pending'), [leaves])
   const pendingDocRemovals = useMemo(
     () => doctorRemovalReqs.filter(r => r.status === 'pending'),
@@ -172,6 +193,7 @@ export default function UnlockRequests() {
 
   const pendingActionCount =
     pending.length +
+    pendingLateDcr.length +
     pendingTp.length +
     tpDeletionReqs.length +
     pendingLeaves.length +
@@ -179,6 +201,7 @@ export default function UnlockRequests() {
     doctorAddReqs.length
   const isLoading =
     unlockLoading ||
+    lateDcrLoading ||
     tpLoading ||
     tpDelLoading ||
     leavesLoading ||
@@ -225,6 +248,69 @@ export default function UnlockRequests() {
       setRejectingId(null)
       setRejectComment('')
     }
+  }
+
+  const renderLateDcrCard = (req: LateDcrFillRequest) => {
+    const datesLabel = (req.requested_dates ?? [])
+      .map(d => formatDisplayDate(d))
+      .join(', ')
+    return (
+      <div
+        key={`late-dcr-${req.id}`}
+        className="rounded-xl bg-card border border-border p-4 shadow-sm space-y-3"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <KindBadge kind="late-dcr" />
+          {statusBadge(req.status)}
+        </div>
+        <p className="text-sm font-semibold text-foreground">{req.mr_full_name ?? 'MR'}</p>
+        <p className="text-xs text-muted-foreground">
+          {(req.requested_dates ?? []).length} day(s): {datesLabel}
+        </p>
+        {req.status === 'pending' ? (
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              className="flex-1 touch-target rounded-lg bg-emerald-600 text-white hover:bg-emerald-600/90"
+              disabled={resolveLateDcr.isPending}
+              onClick={() =>
+                void resolveLateDcr
+                  .mutateAsync({ requestId: req.id, action: 'approved', mrId: req.mr_id })
+                  .then(() => toast.success('Late DCR dates approved'))
+                  .catch(e => toast.error(e instanceof Error ? e.message : 'Approve failed'))
+              }
+            >
+              <CheckCircle2 className="h-4 w-4 mr-1.5" />
+              Approve
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 touch-target rounded-lg border-destructive text-destructive hover:bg-destructive/5"
+              disabled={resolveLateDcr.isPending}
+              onClick={() =>
+                void resolveLateDcr
+                  .mutateAsync({
+                    requestId: req.id,
+                    action: 'rejected',
+                    managerComment: 'Not approved',
+                    mrId: req.mr_id,
+                  })
+                  .then(() => toast.success('Request rejected'))
+                  .catch(e => toast.error(e instanceof Error ? e.message : 'Reject failed'))
+              }
+            >
+              <XCircle className="h-4 w-4 mr-1.5" />
+              Reject
+            </Button>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {req.manager_comment ? `Note: ${req.manager_comment}` : 'Resolved'}
+          </p>
+        )}
+      </div>
+    )
   }
 
   const renderUnlockCard = (req: {
@@ -776,6 +862,7 @@ export default function UnlockRequests() {
               ) : (
                 <div className="space-y-3">
                   {pending.map(req => renderUnlockCard(req))}
+                  {pendingLateDcr.map(req => renderLateDcrCard(req))}
                   {pendingTp.map(tp => renderTourProgramCard(tp))}
                   {tpDeletionReqs.map(req => renderTpDeletionCard(req))}
                   {pendingLeaves.map(leave => renderLeaveCard(leave))}

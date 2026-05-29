@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import BottomNav from '@/components/shared/BottomNav';
@@ -7,7 +8,9 @@ import { useAuth } from '@/hooks/useAuth';
 export default function ReportHistory() {
   const { goBack: safeGoBack } = usePreventAccidentalBack(true);
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const isManager = user?.role === 'manager';
+  const initialRequestLateMode = searchParams.get('requestLate') === '1';
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -24,6 +27,8 @@ export default function ReportHistory() {
             subjectName={user.full_name ?? 'You'}
             linkMode={isManager ? 'manager-self' : 'mr'}
             showPdfCard={!isManager}
+            enableLateRequest={!isManager}
+            initialRequestLateMode={initialRequestLateMode}
           />
         )}
       </div>

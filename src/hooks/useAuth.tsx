@@ -1,20 +1,10 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react'
-import { User, AuthState, UserRole } from '@/types/database.types'
+import { useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react'
+import { User, UserRole } from '@/types/database.types'
 import { supabase } from '@/lib/supabase'
 import { prefetchRoleDashboard } from '@/lib/prefetchDashboard'
 import { resetProfilePromptSession } from '@/lib/profileCompletion'
+import { AuthContext, type AuthContextType } from '@/contexts/auth-context'
 
-interface AuthContextType extends AuthState {
-  signIn: (
-    email: string,
-    password: string,
-  ) => Promise<{ success: boolean; error?: string }>
-  logout: () => Promise<void>
-  blockedInfo: { isBlocked: boolean; blockReason: string | null } | null
-  clearBlockedInfo: () => void
-}
-
-const AuthContext = createContext<AuthContextType | null>(null)
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const PROFILE_SELECT =
@@ -22,7 +12,6 @@ const PROFILE_SELECT =
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
-  // Keep login UI responsive even if session check is slow.
   const [authReady, setAuthReady] = useState(true)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
@@ -246,12 +235,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, authReady, isProfileLoading, signIn, logout, blockedInfo, clearBlockedInfo])
 
-  return (
-    <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
+export function useAuth(): AuthContextType {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx

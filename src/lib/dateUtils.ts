@@ -12,6 +12,20 @@ export function todayInputDate(): string {
   }).format(new Date())
 }
 
+/** Oldest date in the default 3-day DCR window (today and previous 2 days, IST). */
+export function oldestDefaultDcrWindowDate(): string {
+  const today = todayInputDate()
+  const [y, m, d] = today.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0))
+  dt.setUTCDate(dt.getUTCDate() - 2)
+  return `${dt.getUTCFullYear()}-${String(dt.getUTCMonth() + 1).padStart(2, '0')}-${String(dt.getUTCDate()).padStart(2, '0')}`
+}
+
+/** True when the date is older than the standard filing window (needs late approval). */
+export function isOutsideDefaultDcrWindow(ymd: string): boolean {
+  return ymd < oldestDefaultDcrWindowDate()
+}
+
 /** True when `dob` (any year) falls on today's calendar month/day in IST. */
 export function isDobCelebrationToday(dob: string | null | undefined): boolean {
   if (!dob) return false

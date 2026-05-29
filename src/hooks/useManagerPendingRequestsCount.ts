@@ -11,8 +11,10 @@ export function useManagerPendingRequestsCount(managerId: string): number {
     queryFn: async (): Promise<number> => {
       if (!supabase) return 0
 
-      const [unlockRpc, tpDelRpc, leavesRes, docDelRes, docAddRes, mrsRpc] = await Promise.all([
+      const [unlockRpc, lateDcrRpc, tpDelRpc, leavesRes, docDelRes, docAddRes, mrsRpc] =
+        await Promise.all([
         supabase.rpc('list_unlock_requests_for_manager'),
+        supabase.rpc('list_late_dcr_fill_requests_for_manager'),
         supabase.rpc('list_tour_program_deletion_requests_for_manager'),
         supabase
           .from('leave_requests')
@@ -36,6 +38,12 @@ export function useManagerPendingRequestsCount(managerId: string): number {
             r => r.status === 'pending',
           ).length
 
+      const lateDcrPending = lateDcrRpc.error
+        ? 0
+        : ((lateDcrRpc.data ?? []) as Array<{ status?: string }>).filter(
+            r => r.status === 'pending',
+          ).length
+
       const tpDelPending = tpDelRpc.error ? 0 : (tpDelRpc.data ?? []).length
 
       const leavePending = leavesRes.error ? 0 : leavesRes.count ?? 0
@@ -55,7 +63,15 @@ export function useManagerPendingRequestsCount(managerId: string): number {
         }
       }
 
-      return unlockPending + tpDelPending + tpSubmitPending + leavePending + docPending + docAddPending
+      return (
+        unlockPending +
+        lateDcrPending +
+        tpDelPending +
+        tpSubmitPending +
+        leavePending +
+        docPending +
+        docAddPending
+      )
     },
   })
 

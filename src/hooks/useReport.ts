@@ -487,16 +487,31 @@ export function useSubmitReport() {
     mutationFn: async (reportId: string) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
-        const { data, error } = await supabase
-          .from('daily_reports')
-          .update({
-            status: 'submitted',
-            submitted_at: new Date().toISOString(),
-          })
-          .eq('id', reportId)
-          .select()
-          .single()
-        if (error) throw error
+        const { data, error } = await supabase.rpc('submit_daily_report', {
+          p_report_id: reportId,
+        })
+        if (error) {
+          if (error.code === 'PGRST202') {
+            const { data: fallback, error: fbErr } = await supabase
+              .from('daily_reports')
+              .update({
+                status: 'submitted',
+                submitted_at: new Date().toISOString(),
+              })
+              .eq('id', reportId)
+              .select()
+              .single()
+            if (fbErr) throw fbErr
+            const report = fallback as DailyReport
+            void supabase.rpc('notify_dcr_submitted_to_manager', {
+              p_mr_id: report.mr_id,
+              p_report_date: report.report_date,
+              p_manager_id: report.manager_id,
+            })
+            return report
+          }
+          throw error
+        }
         const report = data as DailyReport
         void supabase.rpc('notify_dcr_submitted_to_manager', {
           p_mr_id: report.mr_id,
@@ -514,6 +529,8 @@ export function useSubmitReport() {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
       queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots'] })
       invalidateDashboardQueries(queryClient)
     },
   })

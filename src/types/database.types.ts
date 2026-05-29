@@ -120,6 +120,7 @@ export interface DailyReport {
   report_kind?: 'field' | 'leave' | 'sunday'
   leave_dcr_category?: 'casual' | 'sick' | null
   leave_dcr_remark?: string | null
+  is_late_submission?: boolean
   mr?: User
   manager?: User
 }
@@ -347,6 +348,20 @@ export interface AllowedReportDate {
   already_submitted: boolean
   /** 'working' | 'leave' | 'holiday' | 'strike' | 'sunday' from get_allowed_report_dates */
   day_type?: string
+  /** True when date was opened via manager-approved late backfill slot */
+  is_late_slot?: boolean
+}
+
+export interface LateDcrFillRequest {
+  id: string
+  mr_id: string
+  mr_full_name?: string
+  manager_id: string
+  requested_dates: string[]
+  status: 'pending' | 'approved' | 'rejected'
+  manager_comment: string | null
+  reviewed_at: string | null
+  created_at: string
 }
 
 export interface ReportUnlockRequest {

@@ -1,14 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import DcrPdfDownloadCard from '@/components/mr/DcrPdfDownloadCard'
 import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { useMrReportsWithVisitCounts, useDeleteReport, useReportVisitDaySummary } from '@/hooks/useReport'
+import {
+  useActiveLateSlotCount,
+  useNextMissedLateBatchDates,
+  useRequestLateDcrFill,
+} from '@/hooks/useLateDcr'
 import { historyReportHref, type ReportHistoryLinkMode } from '@/lib/reportHistoryLinks'
-import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2 } from 'lucide-react'
+import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2, Send } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatDisplayDate, isSundayYmd } from '@/lib/dateUtils'
+import { formatDisplayDate, isOutsideDefaultDcrWindow, isSundayYmd, todayInputDate } from '@/lib/dateUtils'
+import { isDateInLateRequestPool, MAX_LATE_DCR_BATCH } from '@/lib/lateDcrEligibility'
 import { Button } from '@/components/ui/button'
 import DcrDaySummaryScreen from '@/components/mr/DcrDaySummaryScreen'
 import { toast } from 'sonner'
@@ -32,6 +38,10 @@ type Props = {
   subjectName: string
   linkMode: ReportHistoryLinkMode
   showPdfCard?: boolean
+  /** MR only: multi-select missed days to request late DCR approval from manager */
+  enableLateRequest?: boolean
+  /** Open request picker on load (e.g. from dashboard link). */
+  initialRequestLateMode?: boolean
   emptyMessage?: string
 }
 
@@ -40,10 +50,17 @@ export default function ReportHistoryView({
   subjectName,
   linkMode,
   showPdfCard = false,
+  enableLateRequest = false,
+  initialRequestLateMode = false,
   emptyMessage = 'No reports yet for this period.',
 }: Props) {
   const navigate = useNavigate()
   const { data: reports = [], isLoading, isError } = useMrReportsWithVisitCounts(subjectMrId)
+  const { data: activeLateSlots = 0 } = useActiveLateSlotCount(enableLateRequest ? subjectMrId : '')
+  const { data: requestPool = [], isLoading: requestPoolLoading } = useNextMissedLateBatchDates(
+    enableLateRequest ? subjectMrId : '',
+  )
+  const requestLate = useRequestLateDcrFill()
   const deleteReport = useDeleteReport()
   const canManagerDelete = linkMode === 'manager-team' || linkMode === 'manager-self'
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
@@ -52,6 +69,8 @@ export default function ReportHistoryView({
     return { year: now.getFullYear(), month: now.getMonth() }
   })
   const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set())
   const [summaryReportId, setSummaryReportId] = useState<string | null>(null)
   const [summaryDateLabel, setSummaryDateLabel] = useState('')
 
@@ -70,10 +89,48 @@ export default function ReportHistoryView({
     return set
   }, [reports])
 
-  const todayStr = useMemo(() => {
-    const n = new Date()
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
-  }, [])
+  const todayStr = todayInputDate()
+
+  const requestPoolSet = useMemo(() => new Set(requestPool), [requestPool])
+
+  useEffect(() => {
+    if (!initialRequestLateMode || !enableLateRequest || requestPoolLoading) return
+    if (requestPool.length === 0) return
+    setView('calendar')
+    const first = requestPool[0]
+    if (first) {
+      const [y, m] = first.split('-').map(Number)
+      setViewMonth({ year: y, month: m - 1 })
+    }
+    setSelectMode(true)
+  }, [initialRequestLateMode, enableLateRequest, requestPool, requestPoolLoading])
+
+  const tryToggleRequestLateMode = () => {
+    if (requestPoolLoading) {
+      toast.message('Loading missed DCR dates…')
+      return
+    }
+    if (activeLateSlots > 0) {
+      toast.error(
+        `Complete your ${activeLateSlots} open late DCR(s) from the dashboard first, then you can request more.`,
+      )
+      return
+    }
+    if (requestPool.length === 0) {
+      toast.error('No missed DCR dates in your current batch to request right now.')
+      return
+    }
+    if (!selectMode) {
+      setView('calendar')
+      const first = requestPool[0]
+      if (first) {
+        const [y, m] = first.split('-').map(Number)
+        setViewMonth({ year: y, month: m - 1 })
+      }
+    }
+    setSelectMode(v => !v)
+    setSelectedDates(new Set())
+  }
 
   const monthLabel = new Date(viewMonth.year, viewMonth.month).toLocaleDateString(undefined, {
     month: 'long',
@@ -110,6 +167,45 @@ export default function ReportHistoryView({
   const requestDelete = (reportId: string) => {
     if (summaryReportId === reportId) closeSummary()
     setDeleteTargetId(reportId)
+  }
+
+  const toggleSelectDate = (date: string) => {
+    if (!isDateInLateRequestPool(date, requestPool)) {
+      toast.error('This date is not in your current batch of requestable missed days')
+      return
+    }
+    setSelectedDates(prev => {
+      const next = new Set(prev)
+      if (next.has(date)) next.delete(date)
+      else {
+        if (next.size >= MAX_LATE_DCR_BATCH) {
+          toast.error(`You can select at most ${MAX_LATE_DCR_BATCH} days per request`)
+          return prev
+        }
+        next.add(date)
+      }
+      return next
+    })
+  }
+
+  const handleRequestLate = async () => {
+    const dates = [...selectedDates].sort()
+    if (dates.length === 0) {
+      toast.error('Select at least one missed day')
+      return
+    }
+    if (dates.length > 15) {
+      toast.error('Select at most 15 days per request')
+      return
+    }
+    try {
+      await requestLate.mutateAsync(dates)
+      toast.success('Late DCR request sent to your manager')
+      setSelectMode(false)
+      setSelectedDates(new Set())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not send request')
+    }
   }
 
   const handleDeleteReport = async () => {
@@ -160,30 +256,73 @@ export default function ReportHistoryView({
       />
 
       <div className="space-y-4">
-        <p className="text-sm text-muted-foreground">
-          Showing history for <span className="font-semibold text-foreground">{subjectName}</span>
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="inline-flex rounded-lg border border-border/80 p-0.5 bg-muted/30">
+            <button
+              type="button"
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                view === 'calendar' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+              )}
+              onClick={() => setView('calendar')}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              className={cn(
+                'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+                view === 'list' ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground',
+              )}
+              onClick={() => setView('list')}
+            >
+              List
+            </button>
+          </div>
+
+          {enableLateRequest && (
+            <Button
+              type="button"
+              variant={selectMode ? 'secondary' : 'outline'}
+              size="sm"
+              className="rounded-lg text-xs h-8"
+              onClick={tryToggleRequestLateMode}
+            >
+              {selectMode ? 'Cancel' : 'Request late DCR'}
+            </Button>
+          )}
+        </div>
+
+        {enableLateRequest && activeLateSlots > 0 && (
+          <p className="text-xs text-amber-800 bg-amber-500/10 rounded-lg px-3 py-2">
+            You have {activeLateSlots} approved late DCR(s) to file — see Pending on your dashboard.
+          </p>
+        )}
+
+        {enableLateRequest && selectMode && (
+          <p className="text-xs text-muted-foreground">
+            Select up to {MAX_LATE_DCR_BATCH} missed days from your current batch (highlighted in red).
+            After these are approved and filed, you can request the next batch.
+          </p>
+        )}
 
         {showPdfCard && subjectMrId && (
           <DcrPdfDownloadCard mrId={subjectMrId} mrName={subjectName} />
         )}
 
-        <div className="flex gap-2">
+        {selectMode && selectedDates.size > 0 && (
           <Button
-            variant={view === 'calendar' ? 'default' : 'outline'}
-            className="flex-1 touch-target rounded-lg text-xs"
-            onClick={() => setView('calendar')}
+            type="button"
+            className="w-full rounded-xl gap-2"
+            disabled={requestLate.isPending}
+            onClick={() => void handleRequestLate()}
           >
-            Calendar
+            <Send className="h-4 w-4" />
+            {requestLate.isPending
+              ? 'Sending…'
+              : `Ask manager to approve ${selectedDates.size} day(s)`}
           </Button>
-          <Button
-            variant={view === 'list' ? 'default' : 'outline'}
-            className="flex-1 touch-target rounded-lg text-xs"
-            onClick={() => setView('list')}
-          >
-            List
-          </Button>
-        </div>
+        )}
 
         {view === 'calendar' && (
           <div className="space-y-3">
@@ -233,13 +372,24 @@ export default function ReportHistoryView({
                   const isToday = d.date === todayStr
                   const isFuture = d.date > todayStr
                   const notSubmitted = isPast && !isSubmitted && !d.isSunday
+                  const requestable =
+                    enableLateRequest &&
+                    selectMode &&
+                    notSubmitted &&
+                    isOutsideDefaultDcrWindow(d.date) &&
+                    requestPoolSet.has(d.date)
+                  const isSelected = selectedDates.has(d.date)
 
                   return (
                     <button
                       key={d.date}
                       type="button"
-                      disabled={isFuture}
+                      disabled={isFuture || (selectMode && !requestable && !isSubmitted)}
                       onClick={() => {
+                        if (selectMode && requestable) {
+                          toggleSelectDate(d.date)
+                          return
+                        }
                         const rep = reports.find(r => r.report_date === d.date)
                         if (!rep) return
                         if (rep.status === 'submitted') {
@@ -251,11 +401,13 @@ export default function ReportHistoryView({
                       }}
                       className={cn(
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
-                        isToday && 'ring-2 ring-primary/50',
+                        isToday && !selectMode && 'ring-2 ring-primary/50',
                         isSubmitted && 'bg-emerald-600/15 text-emerald-800 font-semibold',
                         notSubmitted && 'bg-red-500/10 text-red-700',
+                        isSelected && 'ring-2 ring-primary bg-primary/15',
                         d.isSunday && !isSubmitted && 'text-muted-foreground/50',
                         isFuture && 'opacity-30',
+                        selectMode && !requestable && !isSubmitted && 'opacity-40',
                         !isSubmitted && !notSubmitted && !isFuture && !d.isSunday && 'text-foreground',
                       )}
                     >
