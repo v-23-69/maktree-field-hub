@@ -15,6 +15,27 @@ export const PROFILE_REQUIRED_FIELDS = [
   'emergency_contact_mobile',
 ] as const
 
+export type ProfileRequiredField = (typeof PROFILE_REQUIRED_FIELDS)[number]
+
+export const PROFILE_FIELD_META: Record<
+  ProfileRequiredField,
+  { label: string; type: 'text' | 'tel' | 'date' | 'textarea' }
+> = {
+  full_name: { label: 'Full Name', type: 'text' },
+  designation: { label: 'Designation', type: 'text' },
+  dob: { label: 'Date of Birth', type: 'date' },
+  joining_date: { label: 'Joining Date', type: 'date' },
+  mobile: { label: 'Mobile', type: 'tel' },
+  aadhaar_number: { label: 'Aadhaar Number', type: 'text' },
+  pan_number: { label: 'PAN Number', type: 'text' },
+  address: { label: 'Address', type: 'textarea' },
+  city: { label: 'City', type: 'text' },
+  state: { label: 'State', type: 'text' },
+  pincode: { label: 'Pincode', type: 'text' },
+  emergency_contact_name: { label: 'Emergency Contact Name', type: 'text' },
+  emergency_contact_mobile: { label: 'Emergency Contact Mobile', type: 'tel' },
+}
+
 export function getProfileMissingFields(
   profile: Record<string, unknown> | null | undefined,
 ): string[] {
@@ -36,7 +57,7 @@ export function isProfileComplete(
   profile: Record<string, unknown> | null | undefined,
 ): boolean {
   if (!profile) return false
-  return getProfileCompletionPct(profile) >= 100
+  return getProfileMissingFields(profile).length === 0
 }
 
 const LEGACY_DISMISSED_KEY = (userId: string) => `maktree_sfa_profile_prompt_dismissed_${userId}`

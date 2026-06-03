@@ -30,22 +30,7 @@ import BottomNav from '@/components/shared/BottomNav'
 import ProfileSummaryCard, {
   profileStatFromContact,
 } from '@/components/dashboard/profile-summary-card'
-
-const REQUIRED_FIELDS: string[] = [
-  'full_name',
-  'designation',
-  'dob',
-  'joining_date',
-  'mobile',
-  'aadhaar_number',
-  'pan_number',
-  'address',
-  'city',
-  'state',
-  'pincode',
-  'emergency_contact_name',
-  'emergency_contact_mobile',
-]
+import { getProfileCompletionPct, getProfileMissingFields } from '@/lib/profileCompletion'
 
 export default function ProfilePage() {
   const { user, logout } = useAuth()
@@ -64,17 +49,24 @@ export default function ProfilePage() {
   const [showEdit, setShowEdit] = useState(false)
 
   const values = profile ? { ...profile, ...form } : null
-  const missingFields = useMemo(() => {
-    if (!values) return []
-    return REQUIRED_FIELDS.filter(field => !String(values[field] ?? '').trim())
-  }, [values])
-  const completion = values?.profile_complete_pct ?? Math.max(0, 100 - missingFields.length * 8)
+  const missingFields = useMemo(
+    () => (values ? getProfileMissingFields(values as Record<string, unknown>) : []),
+    [values],
+  )
+  const completion = values
+    ? getProfileCompletionPct(values as Record<string, unknown>)
+    : 0
+  const aadhaarDigits = useMemo(
+    () => String(values?.aadhaar_number ?? '').replace(/\D/g, ''),
+    [values?.aadhaar_number],
+  )
+  const aadhaarMissing = aadhaarDigits.length === 0
   const maskedAadhaar = useMemo(() => {
-    const raw = String(values?.aadhaar_number ?? '')
-    const digits = raw.replace(/\D/g, '')
-    if (digits.length < 4) return raw || '—'
-    return `XXXX-XXXX-${digits.slice(-4)}`
-  }, [values?.aadhaar_number])
+    if (aadhaarMissing) return '—'
+    if (aadhaarDigits.length < 4) return aadhaarDigits
+    return `XXXX-XXXX-${aadhaarDigits.slice(-4)}`
+  }, [aadhaarDigits, aadhaarMissing])
+  const aadhaarTouched = 'aadhaar_number' in form || editingAadhaar
 
   const initials = profile?.full_name
     ?.split(' ')
@@ -204,15 +196,32 @@ export default function ProfilePage() {
                 <Label className="text-xs">{label}</Label>
                 <Input
                   value={
-                    key === 'aadhaar_number' && !editingAadhaar
-                      ? maskedAadhaar
+                    key === 'aadhaar_number'
+                      ? aadhaarMissing || editingAadhaar || 'aadhaar_number' in form
+                        ? form.aadhaar_number ?? aadhaarDigits
+                        : maskedAadhaar
                       : String(values?.[key] ?? '')
                   }
-                  type={type}
+                  type={key === 'aadhaar_number' ? 'text' : type}
+                  inputMode={key === 'aadhaar_number' ? 'numeric' : undefined}
                   readOnly={key === 'employee_code' || key === 'role'}
-                  onFocus={() => { if (key === 'aadhaar_number') setEditingAadhaar(true) }}
-                  onBlur={() => { if (key === 'aadhaar_number') setEditingAadhaar(false) }}
-                  onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+                  onFocus={() => {
+                    if (key === 'aadhaar_number') {
+                      setEditingAadhaar(true)
+                      if (aadhaarMissing) {
+                        setForm(prev => ({ ...prev, aadhaar_number: '' }))
+                      }
+                    }
+                  }}
+                  onChange={e => {
+                    if (key === 'aadhaar_number') {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 12)
+                      setForm(prev => ({ ...prev, aadhaar_number: digits }))
+                      return
+                    }
+                    setForm(prev => ({ ...prev, [key]: e.target.value }))
+                  }}
+                  placeholder={key === 'aadhaar_number' && aadhaarMissing ? '12-digit Aadhaar number' : undefined}
                   className="rounded-lg"
                 />
               </div>
@@ -236,7 +245,8 @@ export default function ProfilePage() {
                   .mutateAsync({
                     userId: effectiveUserId!,
                     updates: form,
-                    allowAadhaar: editingAadhaar,
+                    allowAadhaar:
+                      aadhaarTouched || aadhaarMissing || missingFields.includes('aadhaar_number'),
                   })
                   .then(() => {
                     setForm({})

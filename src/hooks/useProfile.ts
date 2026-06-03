@@ -12,8 +12,18 @@ export function useProfile(userId?: string) {
     ...PROFILE_QUERY_OPTIONS,
     queryFn: async (): Promise<UserProfile> => {
       if (!supabase || !userId) throw new Error('Supabase not configured')
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData.session) {
+        throw new Error('Session expired. Please sign in again.')
+      }
       const { data, error } = await supabase.from('users').select(USER_PROFILE_COLUMNS).eq('id', userId).single()
-      if (error) throw error
+      if (error) {
+        const msg = [error.message, error.code].filter(Boolean).join(' ')
+        if (/jwt|session|refresh|token|not found|401|403/i.test(msg)) {
+          throw new Error('Session expired. Please sign in again.')
+        }
+        throw error
+      }
       return data as UserProfile
     },
   })
