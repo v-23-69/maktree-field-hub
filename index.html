@@ -23,6 +23,17 @@
     <meta property="og:image" content="/android-chrome-512x512.png" />
   </head>
   <body>
+    <script>
+      (function () {
+        var stored = localStorage.getItem('maktree-theme');
+        var theme = stored === 'dark' ? 'dark' : 'light';
+        if (stored === 'system') {
+          localStorage.setItem('maktree-theme', 'light');
+        }
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(theme);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

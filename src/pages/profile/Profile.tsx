@@ -15,7 +15,6 @@ import {
   User as UserIcon,
   Sun,
   Moon,
-  Monitor,
   Headphones,
 } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
@@ -301,7 +300,6 @@ function InfoRow({ icon: Icon, label, value }: { icon: React.ElementType; label:
 const THEMES = [
   { value: 'light' as const, label: 'Light', icon: Sun },
   { value: 'dark' as const, label: 'Dark', icon: Moon },
-  { value: 'system' as const, label: 'System', icon: Monitor },
 ]
 
 function ThemeSelector() {
@@ -310,7 +308,7 @@ function ThemeSelector() {
   return (
     <div className="glass-card !rounded-xl p-3.5 space-y-2.5">
       <p className="section-title">Appearance</p>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         {THEMES.map(t => {
           const active = theme === t.value
           return (

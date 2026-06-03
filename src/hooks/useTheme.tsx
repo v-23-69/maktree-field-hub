@@ -1,10 +1,10 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = 'light' | 'dark';
 
 interface ThemeContextValue {
   theme: Theme;
-  resolvedTheme: 'light' | 'dark';
+  resolvedTheme: Theme;
   setTheme: (t: Theme) => void;
 }
 
@@ -14,37 +14,25 @@ const ThemeContext = createContext<ThemeContextValue>({
   setTheme: () => {},
 });
 
-function getSystemTheme(): 'light' | 'dark' {
+function readStoredTheme(): Theme {
   if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  const stored = localStorage.getItem('maktree-theme');
+  if (stored === 'dark') return 'dark';
+  // Default and legacy "system" (or unknown) → light
+  if (stored === 'system') {
+    localStorage.setItem('maktree-theme', 'light');
+  }
+  return 'light';
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const stored = localStorage.getItem('maktree-theme') as Theme | null;
-    if (stored === 'system') {
-      localStorage.setItem('maktree-theme', 'light');
-      return 'light';
-    }
-    return stored ?? 'light';
-  });
-
-  const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(getSystemTheme);
-
-  const resolvedTheme = theme === 'system' ? systemTheme : theme;
-
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e: MediaQueryListEvent) => setSystemTheme(e.matches ? 'dark' : 'light');
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
 
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove('light', 'dark');
-    root.classList.add(resolvedTheme);
-  }, [resolvedTheme]);
+    root.classList.add(theme);
+  }, [theme]);
 
   const setTheme = (t: Theme) => {
     setThemeState(t);
@@ -52,7 +40,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme: theme, setTheme }}>
       {children}
     </ThemeContext.Provider>
   );
