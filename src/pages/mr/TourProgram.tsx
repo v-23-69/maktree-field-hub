@@ -7,7 +7,7 @@ import BottomNav from '@/components/shared/BottomNav'
 import { Button } from '@/components/ui/button'
 import { todayInputDate, calendarWeekdaySun0, formatShortDateIst } from '@/lib/dateUtils'
 import { useAuth } from '@/hooks/useAuth'
-import { CalendarDays, Check, AlertCircle, Users, Save, Trash2, ChevronDown } from 'lucide-react'
+import { CalendarDays, Check, AlertCircle, Users, Save, Trash2, Copy } from 'lucide-react'
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { cn } from '@/lib/utils'
@@ -22,7 +22,9 @@ import {
   useBeginTourProgramRevision,
   useRequestTourProgramDeletion,
   useDeleteTourProgramAsManager,
+  useManagerImportTourProgram,
 } from '@/hooks/useTourProgram'
+import ManagerTpImportDrawer from '@/components/manager/ManagerTpImportDrawer'
 import { supabase } from '@/lib/supabase'
 import { useMrSubAreasGrouped } from '@/hooks/useAreas'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
@@ -136,10 +138,13 @@ export default function TourProgramPage() {
   const beginRevision = useBeginTourProgramRevision()
   const requestTpDeletion = useRequestTourProgramDeletion()
   const deleteTpAsManager = useDeleteTourProgramAsManager()
+  const importTp = useManagerImportTourProgram()
   const [tpDeleteOpen, setTpDeleteOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
   const { data: history = [] } = useTourProgramHistory(activeMrId)
   const { data: assignedAreaGroups = [] } = useMrSubAreasGrouped(activeMrId)
+  const { data: selfAreaGroups = [] } = useMrSubAreasGrouped(isManager ? selfId : '')
   const { data: teamMrs = [] } = useManagerMrs(isManager ? selfId : '')
   const { goBack: safeGoBack } = usePreventAccidentalBack(true)
 
@@ -189,6 +194,41 @@ export default function TourProgramPage() {
     assignedAreaGroups.flatMap(g => g.sub_areas.map(sa => ({ ...sa, areaName: g.area.name }))),
     [assignedAreaGroups],
   )
+
+  const managerSubAreas = useMemo(() =>
+    selfAreaGroups.flatMap(g => g.sub_areas.map(sa => ({ ...sa, areaName: g.area.name }))),
+    [selfAreaGroups],
+  )
+
+  const sourceMrName = teamMrs.find(m => m.id === viewMrId)?.full_name ?? 'MR'
+  const importableWorkingDates = useMemo(
+    () => workingDayRows.map(d => d.work_date),
+    [workingDayRows],
+  )
+
+  const handleImportConfirm = async (rows: Array<{ work_date: string; sub_area_id: string; apply_to: 'self' | 'both' }>) => {
+    if (!viewMrId) return
+    try {
+      const result = await importTp.mutateAsync({
+        sourceMrId: viewMrId,
+        month,
+        entries: rows.map(r => ({
+          work_date: r.work_date,
+          sub_area_id: r.sub_area_id,
+          apply_to: r.apply_to,
+        })),
+      })
+      toast.success(
+        `Imported ${result.self_days} day(s) to your plan` +
+          (result.mr_days_updated > 0 ? ` · ${result.mr_days_updated} day(s) updated for ${sourceMrName}` : ''),
+      )
+      setImportOpen(false)
+      setTab('self')
+      setViewMrId('')
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Import failed')
+    }
+  }
 
   const buildEntryRows = (tpId: string) =>
     workingDayRows
@@ -334,18 +374,25 @@ export default function TourProgramPage() {
         )}
 
         {isManager && tab === 'team' && (
-          <div className="relative">
-            <select
-              value={viewMrId}
-              onChange={e => setViewMrId(e.target.value)}
-              className="flex h-11 w-full rounded-xl border-2 border-border/60 bg-card px-3 text-sm font-medium appearance-none focus:border-primary focus:outline-none transition-colors"
-            >
-              <option value="">Select MR to view</option>
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground">Team MRs</p>
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
               {teamMrs.map(mr => (
-                <option key={mr.id} value={mr.id}>{mr.full_name}</option>
+                <button
+                  key={mr.id}
+                  type="button"
+                  onClick={() => setViewMrId(mr.id)}
+                  className={cn(
+                    'shrink-0 rounded-xl border px-3 py-2 text-left min-w-[100px] max-w-[140px] transition-all',
+                    viewMrId === mr.id
+                      ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                      : 'border-border/80 bg-card hover:border-primary/30',
+                  )}
+                >
+                  <p className="text-xs font-bold leading-snug line-clamp-2">{mr.full_name}</p>
+                </button>
               ))}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            </div>
           </div>
         )}
 
@@ -404,6 +451,18 @@ export default function TourProgramPage() {
                 <p className="text-xs mt-2">Note: {tpQuery.data.manager_note}</p>
               )}
             </div>
+
+            {isManager && tab === 'team' && viewMrId && filledCount > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full rounded-2xl h-11 text-sm font-semibold gap-2"
+                onClick={() => setImportOpen(true)}
+              >
+                <Copy className="h-4 w-4" />
+                Import {sourceMrName}&apos;s plan to mine
+              </Button>
+            )}
 
             {!isManager && !isViewOnly && (currentStatus === 'submitted' || currentStatus === 'approved') && tpQuery.data?.id && (
               <Button
@@ -570,8 +629,21 @@ export default function TourProgramPage() {
         {tab === 'team' && !viewMrId && (
           <div className="glass-card p-6 text-center space-y-2">
             <Users className="h-8 w-8 text-muted-foreground mx-auto" />
-            <p className="text-sm font-medium text-muted-foreground">Select an MR above to view their tour program</p>
+            <p className="text-sm font-medium text-muted-foreground">Tap an MR above to view their tour program</p>
           </div>
+        )}
+
+        {isManager && (
+          <ManagerTpImportDrawer
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            sourceMrName={sourceMrName}
+            workingDates={importableWorkingDates}
+            sourceEntries={dbEntries}
+            managerSubAreas={managerSubAreas}
+            saving={importTp.isPending}
+            onConfirm={rows => void handleImportConfirm(rows)}
+          />
         )}
       </div>
 

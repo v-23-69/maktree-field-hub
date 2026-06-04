@@ -164,6 +164,40 @@ export function useCopyPreviousMonth() {
   })
 }
 
+export type TourProgramImportEntry = {
+  work_date: string
+  sub_area_id: string
+  apply_to: 'self' | 'both'
+}
+
+export function useManagerImportTourProgram() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (payload: {
+      sourceMrId: string
+      month: string
+      entries: TourProgramImportEntry[]
+    }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('manager_import_tour_program', {
+        p_source_mr_id: payload.sourceMrId,
+        p_month: payload.month,
+        p_entries: payload.entries,
+      })
+      if (error) throw error
+      return data as { self_days: number; mr_days_updated: number; tour_program_id: string }
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program-entries'] })
+      queryClient.invalidateQueries({ queryKey: ['tp-status'] })
+      queryClient.invalidateQueries({ queryKey: ['today-tp-plan'] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications', vars.sourceMrId] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+    },
+  })
+}
+
 export function useManagerPendingTourPrograms(managerId: string) {
   return useQuery({
     queryKey: ['manager-pending-tour-programs', managerId],

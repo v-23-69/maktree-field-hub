@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store, Archive } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -37,6 +37,7 @@ import { ActionToolbar } from '@/components/ui/action-toolbar';
 import { MANAGER_FILTER_OPTIONS } from '@/lib/dashboardDateRange';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 import { useCreateStockist } from '@/hooks/useStockists';
+import { useMonthsNeedingBackup } from '@/hooks/useManagerBackup';
 
 type QuickAction = 'assign-self' | 'strike' | 'holiday' | 'add-stockist' | null
 
@@ -104,6 +105,7 @@ export default function ManagerDashboard() {
     [mgrAllowedDates],
   );
   const { data: pendingImports = [] } = usePendingDcrImports(deferReady ? (user?.id ?? '') : '');
+  const { data: monthsNeedingBackup = [] } = useMonthsNeedingBackup(deferReady ? (user?.id ?? '') : '');
   const todayImport = pendingImports.find(p => p.report_date === mgrTodayDate);
   const showMgrSundayDcr = mgrTodayIsSunday && !mgrTodayDcrDone;
   const [strikeDate, setStrikeDate] = useState(todayInputDate());
@@ -283,6 +285,27 @@ export default function ManagerDashboard() {
             <p className="text-xs text-muted-foreground mt-1">
               Assign at least one area to yourself (Quick Actions → Assign Self), then create your tour program. Until then, your own DCR stays closed. Use Team in the bottom nav to manage MRs.
             </p>
+          </div>
+        )}
+
+        {monthsNeedingBackup.length > 0 && (
+          <div className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-sm max-md:order-[13] flex items-start gap-3">
+            <Archive className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0 space-y-2">
+              <p className="font-semibold text-foreground">Monthly data backup recommended</p>
+              <p className="text-xs text-muted-foreground">
+                Download Excel backups for{' '}
+                {monthsNeedingBackup.map(m => m.month_label.trim()).join(', ')}.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs rounded-lg"
+                onClick={() => navigate('/manager/backup')}
+              >
+                Open backup
+              </Button>
+            </div>
           </div>
         )}
 

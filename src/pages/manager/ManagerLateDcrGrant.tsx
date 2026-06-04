@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { CalendarClock } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
@@ -18,9 +18,13 @@ import { useMrReportsWithVisitCounts } from '@/hooks/useReport'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils'
 import { MAX_LATE_DCR_BATCH } from '@/lib/lateDcrEligibility'
+import { supabase } from '@/lib/supabase'
+import { useQueryClient } from '@tanstack/react-query'
+
 import { toast } from 'sonner'
 
 export default function ManagerLateDcrGrant() {
+  const queryClient = useQueryClient()
   const { user } = useAuth()
   const managerId = user?.id ?? ''
   const navigate = useNavigate()
@@ -37,10 +41,8 @@ export default function ManagerLateDcrGrant() {
 
   const todayStr = todayInputDate()
   const { data: reports = [] } = useMrReportsWithVisitCounts(selectedMrId)
-  const { data: activeSlots = 0, isLoading: slotsLoading } = useActiveLateSlotCount(selectedMrId)
-  const { data: activeSlotRows = [], isLoading: slotsListLoading } = useActiveLateSlots(
-    tab === 'revoke' ? selectedMrId : '',
-  )
+  const { isLoading: slotsLoading } = useActiveLateSlotCount(selectedMrId)
+  const { data: activeSlotRows = [], isLoading: slotsListLoading } = useActiveLateSlots(selectedMrId)
 
   const submittedDates = useMemo(() => {
     const set = new Set<string>()
@@ -49,6 +51,23 @@ export default function ManagerLateDcrGrant() {
     }
     return set
   }, [reports])
+
+  const staleOpenSlots = useMemo(
+    () => activeSlotRows.filter(row => !submittedDates.has(row.report_date)),
+    [activeSlotRows, submittedDates],
+  )
+  const effectiveActiveSlots = staleOpenSlots.length
+
+  useEffect(() => {
+    if (!selectedMrId || !supabase) return
+    const hasStale = activeSlotRows.some(row => submittedDates.has(row.report_date))
+    if (!hasStale) return
+    void supabase.rpc('reconcile_late_fill_slots', { p_mr_id: selectedMrId }).then(({ error }) => {
+      if (error && error.code !== 'PGRST202') return
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots', selectedMrId] })
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots-list', selectedMrId] })
+    })
+  }, [selectedMrId, activeSlotRows, submittedDates, queryClient])
 
   const subjectName = useMemo(() => {
     if (selectedMrId === managerId) return user?.full_name ?? 'Myself'
@@ -80,10 +99,10 @@ export default function ManagerLateDcrGrant() {
   }
 
   const allRevokeSelected =
-    activeSlotRows.length > 0 && revokeDates.size === activeSlotRows.length
+    staleOpenSlots.length > 0 && revokeDates.size === staleOpenSlots.length
 
   const selectAllRevoke = () => {
-    setRevokeDates(new Set(activeSlotRows.map(row => row.report_date)))
+    setRevokeDates(new Set(staleOpenSlots.map(row => row.report_date)))
   }
 
   const clearRevokeSelection = () => {
@@ -209,9 +228,9 @@ export default function ManagerLateDcrGrant() {
 
             {tab === 'grant' && (
               <>
-                {!slotsLoading && activeSlots > 0 && (
+                {!slotsLoading && effectiveActiveSlots > 0 && (
                   <p className="text-sm text-amber-800 bg-amber-500/10 rounded-lg px-3 py-2">
-                    {subjectName} still has {activeSlots} open late DCR(s). Revoke or wait until they
+                    {subjectName} still has {effectiveActiveSlots} open late DCR(s). Revoke or wait until they
                     are all submitted before granting a new batch.
                   </p>
                 )}
@@ -226,7 +245,7 @@ export default function ManagerLateDcrGrant() {
                 <Button
                   type="button"
                   className="w-full rounded-xl font-semibold"
-                  disabled={grant.isPending || activeSlots > 0 || grantDates.size === 0}
+                  disabled={grant.isPending || effectiveActiveSlots > 0 || grantDates.size === 0}
                   onClick={() => void handleGrant()}
                 >
                   {grant.isPending
@@ -239,16 +258,21 @@ export default function ManagerLateDcrGrant() {
             {tab === 'revoke' && (
               <>
                 {slotsListLoading && <LoadingSpinner />}
-                {!slotsListLoading && activeSlotRows.length === 0 && (
+                {!slotsListLoading && staleOpenSlots.length === 0 && activeSlotRows.length > 0 && (
+                  <p className="text-sm text-emerald-800 bg-emerald-500/10 rounded-lg px-3 py-2">
+                    All granted late DCRs are submitted. You can grant a new batch from the Grant dates tab.
+                  </p>
+                )}
+                {!slotsListLoading && staleOpenSlots.length === 0 && activeSlotRows.length === 0 && (
                   <p className="text-sm text-muted-foreground text-center py-4">
                     No open late DCR slots for {subjectName}.
                   </p>
                 )}
-                {!slotsListLoading && activeSlotRows.length > 0 && (
+                {!slotsListLoading && staleOpenSlots.length > 0 && (
                   <div className="space-y-2 rounded-xl border border-border/60 bg-card p-3">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs font-semibold">
-                        Open late slots ({activeSlotRows.length})
+                        Open late slots ({staleOpenSlots.length})
                       </p>
                       <div className="flex gap-2 shrink-0">
                         <button
@@ -270,7 +294,7 @@ export default function ManagerLateDcrGrant() {
                         </button>
                       </div>
                     </div>
-                    {activeSlotRows.map(row => (
+                    {staleOpenSlots.map(row => (
                       <label
                         key={row.slot_id}
                         className="flex items-center gap-2 text-sm py-1.5 border-b border-border/40 last:border-0"

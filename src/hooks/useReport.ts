@@ -556,13 +556,17 @@ export function useSubmitReport() {
         throw new Error(message)
       }
     },
-    onSuccess: () => {
+    onSuccess: (report) => {
       queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
       queryClient.invalidateQueries({ queryKey: ['daily-report'] })
       queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
       queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
       queryClient.invalidateQueries({ queryKey: ['active-late-slots'] })
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots-list'] })
       invalidateDashboardQueries(queryClient)
+      if (supabase && report?.mr_id) {
+        void supabase.rpc('reconcile_late_fill_slots', { p_mr_id: report.mr_id })
+      }
     },
   })
 }

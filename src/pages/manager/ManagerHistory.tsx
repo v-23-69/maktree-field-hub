@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CalendarClock } from 'lucide-react'
+import { CalendarClock, Archive } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -72,24 +72,38 @@ export default function ManagerHistory() {
                   {selectedMrId ? subjectName : 'Select below'}
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="rounded-xl shrink-0 gap-1.5"
-                asChild
-              >
-                <Link
-                  to={
-                    selectedMrId
-                      ? `/manager/late-dcr-grant?mrId=${selectedMrId}`
-                      : '/manager/late-dcr-grant'
-                  }
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  asChild
                 >
-                  <CalendarClock className="h-4 w-4" />
-                  Allow late DCR
-                </Link>
-              </Button>
+                  <Link
+                    to={
+                      selectedMrId
+                        ? `/manager/late-dcr-grant?mrId=${selectedMrId}`
+                        : '/manager/late-dcr-grant'
+                    }
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    Allow late DCR
+                  </Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  asChild
+                >
+                  <Link to="/manager/backup">
+                    <Archive className="h-4 w-4" />
+                    Backup data
+                  </Link>
+                </Button>
+              </div>
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1">
