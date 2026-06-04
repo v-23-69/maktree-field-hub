@@ -1,0 +1,82 @@
+/* Book page turn — 3D faces for E-Detailing slideshow */
+.book-page-sheet {
+  position: relative;
+  width: min(100%, 1200px);
+  height: min(calc(100dvh - 10rem), calc(100vw - 1.5rem));
+  max-height: 100%;
+  overflow: hidden;
+  border-radius: 4px 8px 8px 4px;
+  border: 1px solid rgba(120, 80, 40, 0.35);
+  background: #f4f0e8;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.45),
+    inset -2px 0 12px rgba(0, 0, 0, 0.06);
+}
+
+.book-page-sheet--static {
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.35);
+}
+
+.book-page-sheet--back {
+  background: linear-gradient(135deg, #ebe5d8 0%, #d9d0c0 50%, #ebe5d8 100%);
+  border-radius: 8px 4px 4px 8px;
+}
+
+.book-page-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #f4f0e8;
+}
+
+.book-page-flip-root {
+  width: min(100%, 1200px);
+  height: min(calc(100dvh - 10rem), calc(100vw - 1.5rem));
+  max-height: 100%;
+}
+
+.book-page-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.book-page-face--front {
+  transform: rotateY(0deg);
+}
+
+.book-page-face--back {
+  transform: rotateY(180deg);
+}
+
+.book-page-edge-glow {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.12) 0%,
+    transparent 8%,
+    transparent 92%,
+    rgba(0, 0, 0, 0.08) 100%
+  );
+}
+
+.book-page-paper-texture {
+  width: 100%;
+  height: 100%;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 3px,
+      rgba(0, 0, 0, 0.02) 3px,
+      rgba(0, 0, 0, 0.02) 4px
+    ),
+    linear-gradient(160deg, #f0ebe0, #d4c9b5);
+}

@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Maximize2, X } from 'lucide-react'
-import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import type { ExplorerMediaItem } from '@/lib/explorerMediaOps'
+import BookPageFlip, { BOOK_FLIP_MS } from './BookPageFlip'
+import './edetailing-book-flip.css'
 
 type Props = {
   open: boolean
@@ -13,8 +13,11 @@ type Props = {
   startIndex?: number
 }
 
-const FLIP_MS = 620
 const SWIPE_THRESHOLD = 48
+
+function itemLabel(item: ExplorerMediaItem) {
+  return item.title?.trim() || item.file_name
+}
 
 export default function EDetailingSlideshow({
   open,
@@ -46,14 +49,14 @@ export default function EDetailingSlideshow({
         setIndex(next)
         setAnimating(false)
         setFlipDir(null)
-      }, FLIP_MS)
+      }, BOOK_FLIP_MS)
     },
     [animating, index, items.length],
   )
 
   useEffect(() => {
     if (!open || paused || items.length < 2) return
-    const t = window.setInterval(() => go('next'), 4500)
+    const t = window.setInterval(() => go('next'), 5000)
     return () => clearInterval(t)
   }, [open, paused, items.length, go])
 
@@ -97,18 +100,18 @@ export default function EDetailingSlideshow({
   if (!open || items.length === 0) return null
 
   const current = items[index]
-  const label = current.title?.trim() || current.file_name
-  const peekIndex =
+  const label = itemLabel(current)
+  const underIndex =
     flipDir === 'next'
       ? (index + 1) % items.length
       : flipDir === 'prev'
         ? (index - 1 + items.length) % items.length
         : null
-  const peekItem = peekIndex !== null ? items[peekIndex] : null
+  const underItem = underIndex !== null ? items[underIndex] : null
 
   const content = (
     <div
-      className="fixed inset-0 z-[100] flex flex-col bg-black touch-none"
+      className="fixed inset-0 z-[100] flex flex-col bg-[#1a1510] touch-none"
       role="dialog"
       aria-modal="true"
       aria-label="Image slideshow"
@@ -122,7 +125,7 @@ export default function EDetailingSlideshow({
         <div className="flex shrink-0 items-center gap-1">
           <span className="hidden text-[10px] text-white/50 sm:inline-flex items-center gap-1">
             <Maximize2 className="h-3 w-3" />
-            Full screen
+            Full screen · Book turn
           </span>
           <Button
             type="button"
@@ -139,66 +142,20 @@ export default function EDetailingSlideshow({
 
       <div
         className="relative flex min-h-0 flex-1 flex-col items-center justify-center px-2 py-2 sm:px-6"
-        style={{ perspective: '1600px' }}
         onClick={handleTapZone}
       >
-        {peekItem && animating && (
-          <div className="absolute inset-4 flex items-center justify-center sm:inset-8">
-            <img
-              src={peekItem.public_url}
-              alt=""
-              className="max-h-full max-w-full rounded-lg object-contain shadow-2xl bg-[#f4f0e8]"
-              draggable={false}
-            />
-          </div>
-        )}
-
-        <div className="relative flex h-full w-full max-h-full max-w-full items-center justify-center [transform-style:preserve-3d]">
-          <motion.div
-            className="relative flex h-full w-full max-h-[calc(100dvh-8rem)] max-w-[min(100%,1200px)] items-center justify-center [transform-style:preserve-3d]"
-            animate={{
-              rotateY:
-                animating && flipDir === 'next'
-                  ? -92
-                  : animating && flipDir === 'prev'
-                    ? 92
-                    : 0,
-              opacity: animating ? 0.4 : 1,
-            }}
-            transition={{
-              duration: FLIP_MS / 1000,
-              ease: [0.42, 0, 0.28, 1],
-            }}
-            style={{
-              transformOrigin: flipDir === 'prev' ? 'right center' : 'left center',
-            }}
-          >
-            <div
-              className={cn(
-                'relative h-[min(calc(100dvh-10rem),calc(100vw-1rem))] max-h-full w-full overflow-hidden rounded-lg border border-amber-900/25 bg-[#f4f0e8] shadow-2xl',
-              )}
-            >
-              <img
-                src={current.public_url}
-                alt={label}
-                className="h-full w-full object-contain"
-                draggable={false}
-              />
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-gradient-to-t from-amber-950/35 to-transparent" />
-              {animating && (
-                <div
-                  className={cn(
-                    'pointer-events-none absolute inset-y-0 w-[45%] bg-gradient-to-r from-amber-950/40 via-black/20 to-transparent',
-                    flipDir === 'next' ? 'right-0 scale-x-[-1]' : 'left-0',
-                  )}
-                />
-              )}
-            </div>
-          </motion.div>
-        </div>
+        <BookPageFlip
+          currentSrc={current.public_url}
+          currentAlt={label}
+          underSrc={underItem?.public_url ?? null}
+          underAlt={underItem ? itemLabel(underItem) : ''}
+          direction={flipDir}
+          animating={animating}
+          className="w-full h-full max-h-[calc(100dvh-8rem)]"
+        />
 
         <p className="pointer-events-none absolute bottom-2 left-0 right-0 text-center text-[10px] text-white/40 sm:hidden">
-          Tap left or right · Swipe to turn pages
+          Tap sides or swipe — pages turn like a book
         </p>
       </div>
 
@@ -213,7 +170,7 @@ export default function EDetailingSlideshow({
             go('prev')
           }}
           disabled={items.length < 2 || animating}
-          aria-label="Previous image"
+          aria-label="Previous page"
         >
           <ChevronLeft className="h-6 w-6" />
         </Button>
@@ -237,7 +194,7 @@ export default function EDetailingSlideshow({
             go('next')
           }}
           disabled={items.length < 2 || animating}
-          aria-label="Next image"
+          aria-label="Next page"
         >
           <ChevronRight className="h-6 w-6" />
         </Button>
