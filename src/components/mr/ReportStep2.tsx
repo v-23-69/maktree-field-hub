@@ -2,12 +2,14 @@ import ReportStepFooter from '@/components/mr/ReportStepFooter';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useMrSubAreasGrouped } from '@/hooks/useAreas';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import EmptyState from '@/components/shared/EmptyState';
 import type { ReportFormData } from '@/pages/mr/NewReport';
-import { Check } from 'lucide-react';
+import { Check, MapPin } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 interface Props {
   data: ReportFormData;
@@ -20,6 +22,7 @@ interface Props {
 
 export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter, onCanProceedChange }: Props) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data: grouped = [], isLoading, isError } = useMrSubAreasGrouped(user?.id ?? '');
 
   const toggleSubArea = (id: string) => {
@@ -72,6 +75,26 @@ export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter
       )}
 
       <p className="text-sm font-semibold text-foreground">Select the areas you worked in today</p>
+      {user?.role === 'manager' && (
+        <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 px-3 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
+          <p className="text-xs text-sky-900 dark:text-sky-200 flex-1 min-w-0">
+            <MapPin className="inline h-3.5 w-3.5 mr-1 shrink-0 text-sky-600" />
+            <span className="font-semibold">Field visits (custom)</span> — file DCR for routes outside your tour program.
+            {grouped.some(g => g.sub_areas.some(s => s.is_manager_custom))
+              ? ' Custom areas you created appear below with a badge.'
+              : ' Create a custom area first, then select it here.'}
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs rounded-lg shrink-0 border-sky-500/30"
+            onClick={() => navigate('/manager/custom-areas')}
+          >
+            Manage custom areas
+          </Button>
+        </div>
+      )}
 
       {grouped.map(({ area, sub_areas }) => (
         <div key={area.id} className="animate-fade-in min-w-0 space-y-2">
@@ -100,7 +123,14 @@ export default function ReportStep2({ data, onChange, onNext, onBack, hideFooter
                     {selected && <Check className="h-3 w-3" />}
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground leading-snug">{sa.name}</p>
+                    <p className="text-sm font-semibold text-foreground leading-snug flex items-center gap-1.5 flex-wrap">
+                      {sa.name}
+                      {sa.is_manager_custom && (
+                        <Badge variant="secondary" className="text-[9px] px-1.5 py-0 h-4 bg-sky-500/15 text-sky-800 border-0">
+                          Custom
+                        </Badge>
+                      )}
+                    </p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{area.name}</p>
                   </div>
                 </button>

@@ -369,6 +369,32 @@ export function useResolveTourProgramDeletionRequest() {
   })
 }
 
+export function useSyncManagerMrTpDayMatch() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: {
+      mrId: string
+      workDate: string
+      month: string
+      subAreaId: string
+    }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('sync_manager_mr_tp_day_match', {
+        p_mr_id: p.mrId,
+        p_work_date: p.workDate,
+        p_month: p.month,
+        p_sub_area_id: p.subAreaId,
+      })
+      if (error) throw error
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['tour-program'] })
+      queryClient.invalidateQueries({ queryKey: ['tour-program-entries'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-tp-day-area', vars.mrId, vars.workDate] })
+    },
+  })
+}
+
 export function useDeleteTourProgramAsManager() {
   const queryClient = useQueryClient()
   return useMutation({

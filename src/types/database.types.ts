@@ -73,6 +73,7 @@ export interface SubArea {
   code: string
   is_active: boolean
   created_at: string
+  is_manager_custom?: boolean
   area?: Area
 }
 
@@ -139,6 +140,7 @@ export interface DailyReport {
   status: ReportStatus
   submitted_at: string | null
   created_at: string
+  manager_dcr_origin?: 'standard' | 'custom' | 'import' | 'mixed' | null
   report_kind?:
     | 'field'
     | 'leave'

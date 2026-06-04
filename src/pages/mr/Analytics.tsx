@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { ManagerStatsFilter } from '@/hooks/useDashboardStats'
+import { managerFilterDateRange, MANAGER_FILTER_OPTIONS } from '@/lib/dashboardDateRange'
+import { ActionToolbar } from '@/components/ui/action-toolbar'
 import { Phone } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -18,7 +21,7 @@ import {
   type PeriodPreset,
 } from '@/hooks/useFieldActivityAnalytics'
 import { buildDayComparisonChart, percentChange } from '@/lib/analyticsPeriodCompare'
-import { todayInputDate } from '@/lib/dateUtils'
+import { formatDisplayDate, todayInputDate } from '@/lib/dateUtils'
 import { cn } from '@/lib/utils'
 
 const PERIOD_PRESETS: PeriodPreset[] = ['weekly', 'monthly', 'yearly']
@@ -31,7 +34,9 @@ export default function MRAnalyticsPage() {
   const { user } = useAuth()
   const mrId = user?.id ?? ''
   const [callPreset, setCallPreset] = useState<PeriodPreset>('monthly')
+  const [perfFilter, setPerfFilter] = useState<ManagerStatsFilter>('This Month')
   const [deferHeavy, setDeferHeavy] = useState(false)
+  const perfRange = useMemo(() => managerFilterDateRange(perfFilter), [perfFilter])
 
   useEffect(() => {
     const t = window.setTimeout(() => setDeferHeavy(true), 200)
@@ -39,7 +44,11 @@ export default function MRAnalyticsPage() {
   }, [])
 
   const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferHeavy ? mrId : '')
-  const { data: perf, isLoading: perfLoading, isError: perfError } = useMrPerformanceMetrics(mrId)
+  const { data: perf, isLoading: perfLoading, isError: perfError } = useMrPerformanceMetrics(
+    mrId,
+    perfRange.from,
+    perfRange.to,
+  )
   const compareEnabled = !!mrId
   const { data: callsBundle, isLoading: callsLoading } = useCallsComparisonAnalytics(
     [mrId],
@@ -74,13 +83,23 @@ export default function MRAnalyticsPage() {
           Your field performance — accurate counts from the database plus call trends and coverage charts.
         </p>
 
+        <ActionToolbar
+          options={MANAGER_FILTER_OPTIONS}
+          value={perfFilter}
+          onChange={setPerfFilter}
+          ariaLabel="Performance period"
+        />
+
         {perfLoading && <LoadingSpinner />}
         {perfError && (
           <EmptyState message="Could not load performance metrics. Pull to refresh or try again later." />
         )}
         {!perfLoading && perf && (
           <>
-            <PerformanceMetricsGrid metrics={perf} />
+            <PerformanceMetricsGrid
+              metrics={perf}
+              periodLabel={`${perfFilter}: ${formatDisplayDate(perf.from)} – ${formatDisplayDate(perf.to)}`}
+            />
             <DashboardRadialMetrics
               title="Doctor call average"
               description="Average doctor calls per field work day for the selected period."

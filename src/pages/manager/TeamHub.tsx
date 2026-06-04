@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ManagerStatsFilter } from '@/hooks/useDashboardStats'
 import { useManagerDashboardStats } from '@/hooks/useDashboardStats'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Users, Plus, ChevronRight, Lock } from 'lucide-react'
+import { Users, Plus, ChevronRight, Lock, MapPin, Stethoscope } from 'lucide-react'
+import { useManagerCustomAreasSummary } from '@/hooks/useManagerCustomAreas'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -69,6 +70,7 @@ export default function TeamHub() {
   const { data: todayExpenses = [] } = useTeamMrsTodayExpenseStatus(mrIds, today)
   const { data: monthTps = [] } = useTeamMrsTourProgramsForMonth(mrIds, monthStart)
   const { data: teamMonthlySupport } = useMonthlySupportAggregateForManagerTeam(managerId, today.slice(0, 7))
+  const { data: customSummary } = useManagerCustomAreasSummary()
   const { data: teamCallAnalytics } = useCallsAndSpecialityAnalytics(
     mrIds,
     teamCallPreset,
@@ -140,6 +142,32 @@ export default function TeamHub() {
               </p>
             </div>
           </div>
+          {customSummary && customSummary.area_count > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/manager/custom-areas')}
+              className={cn(
+                dashboardPanelClass(),
+                'w-full p-3 flex items-center gap-3 text-left active:scale-[0.99] border-sky-500/20 bg-sky-500/5',
+              )}
+            >
+              <div className="h-10 w-10 rounded-xl bg-sky-500/15 flex items-center justify-center shrink-0">
+                <MapPin className="h-5 w-5 text-sky-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-foreground">Your field visits (custom)</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {customSummary.area_count} area{customSummary.area_count !== 1 ? 's' : ''} ·{' '}
+                  {customSummary.doctor_count} doctors · {customSummary.visit_count} calls logged
+                </p>
+              </div>
+              <div className="flex items-center gap-1 text-xs text-sky-700 font-medium shrink-0">
+                <Stethoscope className="h-3.5 w-3.5" />
+                Open
+                <ChevronRight className="h-4 w-4" />
+              </div>
+            </button>
+          )}
         </div>
 
         <TeamPerformanceLeaderboard

@@ -5,6 +5,13 @@ import EmptyState from '@/components/shared/EmptyState'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import ConfirmDialog from '@/components/shared/ConfirmDialog'
 import { useMrReportsWithVisitCounts, useDeleteReport, useReportVisitDaySummary } from '@/hooks/useReport'
+import { useReportImportMrNames } from '@/hooks/useManagerCustomAreas'
+import {
+  managerDcrLegendItems,
+  managerDcrOriginLabel,
+  managerDcrSubmittedTileClass,
+  listTileOriginBadgeClass,
+} from '@/lib/managerDcrHistoryStyles'
 import {
   useActiveLateSlotCount,
   useNextMissedLateBatchDates,
@@ -62,6 +69,10 @@ export default function ReportHistoryView({
 }: Props) {
   const navigate = useNavigate()
   const { data: reports = [], isLoading, isError } = useMrReportsWithVisitCounts(subjectMrId)
+  const showManagerOrigin = linkMode === 'manager-self' || linkMode === 'manager-team'
+  const { data: importMrNames = new Map<string, string[]>() } = useReportImportMrNames(
+    showManagerOrigin ? subjectMrId : '',
+  )
   const { data: activeLateSlots = 0 } = useActiveLateSlotCount(enableLateRequest ? subjectMrId : '')
   const { data: requestPool = [], isLoading: requestPoolLoading } = useNextMissedLateBatchDates(
     enableLateRequest ? subjectMrId : '',
@@ -460,6 +471,8 @@ export default function ReportHistoryView({
                   const expenseDone = expenseSubmittedSet.has(d.date)
                   const expensePending = isSubmitted && isPast && !expenseDone && !d.isSunday
                   const notSubmitted = isPast && !isSubmitted && !d.isSunday
+                  const dayReport = reports.find(r => r.report_date === d.date && r.status === 'submitted')
+                  const mgrOrigin = showManagerOrigin ? dayReport?.manager_dcr_origin : null
                   const requestable =
                     enableLateRequest &&
                     selectMode &&
@@ -504,9 +517,11 @@ export default function ReportHistoryView({
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
                         isToday && !selectMode && 'ring-2 ring-primary/50',
                         isSubmitted &&
-                          (expensePending
-                            ? 'bg-amber-500/15 text-amber-900 font-semibold'
-                            : 'bg-emerald-600/15 text-emerald-800 font-semibold'),
+                          (showManagerOrigin
+                            ? managerDcrSubmittedTileClass(mgrOrigin ?? 'standard', expensePending)
+                            : expensePending
+                              ? 'bg-amber-500/15 text-amber-900 font-semibold'
+                              : 'bg-emerald-600/15 text-emerald-800 font-semibold'),
                         notSubmitted && 'bg-red-500/10 text-red-700',
                         isSelected && 'ring-2 ring-primary bg-primary/15',
                         d.isSunday && !isSubmitted && 'text-muted-foreground/50',
@@ -559,15 +574,16 @@ export default function ReportHistoryView({
             )}
 
             <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground justify-center">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-emerald-600/15" /> Submitted (tap for summary)
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-amber-500/15" /> Expense pending
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded bg-red-500/10" /> Not Submitted
-              </span>
+              {(showManagerOrigin ? managerDcrLegendItems() : [
+                { className: 'bg-emerald-600/15', label: 'Submitted (tap for summary)' },
+                { className: 'bg-amber-500/15', label: 'Expense pending' },
+                { className: 'bg-red-500/10', label: 'Not submitted' },
+              ]).map(item => (
+                <span key={item.label} className="flex items-center gap-1">
+                  <span className={cn('w-3 h-3 rounded', item.className)} />
+                  {item.label}
+                </span>
+              ))}
               <span className="flex items-center gap-1">
                 <span className="w-3 h-3 rounded bg-muted/50" /> Sunday
               </span>
@@ -606,12 +622,22 @@ export default function ReportHistoryView({
                         {report.visit_count} doctor visit{report.visit_count === 1 ? '' : 's'}
                         {report.status === 'submitted' ? ' · Tap for day summary' : ''}
                       </p>
+                      {showManagerOrigin && report.status === 'submitted' && (
+                        <p className="text-[10px] text-muted-foreground mt-1">
+                          {managerDcrOriginLabel(
+                            report.manager_dcr_origin,
+                            importMrNames.get(report.id),
+                          ) ?? 'Standard field DCR'}
+                        </p>
+                      )}
                     </div>
                     <span
                       className={cn(
                         'flex items-center gap-1 text-xs font-medium rounded-full px-2.5 py-1 shrink-0',
                         report.status === 'submitted'
-                          ? 'bg-emerald-600/15 text-emerald-800'
+                          ? showManagerOrigin
+                            ? listTileOriginBadgeClass(report.manager_dcr_origin)
+                            : 'bg-emerald-600/15 text-emerald-800'
                           : 'bg-amber-500/15 text-amber-900',
                       )}
                     >

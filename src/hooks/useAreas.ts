@@ -46,6 +46,7 @@ type MrSubAreaRpcRow = {
   sub_area_code: string
   area_id: string
   area_name: string
+  is_manager_custom?: boolean
 }
 
 /** MR: sub-areas from mr_sub_area_access (RPC first, embed fallback). */
@@ -65,6 +66,7 @@ export function useMrSubAreas(mrId: string) {
             name: r.sub_area_name,
             code: r.sub_area_code,
             is_active: true,
+            is_manager_custom: r.is_manager_custom === true,
             created_at: '',
             area: {
               id: r.area_id,
@@ -150,7 +152,7 @@ export function useMrSubAreas(mrId: string) {
 /** Shape returned by useMrSubAreasGrouped — areas with nested sub-areas for MR Step 2. */
 export interface MrAreaGroup {
   area: { id: string; name: string }
-  sub_areas: { id: string; name: string; code: string }[]
+  sub_areas: { id: string; name: string; code: string; is_manager_custom?: boolean }[]
 }
 
 export function buildMrAreaGroups(subAreas: SubArea[]): MrAreaGroup[] {
@@ -164,7 +166,12 @@ export function buildMrAreaGroups(subAreas: SubArea[]): MrAreaGroup[] {
       g = { area: { id: areaId, name: areaName }, sub_areas: [] }
       map.set(areaId, g)
     }
-    g.sub_areas.push({ id: sa.id, name: sa.name, code: sa.code })
+    g.sub_areas.push({
+      id: sa.id,
+      name: sa.name,
+      code: sa.code,
+      is_manager_custom: sa.is_manager_custom,
+    })
   }
   return Array.from(map.values()).sort((a, b) =>
     a.area.name.localeCompare(b.area.name),

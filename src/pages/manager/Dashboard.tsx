@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
-import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store, Archive } from 'lucide-react';
+import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store, Archive, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -426,6 +426,12 @@ export default function ManagerDashboard() {
               icon={<MapPinned className="h-4 w-4 md:h-5 md:w-5 text-slate-600 dark:text-slate-400" />}
             />
             <ManagerQuickAction
+              label="Custom areas"
+              iconClassName="bg-sky-500/10"
+              onClick={() => navigate('/manager/custom-areas')}
+              icon={<MapPin className="h-4 w-4 md:h-5 md:w-5 text-sky-600 dark:text-sky-400" />}
+            />
+            <ManagerQuickAction
               label="Assign MR"
               iconClassName="bg-violet-500/10"
               onClick={() => navigate('/manager/territories')}
@@ -446,7 +452,7 @@ export default function ManagerDashboard() {
             <ManagerQuickAction
               label="E detailing"
               iconClassName="bg-cyan-500/10"
-              comingSoon
+              onClick={() => navigate('/manager/e-detailing')}
               icon={<Tablet className="h-4 w-4 md:h-5 md:w-5 text-cyan-600 dark:text-cyan-400" />}
             />
             <ManagerQuickAction

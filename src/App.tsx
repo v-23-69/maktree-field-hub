@@ -59,6 +59,9 @@ const ManagerTeamMrDetail = lazy(() => import("@/pages/manager/TeamMrDetail"));
 const ManagerDcrImport = lazy(() => import("@/pages/manager/ManagerDcrImport"));
 const ManagerTerritoryAreas = lazy(() => import("@/pages/manager/ManagerTerritoryAreas"));
 const ManagerVacantAreas = lazy(() => import("@/pages/manager/ManagerVacantAreas"));
+const ManagerCustomAreas = lazy(() => import("@/pages/manager/ManagerCustomAreas"));
+const ManagerCustomAreaDetail = lazy(() => import("@/pages/manager/ManagerCustomAreaDetail"));
+const ManagerEDetailing = lazy(() => import("@/pages/manager/ManagerEDetailing"));
 const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
 const AdminUsers = lazy(() => import("@/pages/admin/Users"));
 const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
@@ -159,6 +162,9 @@ const App = () => (
             <Route path="/manager/report/:id" element={<AppRoute scope="manager-report-detail" allowedRoles={['manager']}><ReportDetail /></AppRoute>} />
             <Route path="/manager/expense" element={<AppRoute scope="manager-expense" allowedRoles={['manager']}><MRExpense /></AppRoute>} />
             <Route path="/manager/tour-program" element={<AppRoute scope="manager-tour-program" allowedRoles={['manager']}><MRTourProgram /></AppRoute>} />
+            <Route path="/manager/custom-areas" element={<AppRoute scope="manager-custom-areas" allowedRoles={['manager']}><ManagerCustomAreas /></AppRoute>} />
+            <Route path="/manager/custom-areas/:customAreaId" element={<AppRoute scope="manager-custom-area-detail" allowedRoles={['manager']}><ManagerCustomAreaDetail /></AppRoute>} />
+            <Route path="/manager/e-detailing" element={<AppRoute scope="manager-e-detailing" allowedRoles={['manager']}><ManagerEDetailing /></AppRoute>} />
 
             {/* Admin Routes */}
             <Route path="/admin/dashboard" element={<AppRoute scope="admin-dashboard" allowedRoles={['admin']}><AdminDashboard /></AppRoute>} />

@@ -77,6 +77,7 @@ const DRAFT_KEY = 'maktree_report_draft';
 type ReportNavState = {
   date?: string
   reportKind?: ReportKind
+  preselectSubAreaIds?: string[]
 }
 
 function migrateDraft(raw: unknown): ReportFormData | null {
@@ -286,6 +287,19 @@ export default function NewReport() {
       return { ...prev, selectedSubAreaIds: sanitized }
     })
   }, [assignedSubAreas])
+
+  useEffect(() => {
+    const pre = navState?.preselectSubAreaIds
+    if (!pre?.length || assignedSubAreas.length === 0) return
+    const allowed = new Set(assignedSubAreas.map(s => s.id))
+    const pick = pre.filter(id => allowed.has(id))
+    if (pick.length === 0) return
+    setFormData(prev => ({
+      ...prev,
+      selectedSubAreaIds: pick,
+      tpAutoFilled: false,
+    }))
+  }, [navState?.preselectSubAreaIds, assignedSubAreas])
 
   useEffect(() => {
     const applyTourPlanAutofill = async () => {

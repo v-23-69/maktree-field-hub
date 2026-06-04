@@ -23,8 +23,13 @@ import {
   useRequestTourProgramDeletion,
   useDeleteTourProgramAsManager,
   useManagerImportTourProgram,
+  useSyncManagerMrTpDayMatch,
 } from '@/hooks/useTourProgram'
 import ManagerTpImportDrawer from '@/components/manager/ManagerTpImportDrawer'
+import {
+  ManagerTpDayCard,
+  type ManagerTpLocalEntry,
+} from '@/components/manager/ManagerTpDayCard'
 import { supabase } from '@/lib/supabase'
 import { useMrSubAreasGrouped } from '@/hooks/useAreas'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
@@ -49,7 +54,7 @@ function generateMonthDays(monthStr: string) {
   })
 }
 
-type LocalEntry = { sub_area_id: string }
+type LocalEntry = ManagerTpLocalEntry
 
 type SubAreaItem = { id: string; name: string; areaName: string }
 
@@ -139,6 +144,7 @@ export default function TourProgramPage() {
   const requestTpDeletion = useRequestTourProgramDeletion()
   const deleteTpAsManager = useDeleteTourProgramAsManager()
   const importTp = useManagerImportTourProgram()
+  const syncTpMatch = useSyncManagerMrTpDayMatch()
   const [tpDeleteOpen, setTpDeleteOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const { data: dbEntries = [] } = useTourProgramEntries(tpQuery.data?.id)
@@ -166,24 +172,95 @@ export default function TourProgramPage() {
 
   const lastSyncKey = useRef('')
   useEffect(() => {
-    const key = dbEntries.map(e => `${e.work_date}:${e.sub_area_id}`).join('|')
+    const key = dbEntries
+      .map(e => `${e.work_date}:${e.sub_area_id}:${(e.working_with_ids ?? []).join(',')}`)
+      .join('|')
     if (key === lastSyncKey.current) return
     lastSyncKey.current = key
+    const teamMrIds = new Set(teamMrs.map(m => m.id))
     const map: Record<string, LocalEntry> = {}
     for (const e of dbEntries) {
-      map[e.work_date] = { sub_area_id: e.sub_area_id ?? '' }
+      const ww = e.working_with_ids ?? []
+      const matchMr = ww.find(id => teamMrIds.has(id))
+      map[e.work_date] = {
+        sub_area_id: e.sub_area_id ?? '',
+        working_with_ids: ww,
+        match_mr_id: matchMr,
+      }
     }
     setLocalEntries(map)
-  }, [dbEntries])
+  }, [dbEntries, teamMrs])
 
   const updateSubArea = useCallback((date: string, value: string) => {
     setLocalEntries(prev => ({
       ...prev,
-      [date]: { ...(prev[date] ?? { sub_area_id: '' }), sub_area_id: value },
+      [date]: {
+        ...(prev[date] ?? { sub_area_id: '' }),
+        sub_area_id: value,
+        match_mr_id: undefined,
+        working_with_ids: [],
+      },
+    }))
+  }, [])
+
+  const updateMatchMr = useCallback((date: string, mrId: string) => {
+    setLocalEntries(prev => ({
+      ...prev,
+      [date]: {
+        ...(prev[date] ?? { sub_area_id: '' }),
+        match_mr_id: mrId || undefined,
+        working_with_ids: mrId ? prev[date]?.working_with_ids ?? [] : [],
+      },
+    }))
+  }, [])
+
+  const applyMatchArea = useCallback((date: string, mrId: string, subAreaId: string) => {
+    setLocalEntries(prev => ({
+      ...prev,
+      [date]: {
+        sub_area_id: subAreaId,
+        match_mr_id: mrId,
+        working_with_ids: [mrId],
+      },
+    }))
+    toast.success('Area matched — save TP to sync working with on both plans')
+  }, [])
+
+  const clearMatch = useCallback((date: string) => {
+    setLocalEntries(prev => ({
+      ...prev,
+      [date]: {
+        ...(prev[date] ?? { sub_area_id: '' }),
+        match_mr_id: undefined,
+        working_with_ids: [],
+      },
     }))
   }, [])
 
   const workingDayRows = useMemo(() => workingDays.filter(d => d.day_type === 'working'), [workingDays])
+
+  const syncMatchedDays = useCallback(
+    async (monthStr: string) => {
+      const tasks: Promise<void>[] = []
+      for (const day of workingDayRows) {
+        const local = localEntries[day.work_date]
+        if (!local?.match_mr_id || !local.sub_area_id) continue
+        if (!(local.working_with_ids ?? []).includes(local.match_mr_id)) continue
+        tasks.push(
+          syncTpMatch
+            .mutateAsync({
+              mrId: local.match_mr_id,
+              workDate: day.work_date,
+              month: monthStr,
+              subAreaId: local.sub_area_id,
+            })
+            .then(() => undefined),
+        )
+      }
+      await Promise.all(tasks)
+    },
+    [localEntries, workingDayRows, syncTpMatch],
+  )
   const filledCount = useMemo(
     () => workingDayRows.filter(d => !!localEntries[d.work_date]?.sub_area_id).length,
     [workingDayRows, localEntries],
@@ -205,6 +282,17 @@ export default function TourProgramPage() {
     () => workingDayRows.map(d => d.work_date),
     [workingDayRows],
   )
+
+  const currentStatus = tpQuery.data?.status ?? 'not_created'
+  const isApproved = currentStatus === 'approved'
+  const isSubmitted = currentStatus === 'submitted'
+  const isViewOnly = tab === 'team'
+  const managerSelf = isManager && tab === 'self'
+  const canEdit =
+    !isViewOnly &&
+    (managerSelf
+      ? isApproved || currentStatus === 'draft' || currentStatus === 'rejected' || currentStatus === 'not_created'
+      : !isApproved && !isSubmitted)
 
   const handleImportConfirm = async (rows: Array<{ work_date: string; sub_area_id: string; apply_to: 'self' | 'both' }>) => {
     if (!viewMrId) return
@@ -238,12 +326,13 @@ export default function TourProgramPage() {
       })
       .map(day => {
         const local = localEntries[day.work_date]
+        const ww = local?.working_with_ids ?? []
         return {
           tour_program_id: tpId,
           work_date: day.work_date,
           sub_area_id: local?.sub_area_id || null,
-          working_with: null as string | null,
-          working_with_ids: [] as string[],
+          working_with: (local?.match_mr_id ?? ww[0] ?? null) as string | null,
+          working_with_ids: ww,
           day_type: 'working' as const,
           notes: null as string | null,
         }
@@ -261,6 +350,7 @@ export default function TourProgramPage() {
       const rows = buildEntryRows(tpId)
       if (rows.length > 0) {
         await batchSave.mutateAsync(rows)
+        if (managerSelf) await syncMatchedDays(month)
         const st = tpQuery.data?.status
         if (isManager && tab === 'self' && st === 'approved' && tpId && supabase) {
           const { error: ecErr } = await supabase.rpc('increment_tour_program_edit_count', { p_tour_program_id: tpId })
@@ -290,7 +380,10 @@ export default function TourProgramPage() {
         tpId = tp.id
       }
       const rows = buildEntryRows(tpId)
-      if (rows.length > 0) await batchSave.mutateAsync(rows)
+      if (rows.length > 0) {
+        await batchSave.mutateAsync(rows)
+        if (managerSelf) await syncMatchedDays(month)
+      }
       await submit.mutateAsync({ tourProgramId: tpId, month })
       if (isManager && tab === 'self') {
         toast.success('Tour program submitted')
@@ -305,17 +398,6 @@ export default function TourProgramPage() {
       setSaving(false)
     }
   }
-
-  const currentStatus = tpQuery.data?.status ?? 'not_created'
-  const isApproved = currentStatus === 'approved'
-  const isSubmitted = currentStatus === 'submitted'
-  const isViewOnly = tab === 'team'
-  const managerSelf = isManager && tab === 'self'
-  const canEdit =
-    !isViewOnly &&
-    (managerSelf
-      ? isApproved || currentStatus === 'draft' || currentStatus === 'rejected' || currentStatus === 'not_created'
-      : !isApproved && !isSubmitted)
 
   const tpIdForActions = tpQuery.data?.id
   const showTpDelete =
@@ -559,6 +641,24 @@ export default function TourProgramPage() {
                         <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">{dateLabel}</span>
                         <span className="text-[10px] text-blue-600 dark:text-blue-400 font-semibold">{day.holiday_name ?? 'Holiday'}</span>
                       </div>
+                    )
+                  }
+
+                  if (managerSelf && canEdit) {
+                    return (
+                      <ManagerTpDayCard
+                        key={day.work_date}
+                        dateStr={day.work_date}
+                        local={localEntries[day.work_date]}
+                        canEdit={canEdit}
+                        allSubAreas={allSubAreas}
+                        teamMrs={teamMrs}
+                        managerId={selfId}
+                        onSubAreaChange={updateSubArea}
+                        onMatchMrChange={updateMatchMr}
+                        onMatchArea={applyMatchArea}
+                        onClearMatch={clearMatch}
+                      />
                     )
                   }
 
