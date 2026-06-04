@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { prefetchRoleDashboard } from '@/lib/prefetchDashboard'
 import { resetProfilePromptSession } from '@/lib/profileCompletion'
 import { AuthContext, type AuthContextType } from '@/contexts/auth-context'
+import { isInvalidAuthSessionError } from '@/lib/authSessionErrors'
 
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
@@ -54,6 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle()
 
     if (error || !profile) {
+      const errMsg = [error?.message, error?.code].filter(Boolean).join(' ')
+      if (error && isInvalidAuthSessionError(errMsg)) {
+        await supabase.auth.signOut({ scope: 'local' })
+        sessionStorage.removeItem(PROFILE_CACHE_KEY)
+      }
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
@@ -96,10 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession()
         if (!mounted) return
         const errMsg = [sessionError?.message, sessionError?.name].filter(Boolean).join(' ')
-        if (
-          sessionError &&
-          /refresh token|invalid.*token|token.*not found|not found/i.test(errMsg)
-        ) {
+        if (sessionError && isInvalidAuthSessionError(errMsg)) {
           await supabase.auth.signOut({ scope: 'local' })
           setUser(null)
           setAuthReady(true)
@@ -108,10 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (session?.user) {
-          const { error: userErr } = await supabase.auth.getUser()
-          if (userErr) {
-            const um = [userErr.message, userErr.name].filter(Boolean).join(' ')
-            if (/refresh|invalid|token|not found|jwt|session|expired/i.test(um)) {
+          const { data: userData, error: userErr } = await supabase.auth.getUser()
+          const um = [userErr?.message, userErr?.name].filter(Boolean).join(' ')
+          if (userErr || !userData.user) {
+            if (!userErr || isInvalidAuthSessionError(um)) {
               await supabase.auth.signOut({ scope: 'local' })
               setUser(null)
               setAuthReady(true)
@@ -130,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         if (!mounted) return
         const msg = e instanceof Error ? e.message : String(e)
-        if (/refresh token|invalid.*token|token.*not found|AuthApiError/i.test(msg)) {
+        if (isInvalidAuthSessionError(msg)) {
           await supabase.auth.signOut({ scope: 'local' })
         }
         setUser(null)
@@ -170,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e)
-          if (/refresh token|invalid.*token|token.*not found|AuthApiError/i.test(msg)) {
+          if (isInvalidAuthSessionError(msg)) {
             await supabase.auth.signOut({ scope: 'local' })
           }
           setUser(null)

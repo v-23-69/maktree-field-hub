@@ -109,10 +109,16 @@ export function useCompleteDcrImport() {
         p_extra_visits: p.extraVisits,
       })
       if (error) {
-        const msg =
-          (error as { message?: string }).message ??
-          (error as { details?: string }).details ??
-          'Import failed'
+        const err = error as { message?: string; details?: string; code?: string }
+        const msg = err.message ?? err.details ?? 'Import failed'
+        if (
+          err.code === '409' ||
+          /duplicate|unique|conflict|already filed|already submitted/i.test(msg)
+        ) {
+          throw new Error(
+            'A DCR already exists for this day. Refresh the page, then complete the import again.',
+          )
+        }
         throw new Error(msg)
       }
       return data as string

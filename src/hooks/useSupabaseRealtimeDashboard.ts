@@ -28,6 +28,8 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
   useEffect(() => {
     if (!enabled || !supabase) return
 
+    let cancelled = false
+    let channel: ReturnType<typeof supabase.channel> | null = null
     const pendingTables = new Set<string>()
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -44,22 +46,28 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
       debounceTimer = setTimeout(flushInvalidation, REALTIME_DEBOUNCE_MS)
     }
 
-    const channel = supabase.channel('maktree-dashboard-realtime')
+    void (async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (cancelled || !session) return
 
-    for (const table of WATCH_TABLES) {
-      channel.on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table },
-        () => scheduleInvalidate(table),
-      )
-    }
+      channel = supabase.channel('maktree-dashboard-realtime')
 
-    void channel.subscribe()
+      for (const table of WATCH_TABLES) {
+        channel.on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table },
+          () => scheduleInvalidate(table),
+        )
+      }
+
+      void channel.subscribe()
+    })()
 
     return () => {
+      cancelled = true
       if (debounceTimer) clearTimeout(debounceTimer)
       pendingTables.clear()
-      void supabase.removeChannel(channel)
+      if (channel) void supabase.removeChannel(channel)
     }
   }, [enabled, queryClient])
 }
