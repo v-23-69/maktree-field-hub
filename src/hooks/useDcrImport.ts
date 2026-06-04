@@ -108,7 +108,13 @@ export function useCompleteDcrImport() {
         p_included_source_visit_ids: p.includedVisitIds,
         p_extra_visits: p.extraVisits,
       })
-      if (error) throw error
+      if (error) {
+        const msg =
+          (error as { message?: string }).message ??
+          (error as { details?: string }).details ??
+          'Import failed'
+        throw new Error(msg)
+      }
       return data as string
     },
     onSuccess: () => {

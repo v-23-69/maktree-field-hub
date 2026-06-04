@@ -121,7 +121,7 @@ export default function ManagerDcrImport() {
         includedVisitIds: [...effectiveIncluded],
         extraVisits: buildExtraPayload(),
       })
-      toast.success('Your DCR has been submitted')
+      toast.success('Calls added to your DCR for this day')
       navigate(`/manager/report/${reportId}`)
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Import failed')
