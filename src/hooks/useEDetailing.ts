@@ -367,15 +367,21 @@ export function useMoveEDetailingMedia() {
 export function useCopyEDetailingMedia() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (payload: { ids: string[]; targetFolderId: string; items: ExplorerMediaItem[] }) => {
+    mutationFn: async (payload: { ids: string[]; targetFolderId: string }) => {
       if (!supabase) throw new Error('Supabase not configured')
-      const source = payload.items.filter(m => payload.ids.includes(m.id))
+      const { data, error: fetchErr } = await supabase
+        .from('e_detailing_media')
+        .select('storage_path, file_name, mime_type, sort_order, title')
+        .in('id', payload.ids)
+      if (fetchErr) throw fetchErr
+      const source = data ?? []
+      if (source.length === 0) throw new Error('No files to copy')
       const rows = source.map((m, i) => ({
         folder_id: payload.targetFolderId,
         storage_path: m.storage_path,
         file_name: m.file_name,
         mime_type: m.mime_type,
-        sort_order: m.sort_order + i,
+        sort_order: (m.sort_order ?? 0) + i,
         title: m.title,
       }))
       const { error } = await supabase.from('e_detailing_media').insert(rows)

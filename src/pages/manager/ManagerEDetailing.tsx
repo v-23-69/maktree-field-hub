@@ -18,7 +18,7 @@ export default function ManagerEDetailing() {
             <div className="text-sm space-y-1">
               <p className="font-semibold text-foreground">Manager gallery</p>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Only <strong>doctor specialities from your master list</strong> appear as categories.
+                Standard categories (GP, GYNI, ENT, Pedia, etc.) are built from your doctor list — duplicate labels are grouped automatically.
                 Add subfolders inside a category, upload images, then use <strong>Slideshow</strong> for presentations.
               </p>
             </div>

@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { MouseEvent } from 'react'
 import {
   ArrowLeft,
+  ChevronDown,
   ChevronRight,
   Copy,
   Scissors,
   ClipboardPaste,
   Folder,
+  FolderOpen,
   FolderPlus,
   Upload,
   Trash2,
@@ -24,12 +26,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
+import { Progress } from '@/components/ui/progress'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu'
 import {
   Dialog,
   DialogContent,
@@ -46,7 +56,7 @@ import {
   countFolderItems,
   type EDetailingFolder,
 } from '@/lib/mediaFolderTree'
-import type { ExplorerMediaItem, MediaClipboard } from '@/lib/explorerMediaOps'
+import type { ExplorerMediaItem, MediaClipboard, UploadProgressState } from '@/lib/explorerMediaOps'
 import {
   useEDetailingFolders,
   useEDetailingMediaCounts,
@@ -68,6 +78,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EDetailingSlideshow from './EDetailingSlideshow'
 
 const LONG_PRESS_MS = 480
+const DRAG_MEDIA_TYPE = 'application/x-edetailing-media-ids'
 
 function canDeleteFolder(folder: EDetailingFolder | undefined): boolean {
   return !!folder && !folder.is_category
@@ -92,10 +103,17 @@ export default function ManagerMediaExplorer() {
   const [slideshowStart, setSlideshowStart] = useState(0)
   const [deleteFolderId, setDeleteFolderId] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressState>(null)
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
   const lastFolderClickId = useRef<string | null>(null)
+  const lastFileClickId = useRef<string | null>(null)
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameName, setRenameName] = useState('')
+  const [expandedTreeIds, setExpandedTreeIds] = useState<Set<string>>(new Set())
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null)
+  const [contentDropActive, setContentDropActive] = useState(false)
+  const contentPaneRef = useRef<HTMLDivElement>(null)
 
   const uploadImage = useUploadEDetailingImage()
   const renameFolder = useRenameEDetailingFolder()
@@ -118,10 +136,27 @@ export default function ManagerMediaExplorer() {
   const countMap = mediaCountByFolder ?? new Map<string | null, number>()
   const filesInView = folderMedia
 
+  const visibleFiles = useMemo(
+    () => (openFolderId ? filesInView : unassignedMedia),
+    [openFolderId, filesInView, unassignedMedia],
+  )
+
+  const mediaById = useMemo(() => {
+    const m = new Map<string, ExplorerMediaItem>()
+    for (const item of [...folderMedia, ...unassignedMedia]) m.set(item.id, item)
+    return m
+  }, [folderMedia, unassignedMedia])
+
   const breadcrumb = useMemo(
     () => getFolderBreadcrumb(openFolderId, folders),
     [openFolderId, folders],
   )
+
+  useEffect(() => {
+    if (!openFolderId) return
+    const ids = [...breadcrumb.map(b => b.id), openFolderId]
+    setExpandedTreeIds(prev => new Set([...prev, ...ids]))
+  }, [openFolderId, breadcrumb])
 
   const openFolder = useMemo(
     () => (openFolderId ? folders.find(f => f.id === openFolderId) ?? null : null),
@@ -142,12 +177,39 @@ export default function ManagerMediaExplorer() {
     return openFolderId
   }, [selectedFolderIds, openFolderId])
 
+  const canPaste = Boolean(clipboard?.ids.length && pasteTargetFolderId)
+
   const clearSelection = useCallback(() => {
     setSelectedFileIds(new Set())
     setSelectedFolderIds(new Set())
     setFileSelectMode(false)
     setFolderSelectMode(false)
   }, [])
+
+  useEffect(() => {
+    if (isMobile) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const mod = e.ctrlKey || e.metaKey
+      const key = e.key.toLowerCase()
+      if (mod && key === 'c' && selectedFileIds.size > 0) {
+        e.preventDefault()
+        handleCopy()
+      } else if (mod && key === 'x' && selectedFileIds.size > 0) {
+        e.preventDefault()
+        handleCut()
+      } else if (mod && key === 'v' && canPaste) {
+        e.preventDefault()
+        void handlePaste()
+      } else if ((key === 'delete' || key === 'backspace') && selectedFileIds.size > 0) {
+        e.preventDefault()
+        void handleDeleteFiles()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
 
   const handleBack = () => {
     if (!openFolder) {
@@ -196,7 +258,6 @@ export default function ManagerMediaExplorer() {
         await copyMedia.mutateAsync({
           ids: clipboard.ids,
           targetFolderId: target,
-          items: filesInView,
         })
         toast.success('Pasted copies')
       }
@@ -210,7 +271,9 @@ export default function ManagerMediaExplorer() {
   const handleDeleteFiles = async () => {
     const ids = [...selectedFileIds]
     if (!ids.length) return
-    const items = filesInView.filter(m => ids.includes(m.id))
+    const items = ids
+      .map(id => mediaById.get(id))
+      .filter((m): m is ExplorerMediaItem => !!m)
     try {
       await deleteMedia.mutateAsync(items.map(m => ({ id: m.id, storage_path: m.storage_path })))
       toast.success('Deleted')
@@ -251,16 +314,34 @@ export default function ManagerMediaExplorer() {
     }
   }
 
-  const handleUploadFiles = async (fileList: FileList | null) => {
-    if (!fileList?.length || !openFolderId || !user?.id) return
+  const handleUploadFiles = async (fileList: FileList | null, targetFolderId?: string | null) => {
+    const folderId = targetFolderId ?? openFolderId
+    if (!fileList?.length || !folderId || !user?.id) return
+    const files = [...fileList].filter(f => f.type.startsWith('image/')).slice(0, 40)
+    if (!files.length) {
+      toast.error('Choose image files only')
+      return
+    }
     setUploading(true)
+    setUploadProgress({ current: 0, total: files.length, percent: 0, fileName: files[0].name })
     let ok = 0
     try {
-      const files = [...fileList].slice(0, 40)
-      for (const file of files) {
-        if (!file.type.startsWith('image/')) continue
-        await uploadImage.mutateAsync({ folderId: openFolderId, file, userId: user.id })
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadProgress({
+          current: i + 1,
+          total: files.length,
+          percent: Math.round((i / files.length) * 100),
+          fileName: file.name,
+        })
+        await uploadImage.mutateAsync({ folderId, file, userId: user.id })
         ok += 1
+        setUploadProgress({
+          current: i + 1,
+          total: files.length,
+          percent: Math.round(((i + 1) / files.length) * 100),
+          fileName: file.name,
+        })
       }
       toast.success(`Uploaded ${ok} image(s)`)
       setShowUpload(false)
@@ -269,30 +350,63 @@ export default function ManagerMediaExplorer() {
       toast.error(e instanceof Error ? e.message : 'Upload failed')
     } finally {
       setUploading(false)
+      setUploadProgress(null)
     }
   }
 
-  const onFileClick = (id: string, index: number) => {
-    if (fileSelectMode) {
+  const handleFileClick = (id: string, index: number, e: MouseEvent) => {
+    const multi = e.ctrlKey || e.metaKey
+    const range = e.shiftKey
+
+    if (fileSelectMode || multi) {
+      e.preventDefault()
+      setFileSelectMode(true)
       setSelectedFileIds(prev => {
         const next = new Set(prev)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
+        if (multi || fileSelectMode) {
+          if (next.has(id)) next.delete(id)
+          else next.add(id)
+        } else {
+          next.clear()
+          next.add(id)
+        }
         return next
       })
+      lastFileClickId.current = id
       return
     }
-    if (isMobile) {
+
+    if (range && lastFileClickId.current) {
+      e.preventDefault()
+      setFileSelectMode(true)
+      const ids = visibleFiles.map(f => f.id)
+      const a = ids.indexOf(lastFileClickId.current)
+      const b = ids.indexOf(id)
+      if (a >= 0 && b >= 0) {
+        const [lo, hi] = a < b ? [a, b] : [b, a]
+        setSelectedFileIds(new Set(ids.slice(lo, hi + 1)))
+      }
+      return
+    }
+
+    lastFileClickId.current = id
+
+    if (isMobile && !fileSelectMode) {
       setSlideshowStart(index)
       setSlideshowOpen(true)
-    } else {
+      return
+    }
+
+    if (!fileSelectMode) {
       setSelectedFileIds(new Set([id]))
     }
   }
 
   const startLongPressFile = (id: string) => {
     if (!isMobile) return
+    didLongPress.current = false
     longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
       setFileSelectMode(true)
       setSelectedFileIds(new Set([id]))
       if (navigator.vibrate) navigator.vibrate(10)
@@ -305,7 +419,9 @@ export default function ManagerMediaExplorer() {
 
   const startLongPressFolder = (id: string) => {
     if (!isMobile) return
+    didLongPress.current = false
     longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
       setFolderSelectMode(true)
       setSelectedFolderIds(new Set([id]))
       if (navigator.vibrate) navigator.vibrate(10)
@@ -360,7 +476,79 @@ export default function ManagerMediaExplorer() {
     }
 
     lastFolderClickId.current = folder.id
-    openFolderById(folder.id)
+    setSelectedFolderIds(new Set([folder.id]))
+    setSelectedFileIds(new Set())
+  }
+
+  const handleDropFilesOnFolder = async (folderId: string, e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverFolderId(null)
+    if (isMobile) return
+
+    const raw = e.dataTransfer.getData(DRAG_MEDIA_TYPE)
+    if (raw) {
+      try {
+        const ids: string[] = JSON.parse(raw)
+        if (ids.length) {
+          await moveMedia.mutateAsync({ ids, targetFolderId: folderId })
+          toast.success('Moved')
+          clearSelection()
+          onRefresh()
+        }
+      } catch {
+        toast.error('Move failed')
+      }
+      return
+    }
+
+    if (e.dataTransfer.files?.length) {
+      await handleUploadFiles(e.dataTransfer.files, folderId)
+    }
+  }
+
+  const handleContentDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setContentDropActive(false)
+    if (isMobile) return
+
+    const raw = e.dataTransfer.getData(DRAG_MEDIA_TYPE)
+    if (raw && openFolderId) {
+      try {
+        const ids: string[] = JSON.parse(raw)
+        if (ids.length) {
+          await moveMedia.mutateAsync({ ids, targetFolderId: openFolderId })
+          toast.success('Moved')
+          clearSelection()
+          onRefresh()
+        }
+      } catch {
+        toast.error('Move failed')
+      }
+      return
+    }
+
+    if (e.dataTransfer.files?.length) {
+      if (!openFolderId) {
+        toast.error('Create or open a category folder first, then upload inside it')
+        return
+      }
+      await handleUploadFiles(e.dataTransfer.files, openFolderId)
+    }
+  }
+
+  const handleContentPaneClick = (e: React.MouseEvent) => {
+    if (isMobile || slideshowOpen) return
+    if (e.target === e.currentTarget) clearSelection()
+  }
+
+  const getDragFileIds = (itemId: string) =>
+    selectedFileIds.size > 0 && selectedFileIds.has(itemId)
+      ? [...selectedFileIds]
+      : [itemId]
+
+  const openSlideshowAt = (index: number) => {
+    setSlideshowStart(index)
+    setSlideshowOpen(true)
   }
 
   const openRenameDialog = (folder: EDetailingFolder) => {
@@ -404,16 +592,30 @@ export default function ManagerMediaExplorer() {
   const renderFolderTile = (folder: EDetailingFolder) => {
     const count = countFolderItems(folder.id, folders, countMap)
     const selected = selectedFolderIds.has(folder.id)
-    return (
+    const isDropTarget = dragOverFolderId === folder.id
+
+    const tile = (
       <button
-        key={folder.id}
         type="button"
         className={cn(
-          'flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border/50 bg-card hover:border-primary/40 transition-all text-left',
+          'flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-border/50 bg-card hover:border-primary/40 transition-all text-left w-full',
           selected && 'ring-2 ring-primary border-primary/50',
+          isDropTarget && 'border-primary bg-primary/5 ring-2 ring-primary/40',
           !folder.is_enabled && 'opacity-80',
         )}
         onClick={e => {
+          if (isMobile && didLongPress.current) {
+            didLongPress.current = false
+            if (folderSelectMode) {
+              setSelectedFolderIds(prev => {
+                const next = new Set(prev)
+                if (next.has(folder.id)) next.delete(folder.id)
+                else next.add(folder.id)
+                return next
+              })
+            }
+            return
+          }
           if (isMobile && folderSelectMode) {
             setSelectedFolderIds(prev => {
               const next = new Set(prev)
@@ -427,20 +629,20 @@ export default function ManagerMediaExplorer() {
           else handleFolderClick(folder, e)
         }}
         onDoubleClick={() => {
+          if (isMobile) return
           setFolderSelectMode(false)
           openFolderById(folder.id)
         }}
         onTouchStart={() => startLongPressFolder(folder.id)}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
-        onContextMenu={e => {
-          if (!isMobile) {
-            e.preventDefault()
-            setFolderSelectMode(true)
-            setSelectedFolderIds(new Set([folder.id]))
-            lastFolderClickId.current = folder.id
-          }
+        onDragOver={e => {
+          if (isMobile) return
+          e.preventDefault()
+          setDragOverFolderId(folder.id)
         }}
+        onDragLeave={() => setDragOverFolderId(id => (id === folder.id ? null : id))}
+        onDrop={e => void handleDropFilesOnFolder(folder.id, e)}
       >
         <div className="relative">
           <Folder className="h-10 w-10 text-amber-500" />
@@ -452,29 +654,111 @@ export default function ManagerMediaExplorer() {
         <span className="text-[10px] text-muted-foreground">{count} items</span>
       </button>
     )
+
+    if (isMobile) {
+      return (
+        <div key={folder.id}>
+          {tile}
+        </div>
+      )
+    }
+
+    return (
+      <ContextMenu key={folder.id}>
+        <ContextMenuTrigger asChild>{tile}</ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem onClick={() => openFolderById(folder.id)}>
+            <FolderOpen className="h-4 w-4 mr-2" />
+            Open
+          </ContextMenuItem>
+          {clipboard && (
+            <ContextMenuItem
+              onClick={() => {
+                setSelectedFolderIds(new Set([folder.id]))
+                void handlePaste()
+              }}
+            >
+              <ClipboardPaste className="h-4 w-4 mr-2" />
+              Paste into folder
+            </ContextMenuItem>
+          )}
+          {canDeleteFolder(folder) && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem
+                className="text-destructive focus:text-destructive"
+                onClick={() => setDeleteFolderId(folder.id)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete folder
+              </ContextMenuItem>
+            </>
+          )}
+        </ContextMenuContent>
+      </ContextMenu>
+    )
   }
 
   const renderFileTile = (item: ExplorerMediaItem, index: number) => {
     const selected = selectedFileIds.has(item.id)
-    return (
+
+    const tile = (
       <button
-        key={item.id}
         type="button"
+        draggable={!isMobile}
         className={cn(
-          'relative aspect-square rounded-lg overflow-hidden border-2 border-border/40 bg-muted',
+          'relative aspect-square rounded-lg overflow-hidden border-2 border-border/40 bg-muted w-full',
           selected && 'ring-2 ring-primary border-primary/50',
+          !isMobile && 'hover:border-primary/30',
         )}
-        onClick={() => onFileClick(item.id, index)}
+        onClick={e => {
+          if (isMobile && didLongPress.current) {
+            didLongPress.current = false
+            if (fileSelectMode) {
+              setSelectedFileIds(prev => {
+                const next = new Set(prev)
+                if (next.has(item.id)) next.delete(item.id)
+                else next.add(item.id)
+                return next
+              })
+            }
+            return
+          }
+          if (isMobile && fileSelectMode) {
+            setSelectedFileIds(prev => {
+              const next = new Set(prev)
+              if (next.has(item.id)) next.delete(item.id)
+              else next.add(item.id)
+              return next
+            })
+            return
+          }
+          if (isMobile) {
+            e.preventDefault()
+            openSlideshowAt(index)
+            return
+          }
+          handleFileClick(item.id, index, e)
+        }}
+        onDoubleClick={() => {
+          if (!isMobile && !fileSelectMode) openSlideshowAt(index)
+        }}
         onTouchStart={() => startLongPressFile(item.id)}
         onTouchEnd={cancelLongPress}
         onTouchMove={cancelLongPress}
+        onDragStart={e => {
+          if (isMobile) return
+          const ids = getDragFileIds(item.id)
+          e.dataTransfer.setData(DRAG_MEDIA_TYPE, JSON.stringify(ids))
+          e.dataTransfer.effectAllowed = 'move'
+        }}
       >
         <img
           src={item.public_url}
           alt=""
           loading="lazy"
           decoding="async"
-          className="w-full h-full object-cover"
+          className="w-full h-full object-cover pointer-events-none"
         />
         {selected && (
           <span className="absolute top-1 left-1 h-5 w-5 rounded-full bg-primary flex items-center justify-center">
@@ -483,26 +767,118 @@ export default function ManagerMediaExplorer() {
         )}
       </button>
     )
+
+    if (isMobile) {
+      return (
+        <div key={item.id}>
+          {tile}
+        </div>
+      )
+    }
+
+    return (
+      <ContextMenu key={item.id}>
+        <ContextMenuTrigger asChild>{tile}</ContextMenuTrigger>
+        <ContextMenuContent className="w-48">
+          <ContextMenuItem
+            onClick={() => {
+              setSelectedFileIds(new Set([item.id]))
+              openSlideshowAt(index)
+            }}
+          >
+            <Presentation className="h-4 w-4 mr-2" />
+            Open slideshow
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            onClick={() => {
+              setSelectedFileIds(new Set([item.id]))
+              handleCopy()
+            }}
+          >
+            <Copy className="h-4 w-4 mr-2" />
+            Copy
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              setSelectedFileIds(new Set([item.id]))
+              handleCut()
+            }}
+          >
+            <Scissors className="h-4 w-4 mr-2" />
+            Cut
+          </ContextMenuItem>
+          {canPaste && (
+            <ContextMenuItem onClick={() => void handlePaste()}>
+              <ClipboardPaste className="h-4 w-4 mr-2" />
+              Paste
+            </ContextMenuItem>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            className="text-destructive focus:text-destructive"
+            onClick={() => {
+              setSelectedFileIds(new Set([item.id]))
+              void handleDeleteFiles()
+            }}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
+  }
+
+  const toggleTreeExpand = (id: string) => {
+    setExpandedTreeIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const TreeBranch = ({ nodes, depth = 0 }: { nodes: typeof tree; depth?: number }) => (
     <ul className={cn('space-y-0.5', depth > 0 && 'ml-3 border-l border-border/40 pl-2')}>
-      {nodes.map(node => (
-        <li key={node.id}>
-          <button
-            type="button"
-            className={cn(
-              'w-full flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-muted/80 text-left',
-              openFolderId === node.id && 'bg-primary/10 text-primary',
-            )}
-            onClick={() => openFolderById(node.id)}
-          >
-            <Folder className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <span className="truncate flex-1">{node.name}</span>
-          </button>
-          {node.children.length > 0 && <TreeBranch nodes={node.children} depth={depth + 1} />}
-        </li>
-      ))}
+      {nodes.map(node => {
+        const hasChildren = node.children.length > 0
+        const expanded = expandedTreeIds.has(node.id)
+        return (
+          <li key={node.id}>
+            <div className="flex items-center gap-0.5">
+              {hasChildren ? (
+                <button
+                  type="button"
+                  className="h-7 w-6 shrink-0 flex items-center justify-center rounded hover:bg-muted/80"
+                  aria-label={expanded ? 'Collapse' : 'Expand'}
+                  onClick={() => toggleTreeExpand(node.id)}
+                >
+                  {expanded ? (
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </button>
+              ) : (
+                <span className="w-6 shrink-0" />
+              )}
+              <button
+                type="button"
+                className={cn(
+                  'flex-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium hover:bg-muted/80 text-left min-w-0',
+                  openFolderId === node.id && 'bg-primary/10 text-primary',
+                )}
+                onClick={() => openFolderById(node.id)}
+              >
+                <Folder className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <span className="truncate flex-1">{node.name}</span>
+              </button>
+            </div>
+            {hasChildren && expanded && <TreeBranch nodes={node.children} depth={depth + 1} />}
+          </li>
+        )
+      })}
     </ul>
   )
 
@@ -531,7 +907,26 @@ export default function ManagerMediaExplorer() {
         </aside>
       )}
 
-      <div className="flex-1 min-w-0 space-y-3">
+      <div
+        ref={contentPaneRef}
+        className={cn(
+          'flex-1 min-w-0 space-y-3 rounded-xl transition-colors',
+          contentDropActive && openFolderId && 'ring-2 ring-primary/40 bg-primary/5',
+        )}
+        onClick={handleContentPaneClick}
+        onDragOver={e => {
+          if (isMobile) return
+          if (e.dataTransfer.types.includes(DRAG_MEDIA_TYPE) || e.dataTransfer.types.includes('Files')) {
+            e.preventDefault()
+            setContentDropActive(true)
+          }
+        }}
+        onDragLeave={e => {
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return
+          setContentDropActive(false)
+        }}
+        onDrop={e => void handleContentDrop(e)}
+      >
         <div className="flex flex-wrap items-center gap-2">
           <Button
             type="button"
@@ -571,19 +966,60 @@ export default function ManagerMediaExplorer() {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant={folderSelectMode ? 'secondary' : 'outline'}
-            className="h-9 gap-1"
-            onClick={() => {
-              setFolderSelectMode(v => !v)
-              if (folderSelectMode) setSelectedFolderIds(new Set())
-            }}
-          >
-            <CheckSquare className="h-3.5 w-3.5" />
-            {folderSelectMode ? 'Selecting folders' : 'Select folders'}
-          </Button>
+          {!isMobile && (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant={fileSelectMode ? 'secondary' : 'outline'}
+                className="h-9 gap-1"
+                onClick={() => {
+                  setFileSelectMode(v => !v)
+                  if (fileSelectMode) setSelectedFileIds(new Set())
+                }}
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                {fileSelectMode ? 'Selecting files' : 'Select files'}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={folderSelectMode ? 'secondary' : 'outline'}
+                className="h-9 gap-1"
+                onClick={() => {
+                  setFolderSelectMode(v => !v)
+                  if (folderSelectMode) setSelectedFolderIds(new Set())
+                }}
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                {folderSelectMode ? 'Selecting folders' : 'Select folders'}
+              </Button>
+            </>
+          )}
+          {(selectedFileIds.size > 0 || clipboard) && (
+            <>
+              {selectedFileIds.size > 0 && (
+                <>
+                  <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={handleCopy}>
+                    <Copy className="h-3.5 w-3.5" /> Copy
+                  </Button>
+                  <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={handleCut}>
+                    <Scissors className="h-3.5 w-3.5" /> Cut
+                  </Button>
+                </>
+              )}
+              {canPaste && (
+                <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={() => void handlePaste()}>
+                  <ClipboardPaste className="h-3.5 w-3.5" /> Paste
+                </Button>
+              )}
+              {selectedFileIds.size > 0 && (
+                <Button type="button" size="sm" variant="destructive" className="h-9 gap-1" onClick={() => void handleDeleteFiles()}>
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </Button>
+              )}
+            </>
+          )}
           {selectedDeletableFolder && (
             <Button
               type="button"
@@ -617,31 +1053,13 @@ export default function ManagerMediaExplorer() {
                   size="sm"
                   variant="secondary"
                   className="h-9 gap-1"
-                  onClick={() => {
-                    setSlideshowStart(0)
-                    setSlideshowOpen(true)
-                  }}
+                  onClick={() => openSlideshowAt(0)}
                 >
                   <Presentation className="h-3.5 w-3.5" />
                   Slideshow
                 </Button>
               )}
             </>
-          )}
-          {!isMobile && selectedFileIds.size > 0 && (
-            <>
-              <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={handleCopy}>
-                <Copy className="h-3.5 w-3.5" /> Copy
-              </Button>
-              <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={handleCut}>
-                <Scissors className="h-3.5 w-3.5" /> Cut
-              </Button>
-            </>
-          )}
-          {clipboard && pasteTargetFolderId && (
-            <Button type="button" size="sm" variant="outline" className="h-9 gap-1" onClick={() => void handlePaste()}>
-              <ClipboardPaste className="h-3.5 w-3.5" /> Paste
-            </Button>
           )}
           {isMobile && (
             <DropdownMenu>
@@ -650,15 +1068,53 @@ export default function ManagerMediaExplorer() {
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {selectedFileIds.size > 0 && (
+              <DropdownMenuContent align="end" className="w-48">
+                {openFolderId && (
                   <>
-                    <DropdownMenuItem onClick={handleCopy}>Copy</DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleCut}>Cut</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setNewFolderOpen(true)}>
+                      <FolderPlus className="h-4 w-4 mr-2" />
+                      New folder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setShowUpload(true)}>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload images
+                    </DropdownMenuItem>
+                    {filesInView.length > 0 && (
+                      <DropdownMenuItem
+                        onClick={() => {
+                          openSlideshowAt(0)
+                        }}
+                      >
+                        <Presentation className="h-4 w-4 mr-2" />
+                        Slideshow
+                      </DropdownMenuItem>
+                    )}
                   </>
                 )}
-                {clipboard && (
-                  <DropdownMenuItem onClick={() => void handlePaste()}>Paste</DropdownMenuItem>
+                {selectedFileIds.size > 0 && (
+                  <>
+                    <DropdownMenuItem onClick={handleCopy}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleCut}>
+                      <Scissors className="h-4 w-4 mr-2" />
+                      Cut
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => void handleDeleteFiles()}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete selected
+                    </DropdownMenuItem>
+                  </>
+                )}
+                {canPaste && (
+                  <DropdownMenuItem onClick={() => void handlePaste()}>
+                    <ClipboardPaste className="h-4 w-4 mr-2" />
+                    Paste
+                  </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -675,7 +1131,17 @@ export default function ManagerMediaExplorer() {
               disabled={uploading}
               onChange={e => void handleUploadFiles(e.target.files)}
             />
-            {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+            {uploading && uploadProgress && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span className="truncate pr-2">
+                    Uploading {uploadProgress.current}/{uploadProgress.total}: {uploadProgress.fileName}
+                  </span>
+                  <span className="font-semibold tabular-nums">{uploadProgress.percent}%</span>
+                </div>
+                <Progress value={uploadProgress.percent} className="h-2" />
+              </div>
+            )}
           </div>
         )}
 
@@ -730,8 +1196,8 @@ export default function ManagerMediaExplorer() {
             </div>
             <p className="text-[10px] text-muted-foreground">
               {isMobile
-                ? 'Tap to open · Long-press to select folders'
-                : 'Categories match doctor specialities in your database · New specialities appear here automatically'}
+                ? 'Tap to open a category · Long-press to select folders'
+                : 'Click to select · Double-click to open · Drag photos onto a folder to move'}
             </p>
             {unassignedMedia.length > 0 && (
               <div className="space-y-2 pt-4 border-t border-border/50">
@@ -746,6 +1212,11 @@ export default function ManagerMediaExplorer() {
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {unassignedMedia.map((m, i) => renderFileTile(m, i))}
                 </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {isMobile
+                    ? 'Move into a category with Cut/Copy, then open folder and Paste'
+                    : 'Select files → Cut or Copy → open a category → Paste'}
+                </p>
               </div>
             )}
           </>
@@ -775,23 +1246,27 @@ export default function ManagerMediaExplorer() {
                   {filesInView.map((m, i) => renderFileTile(m, i))}
                 </div>
               )}
-              {isMobile && (
-                <p className="text-[10px] text-muted-foreground">
-                  Tap to preview · Long-press to select · Slideshow for auto book view
-                </p>
-              )}
+              <p className="text-[10px] text-muted-foreground">
+                {isMobile
+                  ? 'Tap to preview · Long-press to select multiple · ⋮ for upload & slideshow'
+                  : 'Click to select · Double-click slideshow · Right-click for menu · Drag to move'}
+              </p>
             </div>
           </>
         )}
 
         <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-2">
-          {rootCategories.length} categories · {totalFileCount} files
-          {selectedFileIds.size > 0 && ` · ${selectedFileIds.size} selected`}
+          {rootCategories.length} categories · {childFolders.length > 0 && openFolderId ? `${childFolders.length} subfolders · ` : ''}
+          {totalFileCount} files
+          {selectedFileIds.size > 0 && ` · ${selectedFileIds.size} file(s) selected`}
+          {selectedFolderIds.size > 0 && ` · ${selectedFolderIds.size} folder(s) selected`}
+          {uploading && uploadProgress && ` · Uploading ${uploadProgress.percent}%`}
+          {openFolder && !openFolder.is_enabled && ' · Hidden (Active off)'}
         </p>
       </div>
 
-      {(fileSelectMode || (folderSelectMode && selectedFolderIds.size > 0)) && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 mx-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-card/95 backdrop-blur p-3 shadow-lg md:bottom-6">
+      {isMobile && (fileSelectMode || folderSelectMode) && (
+        <div className="fixed bottom-20 left-0 right-0 z-40 mx-3 flex items-center justify-between gap-2 rounded-xl border border-border bg-card/95 backdrop-blur p-3 shadow-lg">
           <Button type="button" variant="ghost" size="sm" onClick={clearSelection}>
             Cancel
           </Button>
@@ -807,20 +1282,36 @@ export default function ManagerMediaExplorer() {
                 <Button type="button" size="sm" variant="outline" onClick={handleCut}>
                   <Scissors className="h-4 w-4" />
                 </Button>
-                {clipboard && (
+                {canPaste && (
                   <Button type="button" size="sm" variant="outline" onClick={() => void handlePaste()}>
                     <ClipboardPaste className="h-4 w-4" />
                   </Button>
                 )}
-                <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteFiles()}>
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {selectedFileIds.size > 0 && (
+                  <Button type="button" size="sm" variant="destructive" onClick={() => void handleDeleteFiles()}>
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
               </>
             )}
-            {folderSelectMode && selectedFolderIds.size === 1 && (
-              <Button type="button" size="sm" variant="destructive" onClick={() => setDeleteFolderId([...selectedFolderIds][0])}>
-                <Trash2 className="h-4 w-4" />
-              </Button>
+            {folderSelectMode && (
+              <>
+                {canPaste && selectedFolderIds.size === 1 && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => void handlePaste()}>
+                    <ClipboardPaste className="h-4 w-4" />
+                  </Button>
+                )}
+                {selectedFolderIds.size === 1 && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    onClick={promptDeleteSelectedFolder}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </>
             )}
           </div>
         </div>

@@ -14,6 +14,13 @@ export type MediaClipboard =
   | { mode: 'cut'; ids: string[] }
   | null
 
+export type UploadProgressState = {
+  current: number
+  total: number
+  percent: number
+  fileName: string
+} | null
+
 export function applyCopyToFolder(
   items: ExplorerMediaItem[],
   clipboardIds: string[],
