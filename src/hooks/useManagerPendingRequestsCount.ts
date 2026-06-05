@@ -11,22 +11,27 @@ export function useManagerPendingRequestsCount(managerId: string): number {
     queryFn: async (): Promise<number> => {
       if (!supabase) return 0
 
-      const [unlockRpc, lateDcrRpc, tpDelRpc, leavesRes, mrsRpc] =
+      const [unlockRpc, lateDcrRpc, tpDelRpc, mrsRpc] =
         await Promise.all([
         supabase.rpc('list_unlock_requests_for_manager'),
         supabase.rpc('list_late_dcr_fill_requests_for_manager'),
         supabase.rpc('list_tour_program_deletion_requests_for_manager'),
-        supabase
-          .from('leave_requests')
-          .select('id', { count: 'exact', head: true })
-          .eq('manager_id', managerId)
-          .eq('status', 'pending'),
         supabase.rpc('list_mrs_for_manager'),
       ])
 
       const mrIds = mrsRpc.error
         ? []
         : ((mrsRpc.data ?? []) as Array<{ id: string }>).map(m => m.id)
+
+      let leavePending = 0
+      if (mrIds.length > 0) {
+        const leavesRes = await supabase
+          .from('leave_requests')
+          .select('id', { count: 'exact', head: true })
+          .in('mr_id', mrIds)
+          .eq('status', 'pending')
+        leavePending = leavesRes.error ? 0 : leavesRes.count ?? 0
+      }
 
       let docPending = 0
       let docAddPending = 0
@@ -60,8 +65,6 @@ export function useManagerPendingRequestsCount(managerId: string): number {
           ).length
 
       const tpDelPending = tpDelRpc.error ? 0 : (tpDelRpc.data ?? []).length
-
-      const leavePending = leavesRes.error ? 0 : leavesRes.count ?? 0
 
       let tpSubmitPending = 0
       if (!mrsRpc.error) {

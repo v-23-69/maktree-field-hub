@@ -26,7 +26,7 @@ export function useUserNotifications(userId: string) {
         .select('id, user_id, kind, title, body, url, read_at, metadata, created_at')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(50)
+        .limit(100)
       if (error) throw error
       return (data ?? []) as UserNotification[]
     },
@@ -79,6 +79,22 @@ export function useMarkNotificationRead() {
     },
     onSuccess: (_d, v) => {
       qc.invalidateQueries({ queryKey: ['user-notifications', v.userId] })
+    },
+  })
+}
+
+export function useMarkAllNotificationsRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('mark_all_notifications_read')
+      if (error) throw error
+      return userId
+    },
+    onSuccess: userId => {
+      qc.invalidateQueries({ queryKey: ['user-notifications', userId] })
+      qc.invalidateQueries({ queryKey: ['manager-pending-counts'] })
     },
   })
 }

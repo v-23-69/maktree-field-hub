@@ -481,18 +481,6 @@ export default function ManagerDashboard() {
               icon={<Target className="h-4 w-4 md:h-5 md:w-5 text-violet-600 dark:text-violet-400" />}
             />
             <ManagerQuickAction
-              label="Leaves"
-              iconClassName="bg-sky-500/10"
-              onClick={() => navigate('/manager/leaves')}
-              icon={<ClipboardList className="h-4 w-4 md:h-5 md:w-5 text-sky-600 dark:text-sky-400" />}
-            />
-            <ManagerQuickAction
-              label="My leave"
-              iconClassName="bg-teal-500/10"
-              onClick={() => navigate('/manager/my-leave')}
-              icon={<Umbrella className="h-4 w-4 md:h-5 md:w-5 text-teal-600 dark:text-teal-400" />}
-            />
-            <ManagerQuickAction
               label="Assign Self"
               iconClassName="bg-primary/10"
               onClick={() => setAction('assign-self')}

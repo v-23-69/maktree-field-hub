@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Bell, Check, ChevronRight, ClipboardList } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
+  useMarkAllNotificationsRead,
   useMarkNotificationRead,
   useUnreadNotificationCount,
   useUserNotifications,
@@ -16,42 +17,73 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { Button } from '@/components/ui/button'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { UserNotification, UserRole } from '@/types/database.types'
 import { normalizeNotificationUrl, NOTIFICATION_ROUTES } from '@/lib/notifications/notificationRoutes'
 
-const TERMINAL_REQUEST_STATUSES = new Set([
-  'approved',
-  'rejected',
-  'declined',
-  'resolved',
-  'completed',
-  'done',
-  'cancelled',
-  'canceled',
-])
-
-function shouldKeepUnread(n: UserNotification): boolean {
-  const url = normalizeNotificationUrl(n.url)
-  const kind = (n.kind ?? '').toLowerCase()
-  const status = (n.metadata as { status?: string } | null)?.status?.toLowerCase()
-  const isRequestLike =
-    url.startsWith(NOTIFICATION_ROUTES.managerRequests) ||
-    kind.includes('request') ||
-    kind.includes('approval') ||
-    kind.includes('leave') ||
-    kind.includes('unlock') ||
-    kind.includes('complaint') ||
-    kind.includes('late_dcr')
-  if (!isRequestLike) return false
-  if (!status) return true
-  return !TERMINAL_REQUEST_STATUSES.has(status)
-}
-
 interface Props {
   userId: string
   role: UserRole
+}
+
+function groupByDate(notifications: UserNotification[]): Map<string, UserNotification[]> {
+  const map = new Map<string, UserNotification[]>()
+  for (const n of notifications) {
+    const key = n.created_at.slice(0, 10)
+    const list = map.get(key) ?? []
+    list.push(n)
+    map.set(key, list)
+  }
+  return map
+}
+
+function NotificationRow({
+  n,
+  onOpen,
+}: {
+  n: UserNotification
+  onOpen: (n: UserNotification) => void
+}) {
+  const isUnread = !n.read_at
+  const dateLabel = n.created_at.slice(0, 10)
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onOpen(n)}
+        className={cn(
+          'w-full text-left px-4 py-3.5 flex gap-3 hover:bg-muted/40 active:bg-muted/60 transition-colors touch-manipulation',
+          isUnread && 'bg-primary/5',
+        )}
+      >
+        <div
+          className={cn(
+            'mt-0.5 h-10 w-10 shrink-0 rounded-full flex items-center justify-center',
+            isUnread ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+          )}
+        >
+          {isUnread ? <Bell className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <p
+              className={cn(
+                'text-sm truncate',
+                isUnread ? 'font-bold text-foreground' : 'font-medium text-foreground/90',
+              )}
+            >
+              {n.title}
+            </p>
+            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+              {formatDisplayDate(dateLabel).split(',')[0]}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.body}</p>
+        </div>
+      </button>
+    </li>
+  )
 }
 
 export default function NotificationBell({ userId, role }: Props) {
@@ -61,8 +93,26 @@ export default function NotificationBell({ userId, role }: Props) {
   const pendingApprovals = useManagerPendingRequestsCount(role === 'manager' ? userId : '')
   const { data: notifications = [] } = useUserNotifications(userId)
   const markRead = useMarkNotificationRead()
+  const markAllRead = useMarkAllNotificationsRead()
+  const markedOnOpenRef = useRef(false)
 
-  const badgeCount = unread + (role === 'manager' ? pendingApprovals : 0)
+  const badgeCount = unread
+
+  const { newNotifications, oldNotifications } = useMemo(() => {
+    const fresh: UserNotification[] = []
+    const older: UserNotification[] = []
+    for (const n of notifications) {
+      if (!n.read_at) fresh.push(n)
+      else older.push(n)
+    }
+    return { newNotifications: fresh, oldNotifications: older }
+  }, [notifications])
+
+  const oldByDate = useMemo(() => groupByDate(oldNotifications), [oldNotifications])
+  const oldDateKeys = useMemo(
+    () => [...oldByDate.keys()].sort((a, b) => b.localeCompare(a)),
+    [oldByDate],
+  )
 
   const onOpen = () => {
     setOpen(true)
@@ -70,18 +120,21 @@ export default function NotificationBell({ userId, role }: Props) {
   }
 
   useEffect(() => {
-    if (!open || notifications.length === 0) return
-    const toMark = notifications.filter(n => !n.read_at && !shouldKeepUnread(n))
-    if (toMark.length === 0) return
-    void Promise.all(toMark.map(n => markRead.mutateAsync({ id: n.id, userId })))
-  }, [open, notifications, userId, markRead])
+    if (!open) {
+      markedOnOpenRef.current = false
+      return
+    }
+    if (!userId || markedOnOpenRef.current || unread === 0) return
+    markedOnOpenRef.current = true
+    void markAllRead.mutateAsync(userId)
+  }, [open, userId, unread, markAllRead])
 
-  const openNotification = (id: string, url: string, n: UserNotification) => {
-    if (!n.read_at && !shouldKeepUnread(n)) {
-      void markRead.mutateAsync({ id, userId })
+  const openNotification = (n: UserNotification) => {
+    if (!n.read_at) {
+      void markRead.mutateAsync({ id: n.id, userId })
     }
     setOpen(false)
-    navigate(normalizeNotificationUrl(url))
+    navigate(normalizeNotificationUrl(n.url))
   }
 
   const goToRequests = () => {
@@ -98,9 +151,7 @@ export default function NotificationBell({ userId, role }: Props) {
           'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
           'hover:bg-foreground/5 active:scale-95 transition-transform touch-manipulation',
         )}
-        aria-label={
-          badgeCount > 0 ? `Notifications, ${badgeCount} unread or pending` : 'Notifications'
-        }
+        aria-label={badgeCount > 0 ? `Notifications, ${badgeCount} unread` : 'Notifications'}
       >
         <Bell className="h-5 w-5 text-foreground" />
         {badgeCount > 0 && (
@@ -116,8 +167,8 @@ export default function NotificationBell({ userId, role }: Props) {
             <SheetTitle className="text-base">Notifications</SheetTitle>
             <SheetDescription className="text-xs">
               {role === 'manager'
-                ? 'Alerts, DCR updates, and approval requests in one place.'
-                : 'Tap a message to open the related page. Enable alerts for DCR reminders at 8 PM and 11 PM.'}
+                ? 'New alerts appear at the top. Older messages are grouped by date below.'
+                : 'Tap a message to open the related page. Alerts are marked read when you open this panel.'}
             </SheetDescription>
           </SheetHeader>
 
@@ -146,70 +197,50 @@ export default function NotificationBell({ userId, role }: Props) {
             )}
 
             {notifications.length === 0 && !(role === 'manager' && pendingApprovals > 0) ? (
-              <p className="text-sm text-muted-foreground text-center py-12 px-4">
-                No notifications yet.
-              </p>
-            ) : notifications.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6 px-4">
-                No other alerts right now. Use the card above for pending approvals.
-              </p>
+              <p className="text-sm text-muted-foreground text-center py-12 px-4">No notifications yet.</p>
             ) : (
-              <ul className="divide-y divide-border/60">
-                {notifications.map(n => {
-                  const isUnread = !n.read_at
-                  const dateLabel = n.created_at.slice(0, 10)
-                  return (
-                    <li key={n.id}>
-                      <button
-                        type="button"
-                        onClick={() => openNotification(n.id, n.url, n)}
-                        className={cn(
-                          'w-full text-left px-4 py-3.5 flex gap-3 hover:bg-muted/40 active:bg-muted/60 transition-colors touch-manipulation',
-                          isUnread && 'bg-primary/5',
-                        )}
-                      >
-                        <div
-                          className={cn(
-                            'mt-0.5 h-10 w-10 shrink-0 rounded-full flex items-center justify-center',
-                            isUnread
-                              ? 'bg-primary/15 text-primary'
-                              : 'bg-muted text-muted-foreground',
-                          )}
-                        >
-                          {isUnread ? (
-                            <Bell className="h-4 w-4" />
-                          ) : (
-                            <Check className="h-4 w-4" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-baseline justify-between gap-2">
-                            <p
-                              className={cn(
-                                'text-sm truncate',
-                                isUnread
-                                  ? 'font-bold text-foreground'
-                                  : 'font-medium text-foreground/90',
-                              )}
-                            >
-                              {n.title}
-                            </p>
-                            <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                              {formatDisplayDate(dateLabel).split(',')[0]}
-                            </span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {n.body}
-                          </p>
-                        </div>
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
+              <>
+                {newNotifications.length > 0 && (
+                  <section>
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-primary">
+                      New
+                    </p>
+                    <ul className="divide-y divide-border/60">
+                      {newNotifications.map(n => (
+                        <NotificationRow key={n.id} n={n} onOpen={openNotification} />
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {oldNotifications.length > 0 && (
+                  <section className="border-t border-border/60">
+                    <p className="px-4 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Earlier
+                    </p>
+                    {oldDateKeys.map(dateKey => (
+                      <div key={dateKey}>
+                        <p className="px-4 py-1.5 text-[11px] font-semibold text-muted-foreground bg-muted/30">
+                          {formatDisplayDate(dateKey)}
+                        </p>
+                        <ul className="divide-y divide-border/60">
+                          {(oldByDate.get(dateKey) ?? []).map(n => (
+                            <NotificationRow key={n.id} n={n} onOpen={openNotification} />
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
+                  </section>
+                )}
+
+                {notifications.length === 0 && role === 'manager' && pendingApprovals > 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-6 px-4">
+                    No other alerts right now. Use the card above for pending approvals.
+                  </p>
+                )}
+              </>
             )}
           </div>
-
         </SheetContent>
       </Sheet>
     </>

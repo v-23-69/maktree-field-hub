@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { formatDisplayDate, todayInputDate, isSundayYmd, formatIstTimeNow } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
-import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, Umbrella, BarChart3 } from 'lucide-react';
+import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
-import { useMrLeaves } from '@/hooks/useLeaves';
+import { useAutoMarkMissedDcrLeave } from '@/hooks/useAutoMarkMissedDcr';
 type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
@@ -99,7 +99,7 @@ export default function MRDashboard() {
     },
   });
 
-  const { data: mrLeaves = [] } = useMrLeaves(deferReady ? userId : '');
+  useAutoMarkMissedDcrLeave(deferReady ? userId : '');
   const activeTargets = useMemo(() => {
     const now = new Date();
     return targetRows
@@ -407,7 +407,7 @@ export default function MRDashboard() {
         )}
 
         <DashboardSection title="Quick actions" className="max-md:order-[30]">
-          <div className="grid grid-cols-5 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             <button type="button" onClick={() => navigate('/mr/tour-program')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
               <div className="h-8 w-8 rounded-xl bg-primary/10 flex items-center justify-center"><CalendarDays className="h-3.5 w-3.5 text-primary" /></div>
               <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Tour</span>
@@ -423,10 +423,6 @@ export default function MRDashboard() {
             <button type="button" onClick={() => setAction('holiday')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
               <div className="h-8 w-8 rounded-xl bg-amber-500/10 flex items-center justify-center"><CalendarOff className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /></div>
               <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Holiday</span>
-            </button>
-            <button type="button" onClick={() => navigate('/mr/leave')} className={cn(dashboardPanelClass(), 'flex flex-col items-center gap-1.5 p-2.5 active:scale-95 transition-all')}>
-              <div className="h-8 w-8 rounded-xl bg-violet-500/10 flex items-center justify-center"><Umbrella className="h-3.5 w-3.5 text-violet-600 dark:text-violet-300" /></div>
-              <span className="text-[9px] font-semibold text-foreground text-center leading-tight">Leave</span>
             </button>
           </div>
           <div className="flex gap-2">
@@ -457,21 +453,6 @@ export default function MRDashboard() {
           </div>
         )}
 
-
-        {deferReady &&
-          mrLeaves
-            .filter(l => l.status === 'approved')
-            .slice(0, 3)
-            .map(leave => (
-              <div key={leave.id} className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 max-md:order-[60]">
-                <p className="text-xs font-semibold text-emerald-900 dark:text-emerald-100 leading-snug">
-                  Leave approved
-                  {leave.approver?.full_name ? ` by ${leave.approver.full_name}` : ''}
-                  {' — '}
-                  {formatDisplayDate(leave.leave_date)} ({leave.leave_category === 'sick' ? 'Sick' : 'Casual'})
-                </p>
-              </div>
-            ))}
 
         {dailyStatus?.is_working_day === false && (
           <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 max-md:order-[60]">

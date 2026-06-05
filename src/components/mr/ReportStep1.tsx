@@ -166,7 +166,7 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
           }
         : {}),
       ...(kind === 'leave'
-        ? { leaveDcrCategory: 'casual', leaveDcrRemark: '' }
+        ? { leaveDcrCategory: 'without_pay', leaveDcrRemark: '' }
         : { leaveDcrCategory: '', leaveDcrRemark: '' }),
       ...(kind === 'meeting'
         ? {

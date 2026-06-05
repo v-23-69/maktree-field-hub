@@ -18,7 +18,8 @@ import {
   useRequestLateDcrFill,
 } from '@/hooks/useLateDcr'
 import { historyReportHref, type ReportHistoryLinkMode } from '@/lib/reportHistoryLinks'
-import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2, Send, Store, Receipt } from 'lucide-react'
+import { CheckCircle2, Clock, ChevronRight, ChevronLeft, Trash2, Send, Store, Receipt, Umbrella } from 'lucide-react'
+import { useMrLeaves } from '@/hooks/useLeaves'
 import { cn } from '@/lib/utils'
 import { formatDisplayDate, isOutsideDefaultDcrWindow, isSundayYmd, todayInputDate } from '@/lib/dateUtils'
 import { isDateInLateRequestPool, MAX_LATE_DCR_BATCH } from '@/lib/lateDcrEligibility'
@@ -69,6 +70,7 @@ export default function ReportHistoryView({
 }: Props) {
   const navigate = useNavigate()
   const { data: reports = [], isLoading, isError } = useMrReportsWithVisitCounts(subjectMrId)
+  const { data: leaveRequests = [] } = useMrLeaves(subjectMrId)
   const showManagerOrigin = linkMode === 'manager-self' || linkMode === 'manager-team'
   const { data: importMrNames = new Map<string, string[]>() } = useReportImportMrNames(
     showManagerOrigin ? subjectMrId : '',
@@ -108,6 +110,24 @@ export default function ReportHistoryView({
     }
     return set
   }, [reports])
+
+  const leaveSubmittedDates = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of reports) {
+      if (r.status === 'submitted' && r.report_kind === 'leave') set.add(r.report_date)
+    }
+    return set
+  }, [reports])
+
+  const pendingLeaveDates = useMemo(() => {
+    const set = new Set<string>()
+    for (const l of leaveRequests) {
+      if (l.status === 'pending' && !submittedDates.has(l.leave_date)) {
+        set.add(l.leave_date)
+      }
+    }
+    return set
+  }, [leaveRequests, submittedDates])
 
   const todayStr = todayInputDate()
 
@@ -464,13 +484,15 @@ export default function ReportHistoryView({
 
                 {days.map(d => {
                   const isSubmitted = submittedDates.has(d.date)
+                  const isLeaveDay = leaveSubmittedDates.has(d.date)
+                  const isLeavePending = pendingLeaveDates.has(d.date)
                   const isPast = d.date <= todayStr
                   const isToday = d.date === todayStr
                   const isFuture = d.date > todayStr
                   const hasStockistMeet = stockistMeetDates.has(d.date)
                   const expenseDone = expenseSubmittedSet.has(d.date)
-                  const expensePending = isSubmitted && isPast && !expenseDone && !d.isSunday
-                  const notSubmitted = isPast && !isSubmitted && !d.isSunday
+                  const expensePending = isSubmitted && isPast && !expenseDone && !d.isSunday && !isLeaveDay
+                  const notSubmitted = isPast && !isSubmitted && !d.isSunday && !isLeavePending
                   const dayReport = reports.find(r => r.report_date === d.date && r.status === 'submitted')
                   const mgrOrigin = showManagerOrigin ? dayReport?.manager_dcr_origin : null
                   const requestable =
@@ -516,7 +538,12 @@ export default function ReportHistoryView({
                       className={cn(
                         'aspect-square flex flex-col items-center justify-center rounded-lg text-xs transition-all',
                         isToday && !selectMode && 'ring-2 ring-primary/50',
+                        isLeavePending && 'bg-amber-500/15 text-amber-900 font-semibold',
+                        isLeaveDay &&
+                          'bg-violet-500/15 text-violet-900 dark:text-violet-100 font-semibold',
                         isSubmitted &&
+                          !isLeaveDay &&
+                          !isLeavePending &&
                           (showManagerOrigin
                             ? managerDcrSubmittedTileClass(mgrOrigin ?? 'standard', expensePending)
                             : expensePending
@@ -532,7 +559,9 @@ export default function ReportHistoryView({
                     >
                       <span>{d.day}</span>
                       <div className="flex items-center gap-0.5 mt-0.5">
-                        {isSubmitted && <CheckCircle2 className="h-2.5 w-2.5" />}
+                        {isLeaveDay && <Umbrella className="h-2.5 w-2.5" />}
+                        {isLeavePending && <Clock className="h-2.5 w-2.5" />}
+                        {isSubmitted && !isLeaveDay && <CheckCircle2 className="h-2.5 w-2.5" />}
                         {expensePending && <Receipt className="h-2.5 w-2.5 text-muted-foreground" />}
                         {hasStockistMeet && <Store className="h-2.5 w-2.5 text-primary" />}
                       </div>
@@ -576,6 +605,8 @@ export default function ReportHistoryView({
             <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground justify-center">
               {(showManagerOrigin ? managerDcrLegendItems() : [
                 { className: 'bg-emerald-600/15', label: 'Submitted (tap for summary)' },
+                { className: 'bg-violet-500/15', label: 'Leave without pay' },
+                { className: 'bg-amber-500/15', label: 'Leave pending approval' },
                 { className: 'bg-amber-500/15', label: 'Expense pending' },
                 { className: 'bg-red-500/10', label: 'Not submitted' },
               ]).map(item => (

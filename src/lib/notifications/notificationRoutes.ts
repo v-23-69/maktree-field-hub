@@ -2,7 +2,9 @@
 export const NOTIFICATION_ROUTES = {
   mrDcrNew: '/mr/report/new',
   mrDoctors: '/mr/master-list',
+  mrHistory: '/mr/report/history',
   managerRequests: '/manager/requests',
+  managerLeaves: '/manager/leaves',
   managerReports: '/manager/reports',
   profile: '/profile',
 } as const

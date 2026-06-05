@@ -41,6 +41,12 @@ export function useManagerLeaves(managerId: string) {
     ...LIVE_QUERY_OPTIONS,
     queryFn: async (): Promise<LeaveRequest[]> => {
       if (!supabase) throw new Error('Supabase not configured')
+
+      const { data: mrsRpc, error: mrsErr } = await supabase.rpc('list_mrs_for_manager')
+      if (mrsErr) throw mrsErr
+      const mrIds = ((mrsRpc ?? []) as Array<{ id: string }>).map(m => m.id)
+      if (mrIds.length === 0) return []
+
       const { data, error } = await supabase
         .from('leave_requests')
         .select(
@@ -49,7 +55,7 @@ export function useManagerLeaves(managerId: string) {
           mr:users!leave_requests_mr_id_fkey(id, full_name, employee_code)
         `,
         )
-        .eq('manager_id', managerId)
+        .in('mr_id', mrIds)
         .order('leave_date', { ascending: false })
       if (error) throw error
       return (data ?? []) as LeaveRequest[]
@@ -97,21 +103,19 @@ export function useResolveLeave() {
       resolverUserId: string
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
-      const { error } = await supabase
-        .from('leave_requests')
-        .update({
-          status: payload.status,
-          manager_note: payload.managerNote ?? null,
-          resolved_at: new Date().toISOString(),
-          approved_by: payload.status === 'approved' ? payload.resolverUserId : null,
-        })
-        .eq('id', payload.leaveId)
+      const { error } = await supabase.rpc('resolve_leave_request', {
+        p_leave_id: payload.leaveId,
+        p_status: payload.status,
+        p_manager_note: payload.managerNote ?? null,
+      })
       if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['manager-leaves'] })
       queryClient.invalidateQueries({ queryKey: ['mr-leaves'] })
       queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+      queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
     },
   })
 }

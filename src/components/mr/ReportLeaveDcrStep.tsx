@@ -2,21 +2,15 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import ReportStepFooter from '@/components/mr/ReportStepFooter'
-import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import { formatDisplayDate } from '@/lib/dateUtils'
 import type { ReportFormData } from '@/pages/mr/NewReport'
 import { useAuth } from '@/hooks/useAuth'
-import {
-  findExistingDailyReport,
-  useCreateReport,
-  useSubmitReport,
-} from '@/hooks/useReport'
 import { supabase } from '@/lib/supabase'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
-import { LEAVE_CATEGORY_OPTIONS, type LeaveCategory } from '@/lib/leaveLabels'
+import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
 
 interface Props {
   data: ReportFormData
@@ -36,15 +30,8 @@ export default function ReportLeaveDcrStep({
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const createReport = useCreateReport()
-  const submitReport = useSubmitReport()
   const [busy, setBusy] = useState(false)
 
-  const cat = (
-    data.leaveDcrCategory === 'sick' || data.leaveDcrCategory === 'without_pay'
-      ? data.leaveDcrCategory
-      : 'casual'
-  ) as LeaveCategory
   const remark = data.leaveDcrRemark ?? ''
 
   const handleSubmit = async () => {
@@ -62,45 +49,20 @@ export default function ReportLeaveDcrStep({
     }
     setBusy(true)
     try {
-      const existing = await findExistingDailyReport(supabase, user.id, data.date)
-      if (existing?.status === 'submitted') {
-        toast.error('A report for this date is already submitted.')
-        return
-      }
-      let reportId = existing?.id
-      if (!reportId) {
-        const row = await createReport.mutateAsync({
-          mrId: user.id,
-          managerId: null,
-          workingWithIds: [],
-          reportDate: data.date,
-          reportKind: 'leave',
-          leaveDcrCategory: cat,
-          leaveDcrRemark: remark.trim(),
-        })
-        reportId = row.id
-      } else {
-        const { error: upErr } = await supabase
-          .from('daily_reports')
-          .update({
-            report_kind: 'leave',
-            leave_dcr_category: cat,
-            leave_dcr_remark: remark.trim(),
-            working_with_ids: [],
-            manager_id: null,
-          })
-          .eq('id', reportId)
-        if (upErr) throw upErr
-      }
+      const { error } = await supabase.rpc('submit_leave_dcr_request', {
+        p_mr_id: user.id,
+        p_leave_date: data.date,
+        p_remark: remark.trim(),
+      })
+      if (error) throw error
 
-      await submitReport.mutateAsync(reportId)
-      await queryClient.invalidateQueries({ queryKey: ['mr-reports'] })
-      await queryClient.invalidateQueries({ queryKey: ['daily-report'] })
-      await queryClient.invalidateQueries({ queryKey: ['allowed-report-dates'] })
-      toast.success('Leave DCR submitted')
+      await queryClient.invalidateQueries({ queryKey: ['mr-leaves'] })
+      await queryClient.invalidateQueries({ queryKey: ['manager-leaves'] })
+      await queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
+      await queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+      toastMrPendingManagerApproval('Leave request sent for manager approval')
       onClearDraft()
-      const historyPath = user.role === 'manager' ? '/manager/history' : '/mr/report/history'
-      navigate(historyPath)
+      navigate('/mr/report/history')
     } catch (e) {
       console.error(e)
       toast.error(e instanceof Error ? e.message : 'Submit failed')
@@ -113,10 +75,10 @@ export default function ReportLeaveDcrStep({
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="rounded-xl border border-primary/25 bg-primary/5 p-3">
-        <p className="text-xs font-semibold text-primary">Leave DCR</p>
+      <div className="rounded-xl border border-violet-500/25 bg-violet-500/5 p-3">
+        <p className="text-xs font-semibold text-violet-800 dark:text-violet-200">Leave DCR</p>
         <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-          For approved full-day leave you still submit a short Leave DCR (type + remark). No doctor visits are required.
+          Submit leave without pay for this date. Your manager will approve or reject the request.
         </p>
       </div>
 
@@ -125,29 +87,16 @@ export default function ReportLeaveDcrStep({
         <p className="text-sm font-semibold text-foreground">{formatDisplayDate(data.date)}</p>
       </div>
 
-      <div className="space-y-2">
-        <Label>Leave type</Label>
-        <div className="grid grid-cols-1 gap-2">
-          {LEAVE_CATEGORY_OPTIONS.map(o => (
-            <button
-              key={o.value}
-              type="button"
-              onClick={() => onChange({ leaveDcrCategory: o.value })}
-              className={`rounded-xl border px-3 py-2.5 text-sm font-medium text-left transition-all active:scale-[0.98] ${
-                cat === o.value ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card'
-              }`}
-            >
-              {o.label}
-            </button>
-          ))}
-        </div>
+      <div className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
+        <p className="text-sm font-semibold text-violet-900 dark:text-violet-100">Leave without pay</p>
+        <p className="text-[11px] text-muted-foreground mt-0.5">All leave requests are recorded as leave without pay.</p>
       </div>
 
       <div className="space-y-2">
         <Label>Remark</Label>
         <Textarea
           value={remark}
-          onChange={e => onChange({ leaveDcrRemark: e.target.value })}
+          onChange={e => onChange({ leaveDcrRemark: e.target.value, leaveDcrCategory: 'without_pay' })}
           placeholder="Brief remark for this leave day"
           className="min-h-[100px] rounded-xl"
         />
@@ -157,7 +106,7 @@ export default function ReportLeaveDcrStep({
         <ReportStepFooter
           onBack={onBack}
           onNext={() => void handleSubmit()}
-          nextLabel={busy ? 'Submitting…' : 'Submit Leave DCR'}
+          nextLabel={busy ? 'Submitting…' : 'Submit leave request'}
           nextDisabled={busy}
         />
       )}
