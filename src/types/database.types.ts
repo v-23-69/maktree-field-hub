@@ -27,6 +27,9 @@ export interface User {
   block_reason?: string | null
   blocked_at?: string | null
   blocked_by?: string | null
+  is_resigned?: boolean
+  resigned_at?: string | null
+  resigned_by?: string | null
   is_paused?: boolean
   paused_at?: string | null
   paused_by?: string | null

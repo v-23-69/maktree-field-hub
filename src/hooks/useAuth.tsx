@@ -9,18 +9,20 @@ import { isInvalidAuthSessionError } from '@/lib/authSessionErrors'
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const PROFILE_SELECT =
-  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
+  'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [authReady, setAuthReady] = useState(true)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
+  const [accountClosedInfo, setAccountClosedInfo] = useState<{ reason: 'resigned' | 'deactivated' } | null>(null)
   const loadingAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAtRef = useRef<number>(0)
 
   const clearBlockedInfo = useCallback(() => setBlockedInfo(null), [])
+  const clearAccountClosedInfo = useCallback(() => setAccountClosedInfo(null), [])
 
   const loadProfile = useCallback(async (authUserId: string, preferCache = false, freshLogin = false) => {
     if (!supabase) return
@@ -33,9 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const cached = JSON.parse(raw) as { ts: number; user: User }
           if (
             cached?.user?.auth_user_id === authUserId &&
-            Date.now() - cached.ts < PROFILE_CACHE_TTL_MS
+            Date.now() - cached.ts < PROFILE_CACHE_TTL_MS &&
+            cached.user.is_active !== false &&
+            !cached.user.is_resigned &&
+            !cached.user.is_blocked
           ) {
             setBlockedInfo(null)
+            setAccountClosedInfo(null)
             setUser(cached.user)
             setAuthReady(true)
             setIsProfileLoading(false)
@@ -67,9 +73,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const p = profile as User & { is_blocked?: boolean; block_reason?: string | null }
+    const p = profile as User & { is_blocked?: boolean; block_reason?: string | null; is_resigned?: boolean }
     if (p.is_blocked) {
       setBlockedInfo({ isBlocked: true, blockReason: p.block_reason ?? null })
+      setAccountClosedInfo(null)
+      setUser(null)
+      setAuthReady(true)
+      setIsProfileLoading(false)
+      loadingAuthUserIdRef.current = null
+      await supabase.auth.signOut()
+      return
+    }
+
+    if (p.is_resigned || !p.is_active) {
+      setAccountClosedInfo({ reason: p.is_resigned ? 'resigned' : 'deactivated' })
+      setBlockedInfo(null)
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
@@ -79,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     setBlockedInfo(null)
+    setAccountClosedInfo(null)
     const nextUser = profile as User
     setUser(nextUser)
     sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: nextUser }))
@@ -243,8 +262,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       blockedInfo,
       clearBlockedInfo,
+      accountClosedInfo,
+      clearAccountClosedInfo,
     }
-  }, [user, authReady, isProfileLoading, signIn, logout, blockedInfo, clearBlockedInfo])
+  }, [user, authReady, isProfileLoading, signIn, logout, blockedInfo, clearBlockedInfo, accountClosedInfo, clearAccountClosedInfo])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

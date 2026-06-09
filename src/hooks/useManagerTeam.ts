@@ -30,7 +30,7 @@ export function useManagerMrs(managerId: string) {
           if (ids.length === 0) return rows
           const { data: extras, error: exErr } = await supabase
             .from('users')
-            .select('id, profile_photo_url, is_paused, pause_reason')
+            .select('id, profile_photo_url, is_paused, pause_reason, is_resigned, is_active')
             .in('id', ids)
           if (exErr) return rows
           const byId = new Map((extras ?? []).map(u => [u.id as string, u]))
@@ -42,6 +42,8 @@ export function useManagerMrs(managerId: string) {
               profile_photo_url: x.profile_photo_url ?? r.profile_photo_url,
               is_paused: x.is_paused ?? r.is_paused,
               pause_reason: x.pause_reason ?? r.pause_reason,
+              is_resigned: x.is_resigned ?? r.is_resigned,
+              is_active: x.is_active ?? r.is_active,
             }
           })
         }
@@ -58,7 +60,6 @@ export function useManagerMrs(managerId: string) {
           .from('users')
           .select('*')
           .in('id', ids)
-          .eq('is_active', true)
           .order('full_name')
         if (uErr) throw uErr
         return dedupeManagersMrs((users ?? []) as User[])

@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import type { User, UserRole } from '@/types/database.types';
 import { useAuth } from '@/hooks/useAuth';
 import { useBlockUser, useUnblockUser, useBlockComplaints, useResolveComplaint } from '@/hooks/useBlockSystem';
+import { useMarkMrResigned, useReinstateMr } from '@/hooks/useMrResignation';
 import { Textarea } from '@/components/ui/textarea';
 import ConfirmDialog from '@/components/shared/ConfirmDialog';
 
@@ -63,6 +64,8 @@ export default function AdminUsers() {
   const unblockUser = useUnblockUser();
   const { data: complaints = [] } = useBlockComplaints();
   const resolveComplaint = useResolveComplaint();
+  const markResigned = useMarkMrResigned();
+  const reinstateMr = useReinstateMr();
 
   const managers = useMemo(
     () => allUsers.filter(u => u.role === 'manager' && u.is_active),
@@ -257,7 +260,11 @@ export default function AdminUsers() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-foreground text-sm truncate">{u.full_name}</p>
-                  <p className="text-xs text-muted-foreground">{u.email ?? '—'} · <span className="capitalize">{u.role}</span></p>
+                  <p className="text-xs text-muted-foreground">
+                    {u.email ?? '—'} · <span className="capitalize">{u.role}</span>
+                    {u.is_resigned && <span className="text-muted-foreground font-semibold"> · Resigned</span>}
+                    {!u.is_active && !u.is_resigned && <span className="text-amber-600"> · Inactive</span>}
+                  </p>
                   {u.role !== 'admin' && !u.is_blocked && (
                     <Input
                       className="mt-2 h-8 text-xs"
@@ -280,6 +287,37 @@ export default function AdminUsers() {
                     >
                       <Edit className="h-4 w-4" />
                     </button>
+                  )}
+                  {u.role === 'mr' && (
+                    u.is_resigned ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={reinstateMr.isPending}
+                        onClick={() =>
+                          void reinstateMr
+                            .mutateAsync(u.id)
+                            .then(() => toast.success('MR reinstated — login restored'))
+                            .catch(e => toast.error(e instanceof Error ? e.message : 'Reinstate failed'))
+                        }
+                      >
+                        Reinstate
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={markResigned.isPending}
+                        onClick={() =>
+                          void markResigned
+                            .mutateAsync(u.id)
+                            .then(() => toast.success('MR marked resigned — login blocked, data kept'))
+                            .catch(e => toast.error(e instanceof Error ? e.message : 'Resign failed'))
+                        }
+                      >
+                        Mark resigned
+                      </Button>
+                    )
                   )}
                   {u.role === 'mr' && (
                     <Button

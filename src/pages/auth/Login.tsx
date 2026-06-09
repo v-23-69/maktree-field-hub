@@ -11,8 +11,16 @@ import MaktreeBrand from '@/components/shared/MaktreeBrand';
 import { prefetchRoleDashboard } from '@/lib/prefetchDashboard';
 
 export default function Login() {
-  const { signIn, user, authReady, isProfileLoading, blockedInfo, clearBlockedInfo } =
-    useAuth();
+  const {
+    signIn,
+    user,
+    authReady,
+    isProfileLoading,
+    blockedInfo,
+    clearBlockedInfo,
+    accountClosedInfo,
+    clearAccountClosedInfo,
+  } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -33,6 +41,16 @@ export default function Login() {
     navigate('/blocked-complaint', { replace: true, state: { blockReason: blockedInfo.blockReason } })
     clearBlockedInfo()
   }, [blockedInfo, navigate, clearBlockedInfo])
+
+  useEffect(() => {
+    if (!accountClosedInfo) return
+    const message =
+      accountClosedInfo.reason === 'resigned'
+        ? 'This account has been closed (resigned). Portal access is no longer available.'
+        : 'This account is deactivated. Contact your administrator.'
+    toast.error(message, { duration: 8000 })
+    clearAccountClosedInfo()
+  }, [accountClosedInfo, clearAccountClosedInfo])
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();

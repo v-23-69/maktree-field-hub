@@ -83,6 +83,14 @@ export default function TeamMrDetail() {
       <PageHeader title={mr.full_name ?? 'MR'} showBack onBack={safeGoBack} />
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
+        {mr.is_resigned && (
+          <div className="rounded-xl border border-muted-foreground/25 bg-muted/40 px-3 py-2.5">
+            <p className="text-xs font-semibold text-foreground">Resigned — read-only</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+              This MR can no longer sign in. All historical DCRs, doctors, and reports remain available for review.
+            </p>
+          </div>
+        )}
         <MrProfileCard
           mr={mr}
           onOpenProfile={() => navigate(`/profile/${mr.id}`)}

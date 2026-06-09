@@ -9,6 +9,8 @@ export interface AuthContextType extends AuthState {
   logout: () => Promise<void>
   blockedInfo: { isBlocked: boolean; blockReason: string | null } | null
   clearBlockedInfo: () => void
+  accountClosedInfo: { reason: 'resigned' | 'deactivated' } | null
+  clearAccountClosedInfo: () => void
 }
 
 /** Stable module — do not colocate with AuthProvider (avoids HMR breaking context). */

@@ -95,6 +95,9 @@ export default function TeamHub() {
       ? mrs.filter(m => (m.full_name ?? '').toLowerCase().includes(q))
       : [...mrs]
     return list.sort((a, b) => {
+      const aResigned = a.is_resigned === true
+      const bResigned = b.is_resigned === true
+      if (aResigned !== bResigned) return aResigned ? 1 : -1
       const aDone = reportByMr.get(a.id)?.submitted === true
       const bDone = reportByMr.get(b.id)?.submitted === true
       if (aDone !== bDone) return aDone ? 1 : -1
@@ -354,6 +357,7 @@ export default function TeamHub() {
               const ex = expenseByMr.get(mr.id)
               const tp = tpByMr.get(mr.id)
               const paused = mr.is_paused === true
+              const resigned = mr.is_resigned === true
               const initials = (mr.full_name ?? '?')
                 .split(' ')
                 .map(n => n[0])
@@ -369,6 +373,7 @@ export default function TeamHub() {
                     dashboardPanelClass(),
                     'w-full p-3.5 flex items-center gap-3 text-left active:scale-[0.99] transition-all',
                     paused && 'opacity-80 ring-1 ring-destructive/20',
+                    resigned && 'opacity-90 ring-1 ring-muted-foreground/30',
                   )}
                 >
                   {mr.profile_photo_url ? (
@@ -379,10 +384,18 @@ export default function TeamHub() {
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{mr.full_name}</p>
+                    <p className="text-sm font-semibold truncate flex items-center gap-1.5">
+                      <span className="truncate">{mr.full_name}</span>
+                      {resigned && (
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-bold uppercase text-muted-foreground">
+                          Resigned
+                        </span>
+                      )}
+                    </p>
                     <p className="text-[10px] text-muted-foreground">
-                      DCR: {tr?.submitted ? 'Done' : 'Pending'} · Exp: {ex?.status === 'submitted' ? 'Done' : ex?.status === 'draft' ? 'Draft' : '—'}
-                      {tp ? ` · TP: ${tp.status}` : ''}
+                      {resigned
+                        ? 'Historical data — view reports & history'
+                        : `DCR: ${tr?.submitted ? 'Done' : 'Pending'} · Exp: ${ex?.status === 'submitted' ? 'Done' : ex?.status === 'draft' ? 'Draft' : '—'}${tp ? ` · TP: ${tp.status}` : ''}`}
                     </p>
                   </div>
                   {paused ? (
