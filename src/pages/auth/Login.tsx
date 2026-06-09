@@ -37,20 +37,11 @@ export default function Login() {
   }, [user, authReady, navigate])
 
   useEffect(() => {
-    if (!blockedInfo?.isBlocked) return
-    navigate('/blocked-complaint', { replace: true, state: { blockReason: blockedInfo.blockReason } })
-    clearBlockedInfo()
-  }, [blockedInfo, navigate, clearBlockedInfo])
-
-  useEffect(() => {
-    if (!accountClosedInfo) return
-    const message =
-      accountClosedInfo.reason === 'resigned'
-        ? 'This account has been closed (resigned). Portal access is no longer available.'
-        : 'This account is deactivated. Contact your administrator.'
-    toast.error(message, { duration: 8000 })
-    clearAccountClosedInfo()
-  }, [accountClosedInfo, clearAccountClosedInfo])
+    if (!accountClosedInfo && !blockedInfo?.isBlocked) return
+    if (blockedInfo?.isBlocked) clearBlockedInfo()
+    if (accountClosedInfo) clearAccountClosedInfo()
+    navigate('/account-blocked', { replace: true })
+  }, [accountClosedInfo, blockedInfo, navigate, clearAccountClosedInfo, clearBlockedInfo])
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -63,6 +54,8 @@ export default function Login() {
       const result = await signIn(email, password);
       if (result.success) {
         toast.success('Signed in');
+      } else if (result.accountBlocked) {
+        navigate('/account-blocked', { replace: true });
       } else {
         toast.error(result.error || 'Login failed');
       }

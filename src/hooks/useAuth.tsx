@@ -5,6 +5,7 @@ import { prefetchRoleDashboard } from '@/lib/prefetchDashboard'
 import { resetProfilePromptSession } from '@/lib/profileCompletion'
 import { AuthContext, type AuthContextType } from '@/contexts/auth-context'
 import { isInvalidAuthSessionError } from '@/lib/authSessionErrors'
+import { isAuthBlockedError, isPortalAccessDenied } from '@/lib/accountAccess'
 
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
@@ -16,7 +17,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(true)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
-  const [accountClosedInfo, setAccountClosedInfo] = useState<{ reason: 'resigned' | 'deactivated' } | null>(null)
+  const [accountClosedInfo, setAccountClosedInfo] = useState<{
+    reason: 'blocked' | 'resigned' | 'deactivated'
+  } | null>(null)
   const loadingAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAtRef = useRef<number>(0)
@@ -74,19 +77,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const p = profile as User & { is_blocked?: boolean; block_reason?: string | null; is_resigned?: boolean }
-    if (p.is_blocked) {
-      setBlockedInfo({ isBlocked: true, blockReason: p.block_reason ?? null })
-      setAccountClosedInfo(null)
-      setUser(null)
-      setAuthReady(true)
-      setIsProfileLoading(false)
-      loadingAuthUserIdRef.current = null
-      await supabase.auth.signOut()
-      return
-    }
-
-    if (p.is_resigned || !p.is_active) {
-      setAccountClosedInfo({ reason: p.is_resigned ? 'resigned' : 'deactivated' })
+    if (p.is_blocked || p.is_resigned || !p.is_active) {
+      setAccountClosedInfo({
+        reason: p.is_blocked ? 'blocked' : p.is_resigned ? 'resigned' : 'deactivated',
+      })
       setBlockedInfo(null)
       setUser(null)
       setAuthReady(true)
@@ -215,11 +209,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'Supabase is not configured' }
     }
     try {
+      const normalizedEmail = email.trim().toLowerCase()
+      const { data: accessCheck, error: accessErr } = await supabase.rpc('check_portal_login_allowed', {
+        p_email: normalizedEmail,
+      })
+      if (!accessErr && isPortalAccessDenied(accessCheck as { allowed?: boolean; reason?: string })) {
+        return { success: false, accountBlocked: true }
+      }
+
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password: password.trim(),
       })
       if (authError) {
+        if (isAuthBlockedError(authError)) {
+          return { success: false, accountBlocked: true }
+        }
         if (authError.message.includes('Invalid login credentials')) {
           return { success: false, error: 'Incorrect email or password.' }
         }

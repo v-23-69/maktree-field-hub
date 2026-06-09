@@ -31,6 +31,7 @@ function AppRoute({
 
 const Login = lazy(() => import("@/pages/auth/Login"));
 const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
+const AccountBlocked = lazy(() => import("@/pages/auth/AccountBlocked"));
 const MRDashboard = lazy(() => import("@/pages/mr/Dashboard"));
 const NewReport = lazy(() => import("@/pages/mr/NewReport"));
 const ReportHistory = lazy(() => import("@/pages/mr/ReportHistory"));
@@ -122,6 +123,7 @@ const App = () => (
             <Route path="/" element={<RootRedirect />} />
             <Route path="/login" element={<Login />} />
             <Route path="/blocked-complaint" element={<BlockedComplaint />} />
+            <Route path="/account-blocked" element={<AccountBlocked />} />
             <Route path="/profile" element={<AppRoute scope="profile" allowedRoles={['mr', 'manager', 'admin']}><ProfilePage /></AppRoute>} />
             <Route path="/profile/support" element={<AppRoute scope="profile-support" allowedRoles={['mr', 'manager']}><ContactSupport /></AppRoute>} />
             <Route path="/profile/:userId" element={<AppRoute scope="profile-view" allowedRoles={['manager', 'admin']}><ProfilePage /></AppRoute>} />

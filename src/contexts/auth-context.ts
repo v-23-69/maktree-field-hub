@@ -5,11 +5,11 @@ export interface AuthContextType extends AuthState {
   signIn: (
     email: string,
     password: string,
-  ) => Promise<{ success: boolean; error?: string }>
+  ) => Promise<{ success: boolean; error?: string; accountBlocked?: boolean }>
   logout: () => Promise<void>
   blockedInfo: { isBlocked: boolean; blockReason: string | null } | null
   clearBlockedInfo: () => void
-  accountClosedInfo: { reason: 'resigned' | 'deactivated' } | null
+  accountClosedInfo: { reason: 'blocked' | 'resigned' | 'deactivated' } | null
   clearAccountClosedInfo: () => void
 }
 
