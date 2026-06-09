@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert } from 'lucide-react';
+import { Home, Users, Stethoscope, MapPin, Settings, Menu, X, Search, Target, CalendarDays, ShieldAlert, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import BottomNav from '@/components/shared/BottomNav';
 import AppLogo from '@/components/shared/AppLogo';
@@ -21,7 +21,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   const initials = user?.full_name
     ?.split(' ')
@@ -58,6 +63,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             );
           })}
         </nav>
+        <div className="p-3 border-t border-border">
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <LogOut className="h-4 w-4" />
+            Log out
+          </button>
+        </div>
       </aside>
 
       {/* Mobile drawer overlay */}
@@ -100,6 +115,19 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 );
               })}
             </nav>
+            <div className="p-3 border-t border-border">
+              <button
+                type="button"
+                onClick={() => {
+                  setSidebarOpen(false);
+                  void handleLogout();
+                }}
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+                Log out
+              </button>
+            </div>
           </aside>
         </div>
       )}
@@ -124,6 +152,15 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               />
             </div>
           </div>
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="shrink-0 flex h-9 items-center gap-1.5 rounded-lg border border-border px-2.5 text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground active:scale-95 transition-all"
+            aria-label="Log out"
+          >
+            <LogOut className="h-4 w-4" />
+            <span className="hidden sm:inline">Log out</span>
+          </button>
           <button
             onClick={() => navigate('/profile')}
             className="shrink-0 active:scale-95 transition-transform"

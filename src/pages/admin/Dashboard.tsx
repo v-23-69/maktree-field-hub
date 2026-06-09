@@ -73,7 +73,8 @@ export default function AdminDashboard() {
         .select('id', { count: 'exact', head: true })
         .eq('status', 'pending')
       if (error) {
-        if (error.code === '42501' || error.code === 'PGRST301') return 0
+        if (error.code === '42501' || error.code === 'PGRST301' || error.code === 'PGRST116') return 0
+        if (/forbidden|permission denied/i.test(error.message ?? '')) return 0
         throw error
       }
       return count ?? 0
