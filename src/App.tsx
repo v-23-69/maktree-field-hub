@@ -44,6 +44,7 @@ const ManagerDashboard = lazy(() => import("@/pages/manager/Dashboard"));
 const ManagerReports = lazy(() => import("@/pages/manager/Reports"));
 const ManagerAnalytics = lazy(() => import("@/pages/manager/Analytics"));
 const ManagerHistory = lazy(() => import("@/pages/manager/ManagerHistory"));
+const ManagerResignedEmployees = lazy(() => import("@/pages/manager/ManagerResignedEmployees"));
 const ManagerLateDcrGrant = lazy(() => import("@/pages/manager/ManagerLateDcrGrant"));
 const ManagerBackup = lazy(() => import("@/pages/manager/ManagerBackup"));
 const UnlockRequests = lazy(() => import("@/pages/manager/UnlockRequests"));
@@ -156,6 +157,8 @@ const App = () => (
             <Route path="/manager/team" element={<AppRoute scope="manager-team" allowedRoles={['manager']}><ManagerTeamHub /></AppRoute>} />
             <Route path="/manager/team/:mrId" element={<AppRoute scope="manager-team-mr" allowedRoles={['manager']}><ManagerTeamMrDetail /></AppRoute>} />
             <Route path="/manager/history" element={<AppRoute scope="manager-history" allowedRoles={['manager']}><ManagerHistory /></AppRoute>} />
+            <Route path="/manager/history/resigned" element={<AppRoute scope="manager-history-resigned" allowedRoles={['manager']}><ManagerResignedEmployees /></AppRoute>} />
+            <Route path="/manager/history/resigned/:mrId" element={<AppRoute scope="manager-history-resigned-mr" allowedRoles={['manager']}><ManagerTeamMrDetail /></AppRoute>} />
             <Route path="/manager/late-dcr-grant" element={<AppRoute scope="manager-late-dcr-grant" allowedRoles={['manager']}><ManagerLateDcrGrant /></AppRoute>} />
             <Route path="/manager/backup" element={<AppRoute scope="manager-backup" allowedRoles={['manager']}><ManagerBackup /></AppRoute>} />
             <Route path="/manager/report/history" element={<Navigate to="/manager/history" replace />} />

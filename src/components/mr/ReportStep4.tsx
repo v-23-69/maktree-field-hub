@@ -36,6 +36,7 @@ import {
   useSubmitExpenseReport,
   useGetOrCreateExpenseReport,
 } from '@/hooks/useExpense';
+import { dailyExpenseLimitForRole } from '@/lib/expenseLimits';
 
 interface Props {
   data: ReportFormData;
@@ -229,7 +230,11 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
         let expenseId = expenseReport?.id;
         if (!expenseId) {
           try {
-            const created = await getOrCreateExpense.mutateAsync({ mrId: user.id, date: data.date });
+            const created = await getOrCreateExpense.mutateAsync({
+              mrId: user.id,
+              date: data.date,
+              dailyLimit: dailyExpenseLimitForRole(user.role),
+            });
             expenseId = created.id;
           } catch {
             expenseId = undefined;

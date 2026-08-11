@@ -6,6 +6,13 @@ import type { LateDcrFillRequest } from '@/types/database.types'
 
 export type ActiveLateSlot = { slot_id: string; report_date: string }
 
+export type AutoMarkedLeaveDcr = {
+  report_id: string
+  report_date: string
+  leave_dcr_category: string | null
+  leave_dcr_remark: string | null
+}
+
 export function useActiveLateSlotCount(mrId: string) {
   return useQuery({
     queryKey: ['active-late-slots', mrId],
@@ -86,6 +93,52 @@ export function useGrantLateDcrFill() {
       queryClient.invalidateQueries({ queryKey: ['active-late-slots-list', vars.mrId] })
       queryClient.invalidateQueries({ queryKey: ['allowed-report-dates', vars.mrId] })
       queryClient.invalidateQueries({ queryKey: ['manager-late-dcr-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications', vars.mrId] })
+      queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
+      invalidateDashboardQueries(queryClient)
+    },
+  })
+}
+
+export function useAutoMarkedLeaveDcrs(mrId: string) {
+  return useQuery({
+    queryKey: ['auto-marked-leave-dcrs', mrId],
+    enabled: !!mrId && !!supabase,
+    ...LIVE_QUERY_OPTIONS,
+    queryFn: async (): Promise<AutoMarkedLeaveDcr[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('list_auto_marked_leave_dcrs', {
+        p_mr_id: mrId,
+      })
+      if (error) throw error
+      return (data ?? []) as AutoMarkedLeaveDcr[]
+    },
+  })
+}
+
+export function useClearAutoMarkedLeaveForLateDcr() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (p: { mrId: string; dates: string[] }) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { data, error } = await supabase.rpc('clear_auto_marked_leave_for_late_dcr', {
+        p_mr_id: p.mrId,
+        p_dates: p.dates,
+      })
+      if (error) throw error
+      return data as {
+        cleared_count: number
+        granted_count: number
+        cleared_dates: string[]
+        granted_dates: string[]
+      }
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['auto-marked-leave-dcrs', vars.mrId] })
+      queryClient.invalidateQueries({ queryKey: ['mr-reports-counts', vars.mrId] })
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots', vars.mrId] })
+      queryClient.invalidateQueries({ queryKey: ['active-late-slots-list', vars.mrId] })
+      queryClient.invalidateQueries({ queryKey: ['allowed-report-dates', vars.mrId] })
       queryClient.invalidateQueries({ queryKey: ['user-notifications', vars.mrId] })
       queryClient.invalidateQueries({ queryKey: ['user-notifications'] })
       invalidateDashboardQueries(queryClient)

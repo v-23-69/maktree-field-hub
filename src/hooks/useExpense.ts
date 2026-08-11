@@ -6,6 +6,7 @@ import {
 } from '@/lib/queryColumns'
 import { supabase } from '@/lib/supabase'
 import { invalidateDashboardQueries } from '@/lib/invalidateDashboardQueries'
+import { MR_DAILY_EXPENSE_LIMIT } from '@/lib/expenseLimits'
 import type { ExpenseItem, ExpenseReport } from '@/types/database.types'
 
 async function syncExpenseReportTotalUsed(reportId: string): Promise<void> {
@@ -69,7 +70,7 @@ export function useGetOrCreateExpenseReport() {
         .insert({
           mr_id: payload.mrId,
           report_date: payload.date,
-          daily_limit: payload.dailyLimit ?? 300,
+          daily_limit: payload.dailyLimit ?? MR_DAILY_EXPENSE_LIMIT,
           total_used: 0,
           status: 'draft',
         })

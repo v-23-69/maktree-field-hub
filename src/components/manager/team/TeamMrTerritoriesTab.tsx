@@ -12,9 +12,10 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   mrId: string
+  readOnly?: boolean
 }
 
-export default function TeamMrTerritoriesTab({ mrId }: Props) {
+export default function TeamMrTerritoriesTab({ mrId, readOnly = false }: Props) {
   const { data: areas = [], isLoading: areasLoading } = useAllAreas()
   const [checkedSubAreas, setCheckedSubAreas] = useState<string[]>([])
   const [territoryFilter, setTerritoryFilter] = useState('')
@@ -113,6 +114,8 @@ export default function TeamMrTerritoriesTab({ mrId }: Props) {
         </p>
       </div>
 
+      {!readOnly && (
+      <>
       <Button
         type="button"
         variant="outline"
@@ -215,6 +218,8 @@ export default function TeamMrTerritoriesTab({ mrId }: Props) {
             {saveAccess.isPending ? 'Saving…' : 'Save territories'}
           </Button>
         </>
+      )}
+      </>
       )}
     </div>
   )

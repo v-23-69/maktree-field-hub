@@ -19,9 +19,10 @@ type DoctorRow = Doctor & { sub_area_name: string; area_name: string }
 interface Props {
   mrId: string
   mrName: string
+  readOnly?: boolean
 }
 
-export default function TeamMrMasterTab({ mrId, mrName }: Props) {
+export default function TeamMrMasterTab({ mrId, mrName, readOnly = false }: Props) {
   const { data, isLoading } = useTeamMrMasterData(mrId)
   const deactivateDoctor = useManagerDeactivateDoctor()
   const deactivateChemist = useManagerDeactivateChemist()
@@ -97,6 +98,7 @@ export default function TeamMrMasterTab({ mrId, mrName }: Props) {
                         {formatDoctorLabel(d.full_name, d.speciality)}
                       </p>
                     </div>
+                    {!readOnly && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -106,6 +108,7 @@ export default function TeamMrMasterTab({ mrId, mrName }: Props) {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -133,6 +136,7 @@ export default function TeamMrMasterTab({ mrId, mrName }: Props) {
                 {chems.map(c => (
                   <li key={c.id} className="flex items-center gap-2 px-3 py-2.5">
                     <p className="text-sm font-medium text-foreground flex-1 truncate">{c.name}</p>
+                    {!readOnly && (
                     <Button
                       type="button"
                       variant="ghost"
@@ -142,6 +146,7 @@ export default function TeamMrMasterTab({ mrId, mrName }: Props) {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
+                    )}
                   </li>
                 ))}
               </ul>

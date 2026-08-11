@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -13,7 +13,7 @@ import TeamMrTerritoriesTab from '@/components/manager/team/TeamMrTerritoriesTab
 import TeamMrAnalyticsTab from '@/components/manager/team/TeamMrAnalyticsTab'
 import TeamMrMasterTab from '@/components/manager/team/TeamMrMasterTab'
 import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack'
-import { useManagerMrs } from '@/hooks/useManagerTeam'
+import { useManagerFormerMrs, useManagerMrs } from '@/hooks/useManagerTeam'
 import { useAuth } from '@/hooks/useAuth'
 import { useUnpauseUser } from '@/hooks/useTourProgram'
 import {
@@ -40,9 +40,16 @@ export default function TeamMrDetail() {
   const { mrId = '' } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const { user } = useAuth()
   const { goBack: safeGoBack } = usePreventAccidentalBack(true)
-  const { data: mrs = [], isLoading } = useManagerMrs(user?.id ?? '')
+  const archiveMode = location.pathname.includes('/history/resigned/')
+  const { data: activeMrs = [], isLoading: activeLoading } = useManagerMrs(user?.id ?? '')
+  const { data: formerMrs = [], isLoading: formerLoading } = useManagerFormerMrs(
+    archiveMode ? (user?.id ?? '') : '',
+  )
+  const mrs = archiveMode ? formerMrs : activeMrs
+  const isLoading = archiveMode ? formerLoading : activeLoading
   const unpauseUser = useUnpauseUser()
 
   const tab = (searchParams.get('tab') as TabId) || 'overview'
@@ -71,8 +78,14 @@ export default function TeamMrDetail() {
   if (!mr) {
     return (
       <div className="min-h-screen bg-background pb-24">
-        <PageHeader title="MR" showBack onBack={safeGoBack} />
-        <p className="p-6 text-sm text-muted-foreground text-center">MR not found on your team.</p>
+        <PageHeader
+          title="MR"
+          showBack
+          onBack={archiveMode ? () => navigate('/manager/history/resigned') : safeGoBack}
+        />
+        <p className="p-6 text-sm text-muted-foreground text-center">
+          {archiveMode ? 'Former employee not found.' : 'MR not found on your team.'}
+        </p>
         <BottomNav role="manager" />
       </div>
     )
@@ -80,7 +93,11 @@ export default function TeamMrDetail() {
 
   return (
     <div className="min-h-screen bg-background pb-24">
-      <PageHeader title={mr.full_name ?? 'MR'} showBack onBack={safeGoBack} />
+      <PageHeader
+        title={mr.full_name ?? 'MR'}
+        showBack
+        onBack={archiveMode ? () => navigate('/manager/history/resigned') : safeGoBack}
+      />
 
       <div className="px-4 md:px-6 py-4 space-y-4 max-w-lg md:max-w-2xl lg:max-w-4xl mx-auto">
         {mr.is_resigned && (
@@ -136,8 +153,16 @@ export default function TeamMrDetail() {
         {tab === 'tp' && <TeamMrTourTab mrId={mr.id} />}
         {tab === 'dcr' && <TeamMrDcrTab mrId={mr.id} mrName={mr.full_name ?? 'MR'} />}
         {tab === 'support' && <TeamMrMonthlySupportTab mrId={mr.id} />}
-        {tab === 'territories' && <TeamMrTerritoriesTab mrId={mr.id} />}
-        {tab === 'master' && <TeamMrMasterTab mrId={mr.id} mrName={mr.full_name ?? 'MR'} />}
+        {tab === 'territories' && (
+          <TeamMrTerritoriesTab mrId={mr.id} readOnly={mr.is_resigned === true || archiveMode} />
+        )}
+        {tab === 'master' && (
+          <TeamMrMasterTab
+            mrId={mr.id}
+            mrName={mr.full_name ?? 'MR'}
+            readOnly={mr.is_resigned === true || archiveMode}
+          />
+        )}
         {tab === 'analytics' && <TeamMrAnalyticsTab mrId={mr.id} />}
       </div>
 

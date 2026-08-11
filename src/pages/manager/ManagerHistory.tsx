@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CalendarClock, Archive } from 'lucide-react'
+import { CalendarClock, Archive, UserMinus } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -8,7 +8,7 @@ import EmptyState from '@/components/shared/EmptyState'
 import ReportHistoryView from '@/components/mr/ReportHistoryView'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
-import { useManagerMrs } from '@/hooks/useManagerTeam'
+import { useManagerFormerMrs, useManagerMrs } from '@/hooks/useManagerTeam'
 import { cn } from '@/lib/utils'
 import type { ReportHistoryLinkMode } from '@/lib/reportHistoryLinks'
 
@@ -17,6 +17,7 @@ export default function ManagerHistory() {
   const managerId = user?.id ?? ''
   const [searchParams, setSearchParams] = useSearchParams()
   const { data: mrs = [], isLoading } = useManagerMrs(managerId)
+  const { data: formerMrs = [] } = useManagerFormerMrs(managerId)
 
   const mrIdParam = searchParams.get('mrId')
 
@@ -151,6 +152,24 @@ export default function ManagerHistory() {
                 </button>
               ))}
             </div>
+
+            {formerMrs.length > 0 && (
+              <Link
+                to="/manager/history/resigned"
+                className="flex items-center gap-3 rounded-xl border border-border/80 bg-card px-3 py-3 active:scale-[0.99] transition-all"
+              >
+                <div className="h-9 w-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                  <UserMinus className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-foreground">Resigned employees</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formerMrs.length} former MR{formerMrs.length !== 1 ? 's' : ''} · doctors, areas
+                    and reports
+                  </p>
+                </div>
+              </Link>
+            )}
           </>
         )}
 

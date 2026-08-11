@@ -7,7 +7,7 @@ import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useAuth } from '@/hooks/useAuth'
-import { useManagerMrs } from '@/hooks/useManagerTeam'
+import { useManagerFormerMrs, useManagerMrs } from '@/hooks/useManagerTeam'
 import { useLogManagerBackup } from '@/hooks/useManagerBackup'
 import {
   assertManagerExcelExport,
@@ -35,7 +35,10 @@ function monthOptions(count = 24): { value: string; label: string }[] {
 export default function ManagerBackup() {
   const { user } = useAuth()
   const managerId = user?.id ?? ''
-  const { data: mrs = [], isLoading } = useManagerMrs(managerId)
+  const { data: activeMrs = [], isLoading: activeLoading } = useManagerMrs(managerId)
+  const { data: formerMrs = [], isLoading: formerLoading } = useManagerFormerMrs(managerId)
+  const mrs = useMemo(() => [...activeMrs, ...formerMrs], [activeMrs, formerMrs])
+  const isLoading = activeLoading || formerLoading
   const logBackup = useLogManagerBackup()
 
   const months = useMemo(() => monthOptions(120), [])

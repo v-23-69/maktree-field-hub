@@ -24,7 +24,7 @@ const NAV_ITEMS: Record<UserRole, NavItem[]> = {
     { to: '/manager/team', icon: Users, label: 'Team' },
     { to: '/manager/analytics', icon: BarChart3, label: 'Performance' },
     { to: '/manager/reports', icon: FileText, label: 'Reports' },
-    { to: '/manager/history', icon: History, label: 'History', exact: true },
+    { to: '/manager/history', icon: History, label: 'History' },
   ],
   admin: [
     { to: '/admin/dashboard', icon: Home, label: 'Home' },

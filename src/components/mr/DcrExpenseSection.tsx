@@ -18,6 +18,8 @@ import {
   useExpenseReport,
   useGetOrCreateExpenseReport,
 } from '@/hooks/useExpense'
+import { useAuth } from '@/hooks/useAuth'
+import { dailyExpenseLimitForRole } from '@/lib/expenseLimits'
 
 type Props = {
   mrId: string
@@ -27,6 +29,8 @@ type Props = {
 }
 
 export default function DcrExpenseSection({ mrId, reportDate, skipExpense, onSkipChange }: Props) {
+  const { user } = useAuth()
+  const defaultLimit = dailyExpenseLimitForRole(user?.id === mrId ? user.role : 'mr')
   const [category, setCategory] = useState<ExpenseCategoryOption>('Food')
   const [otherDetail, setOtherDetail] = useState('')
   const [amount, setAmount] = useState('')
@@ -39,7 +43,7 @@ export default function DcrExpenseSection({ mrId, reportDate, skipExpense, onSki
   const deleteItem = useDeleteExpenseItem()
 
   const totalUsed = useMemo(() => items.reduce((s, i) => s + Number(i.amount || 0), 0), [items])
-  const dailyLimit = Number(report?.daily_limit ?? 300)
+  const dailyLimit = Number(report?.daily_limit ?? defaultLimit)
   const balance = dailyLimit - totalUsed
   const isSubmitted = report?.status === 'submitted'
 
@@ -48,10 +52,10 @@ export default function DcrExpenseSection({ mrId, reportDate, skipExpense, onSki
     const key = `${mrId}-${reportDate}`
     if (createKey === key) return
     setCreateKey(key)
-    void getOrCreate.mutateAsync({ mrId, date: reportDate }).catch(() => {
+    void getOrCreate.mutateAsync({ mrId, date: reportDate, dailyLimit: defaultLimit }).catch(() => {
       setCreateKey(null)
     })
-  }, [mrId, reportDate, skipExpense, report?.id, getOrCreate, createKey])
+  }, [mrId, reportDate, skipExpense, report?.id, getOrCreate, createKey, defaultLimit])
 
   const canAdd =
     !skipExpense &&

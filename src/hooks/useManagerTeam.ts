@@ -15,7 +15,7 @@ function dedupeManagersMrs(rows: User[]): User[] {
   return out
 }
 
-/** MRs assigned to the current manager via mr_manager_map. */
+/** Active MRs assigned to the current manager (resigned/inactive excluded). */
 export function useManagerMrs(managerId: string) {
   return useQuery({
     queryKey: ['manager-mrs', managerId],
@@ -60,6 +60,8 @@ export function useManagerMrs(managerId: string) {
           .from('users')
           .select('*')
           .in('id', ids)
+          .eq('is_active', true)
+          .eq('is_resigned', false)
           .order('full_name')
         if (uErr) throw uErr
         return dedupeManagersMrs((users ?? []) as User[])
@@ -68,6 +70,59 @@ export function useManagerMrs(managerId: string) {
           e instanceof Error ? e.message : 'Failed to load medical representatives'
         throw new Error(message)
       }
+    },
+    enabled: !!managerId && !!supabase,
+  })
+}
+
+/** Resigned or inactive MRs whose data is kept for manager history. */
+export function useManagerFormerMrs(managerId: string) {
+  return useQuery({
+    queryKey: ['manager-former-mrs', managerId],
+    queryFn: async (): Promise<User[]> => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const rpcRes = await supabase.rpc('list_former_mrs_for_manager')
+      if (!rpcRes.error) {
+        const rows = dedupeManagersMrs((rpcRes.data ?? []) as User[])
+        const ids = rows.map(r => r.id).filter(Boolean)
+        if (ids.length === 0) return rows
+        const { data: extras, error: exErr } = await supabase
+          .from('users')
+          .select('id, profile_photo_url, is_paused, pause_reason, is_resigned, is_active, resigned_at')
+          .in('id', ids)
+        if (exErr) return rows
+        const byId = new Map((extras ?? []).map(u => [u.id as string, u]))
+        return rows.map(r => {
+          const x = byId.get(r.id)
+          if (!x) return r
+          return {
+            ...r,
+            profile_photo_url: x.profile_photo_url ?? r.profile_photo_url,
+            is_paused: x.is_paused ?? r.is_paused,
+            pause_reason: x.pause_reason ?? r.pause_reason,
+            is_resigned: x.is_resigned ?? r.is_resigned,
+            is_active: x.is_active ?? r.is_active,
+            resigned_at: x.resigned_at ?? r.resigned_at,
+          }
+        })
+      }
+
+      const { data: maps, error } = await supabase
+        .from('mr_manager_map')
+        .select('mr_id')
+        .eq('manager_id', managerId)
+      if (error) throw error
+      const ids = [...new Set((maps ?? []).map(m => m.mr_id).filter(Boolean))]
+      if (ids.length === 0) return []
+      const { data: users, error: uErr } = await supabase
+        .from('users')
+        .select('*')
+        .in('id', ids)
+        .order('full_name')
+      if (uErr) throw uErr
+      return dedupeManagersMrs(
+        ((users ?? []) as User[]).filter(u => u.is_resigned === true || u.is_active === false),
+      )
     },
     enabled: !!managerId && !!supabase,
   })

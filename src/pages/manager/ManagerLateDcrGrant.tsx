@@ -11,6 +11,8 @@ import { useManagerMrs } from '@/hooks/useManagerTeam'
 import {
   useActiveLateSlotCount,
   useActiveLateSlots,
+  useAutoMarkedLeaveDcrs,
+  useClearAutoMarkedLeaveForLateDcr,
   useGrantLateDcrFill,
   useRevokeLateDcrFill,
 } from '@/hooks/useLateDcr'
@@ -32,17 +34,22 @@ export default function ManagerLateDcrGrant() {
   const { data: mrs = [], isLoading } = useManagerMrs(managerId)
   const grant = useGrantLateDcrFill()
   const revoke = useRevokeLateDcrFill()
+  const clearLeave = useClearAutoMarkedLeaveForLateDcr()
 
   const initialMr = searchParams.get('mrId') ?? managerId
   const [selectedMrId, setSelectedMrId] = useState(initialMr)
-  const [tab, setTab] = useState<'grant' | 'revoke'>('grant')
+  const [tab, setTab] = useState<'grant' | 'leave' | 'revoke'>('grant')
   const [grantDates, setGrantDates] = useState<Set<string>>(new Set())
   const [revokeDates, setRevokeDates] = useState<Set<string>>(new Set())
+  const [leaveDates, setLeaveDates] = useState<Set<string>>(new Set())
 
   const todayStr = todayInputDate()
   const { data: reports = [] } = useMrReportsWithVisitCounts(selectedMrId)
   const { isLoading: slotsLoading } = useActiveLateSlotCount(selectedMrId)
   const { data: activeSlotRows = [], isLoading: slotsListLoading } = useActiveLateSlots(selectedMrId)
+  const { data: autoLeaveRows = [], isLoading: autoLeaveLoading } = useAutoMarkedLeaveDcrs(
+    selectedMrId === managerId ? '' : selectedMrId,
+  )
 
   const submittedDates = useMemo(() => {
     const set = new Set<string>()
@@ -89,6 +96,15 @@ export default function ManagerLateDcrGrant() {
     })
   }
 
+  const toggleLeave = (date: string) => {
+    setLeaveDates(prev => {
+      const next = new Set(prev)
+      if (next.has(date)) next.delete(date)
+      else next.add(date)
+      return next
+    })
+  }
+
   const toggleRevoke = (date: string) => {
     setRevokeDates(prev => {
       const next = new Set(prev)
@@ -125,6 +141,23 @@ export default function ManagerLateDcrGrant() {
     }
   }
 
+  const handleClearLeave = async () => {
+    const dates = [...leaveDates].sort()
+    if (dates.length === 0) {
+      toast.error('Select at least one auto-leave date')
+      return
+    }
+    try {
+      const result = await clearLeave.mutateAsync({ mrId: selectedMrId, dates })
+      toast.success(
+        `Removed leave on ${result?.cleared_count ?? dates.length} day(s) and opened late DCR`,
+      )
+      setLeaveDates(new Set())
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not remove leave')
+    }
+  }
+
   const handleRevoke = async () => {
     const dates = [...revokeDates].sort()
     if (dates.length === 0) {
@@ -153,8 +186,9 @@ export default function ManagerLateDcrGrant() {
           <p className="text-xs text-muted-foreground leading-relaxed">
             Normal filing is today plus the previous 2 days. Pick up to{' '}
             <strong>{MAX_LATE_DCR_BATCH} specific dates</strong> per batch (not a range). The person
-            must submit all granted late DCRs before you can grant the next batch. Managers can grant
-            for themselves or team MRs — no approval needed.
+            must submit all granted late DCRs before you can grant the next batch. If a day was
+            auto-marked as leave, use <strong>Remove leave</strong> first — that also opens late DCR
+            so the MR can file normally.
           </p>
         </div>
 
@@ -168,6 +202,16 @@ export default function ManagerLateDcrGrant() {
             onClick={() => setTab('grant')}
           >
             Grant dates
+          </button>
+          <button
+            type="button"
+            className={cn(
+              'flex-1 py-2 text-xs font-semibold rounded-md',
+              tab === 'leave' ? 'bg-background shadow-sm' : 'text-muted-foreground',
+            )}
+            onClick={() => setTab('leave')}
+          >
+            Remove leave
           </button>
           <button
             type="button"
@@ -194,6 +238,7 @@ export default function ManagerLateDcrGrant() {
                     setSelectedMrId(managerId)
                     setGrantDates(new Set())
                     setRevokeDates(new Set())
+                    setLeaveDates(new Set())
                   }}
                   className={cn(
                     'rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-all',
@@ -212,6 +257,7 @@ export default function ManagerLateDcrGrant() {
                       setSelectedMrId(mr.id)
                       setGrantDates(new Set())
                       setRevokeDates(new Set())
+                      setLeaveDates(new Set())
                     }}
                     className={cn(
                       'rounded-xl border px-3 py-2.5 text-left text-xs font-semibold transition-all line-clamp-2',
@@ -234,6 +280,12 @@ export default function ManagerLateDcrGrant() {
                     are all submitted before granting a new batch.
                   </p>
                 )}
+                {autoLeaveRows.length > 0 && (
+                  <p className="text-sm text-amber-800 bg-amber-500/10 rounded-lg px-3 py-2">
+                    {autoLeaveRows.length} auto-leave day(s) are blocking late DCR. Open the Remove leave
+                    tab to clear them.
+                  </p>
+                )}
 
                 <LateDcrDateMultiSelect
                   submittedDates={submittedDates}
@@ -252,6 +304,78 @@ export default function ManagerLateDcrGrant() {
                     ? 'Granting…'
                     : `Grant ${grantDates.size} selected date(s)`}
                 </Button>
+              </>
+            )}
+
+            {tab === 'leave' && (
+              <>
+                {selectedMrId === managerId ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Auto-leave only applies to team MRs. Select an MR above.
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Days the system auto-marked as leave (missed DCR window). Removing the mark
+                      also opens late DCR so {subjectName} can file a normal report.
+                    </p>
+                    {autoLeaveLoading && <LoadingSpinner />}
+                    {!autoLeaveLoading && autoLeaveRows.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        No auto-marked leave days for {subjectName}.
+                      </p>
+                    )}
+                    {!autoLeaveLoading && autoLeaveRows.length > 0 && (
+                      <div className="space-y-2 rounded-xl border border-border/60 bg-card p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-semibold">
+                            Auto-leave days ({autoLeaveRows.length})
+                          </p>
+                          <button
+                            type="button"
+                            className="text-[10px] font-semibold text-primary hover:underline"
+                            onClick={() =>
+                              setLeaveDates(
+                                leaveDates.size === autoLeaveRows.length
+                                  ? new Set()
+                                  : new Set(autoLeaveRows.map(row => row.report_date)),
+                              )
+                            }
+                          >
+                            {leaveDates.size === autoLeaveRows.length ? 'Clear' : 'Select all'}
+                          </button>
+                        </div>
+                        {autoLeaveRows.map(row => (
+                          <label
+                            key={row.report_id}
+                            className="flex items-center gap-2 text-sm py-1.5 border-b border-border/40 last:border-0"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={leaveDates.has(row.report_date)}
+                              onChange={() => toggleLeave(row.report_date)}
+                              className="rounded border-border"
+                            />
+                            <span className="flex-1">{formatDisplayDate(row.report_date)}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {row.leave_dcr_category === 'without_pay' ? 'LOP' : row.leave_dcr_category}
+                            </span>
+                          </label>
+                        ))}
+                        <Button
+                          type="button"
+                          className="w-full rounded-xl mt-2"
+                          disabled={clearLeave.isPending || leaveDates.size === 0}
+                          onClick={() => void handleClearLeave()}
+                        >
+                          {clearLeave.isPending
+                            ? 'Removing…'
+                            : `Remove leave & allow late DCR (${leaveDates.size})`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
               </>
             )}
 

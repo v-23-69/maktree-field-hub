@@ -22,6 +22,7 @@ import {
   useSubmitExpenseReport,
   useGetOrCreateExpenseReport,
 } from '@/hooks/useExpense'
+import { dailyExpenseLimitForRole } from '@/lib/expenseLimits'
 
 export default function MRExpense() {
   const { user } = useAuth()
@@ -45,7 +46,7 @@ export default function MRExpense() {
   const submitReport = useSubmitExpenseReport()
   const getOrCreateReport = useGetOrCreateExpenseReport()
   const totalUsed = useMemo(() => items.reduce((sum, item) => sum + Number(item.amount || 0), 0), [items])
-  const dailyLimit = Number(report?.daily_limit ?? 300)
+  const dailyLimit = Number(report?.daily_limit ?? dailyExpenseLimitForRole(user?.role))
   const balance = dailyLimit - totalUsed
 
   useEffect(() => {
@@ -54,8 +55,14 @@ export default function MRExpense() {
     const requestKey = `${user.id}-${date}`
     if (createAttemptedKey === requestKey) return
     setCreateAttemptedKey(requestKey)
-    void getOrCreateReport.mutateAsync({ mrId: user.id, date }).catch(() => {})
-  }, [user?.id, date, report?.id, getOrCreateReport, createAttemptedKey])
+    void getOrCreateReport
+      .mutateAsync({
+        mrId: user.id,
+        date,
+        dailyLimit: dailyExpenseLimitForRole(user.role),
+      })
+      .catch(() => {})
+  }, [user?.id, user?.role, date, report?.id, getOrCreateReport, createAttemptedKey])
 
   const dateLabels = ['Today', 'Yesterday', 'Day Before']
 
