@@ -12,12 +12,11 @@ export function isPortalAccessDenied(
 export function isAuthBlockedError(error: { message?: string; status?: number } | null): boolean {
   if (!error) return false
   const msg = (error.message ?? '').toLowerCase()
+  // Do not treat 500/403/timeouts as blocked — those happen when Auth/DB is overloaded.
   return (
-    error.status === 500 ||
-    error.status === 403 ||
+    msg.includes('user is banned') ||
+    msg.includes('user_banned') ||
     msg.includes('banned') ||
-    msg.includes('disabled') ||
-    msg.includes('not authorized') ||
-    msg.includes('user is banned')
+    (msg.includes('disabled') && msg.includes('user'))
   )
 }

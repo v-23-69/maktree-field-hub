@@ -14,7 +14,9 @@ export const supabase = supabaseUrl && supabaseAnonKey
       auth: {
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: true,
+        // HashRouter uses window.location.hash for routes; parsing it as an
+        // OAuth callback can drop a valid session right after login.
+        detectSessionInUrl: false,
         storage: browserStorage,
       },
     })

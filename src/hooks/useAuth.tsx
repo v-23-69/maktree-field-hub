@@ -17,9 +17,23 @@ const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
 const PROFILE_SELECT =
   'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
-const LOGIN_RPC_TIMEOUT_MS = 8_000
-const PROFILE_FETCH_TIMEOUT_MS = 12_000
+const LOGIN_RPC_TIMEOUT_MS = 2_500
+const PROFILE_FETCH_TIMEOUT_MS = 10_000
 const PROFILE_RETRY_COUNT = 3
+const PASSWORD_LOGIN_TIMEOUT_MS = 20_000
+
+type ProfileQueryError = { message?: string; code?: string; name?: string } | null
+
+function isClosedAccount(p: User): boolean {
+  return !!(p.is_blocked || p.is_resigned || p.is_active === false)
+}
+
+function asUser(row: unknown): User | null {
+  if (!row || typeof row !== 'object') return null
+  const u = row as Partial<User>
+  if (!u.id || !u.role) return null
+  return u as User
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -30,19 +44,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     reason: 'blocked' | 'resigned' | 'deactivated'
   } | null>(null)
   const loadingAuthUserIdRef = useRef<string | null>(null)
-  const inFlightProfileRef = useRef<{ id: string; promise: Promise<boolean> } | null>(null)
+  const profileEpochRef = useRef(0)
+  const inFlightProfileRef = useRef<{ epoch: number; id: string; promise: Promise<boolean> } | null>(null)
   const lastLoadedAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAtRef = useRef<number>(0)
+  const signingInRef = useRef(false)
 
   const clearBlockedInfo = useCallback(() => setBlockedInfo(null), [])
   const clearAccountClosedInfo = useCallback(() => setAccountClosedInfo(null), [])
 
-  const loadProfile = useCallback(async (authUserId: string, preferCache = false, freshLogin = false): Promise<boolean> => {
+  const bumpProfileEpoch = useCallback(() => {
+    profileEpochRef.current += 1
+    inFlightProfileRef.current = null
+    loadingAuthUserIdRef.current = null
+  }, [])
+
+  const fetchProfileRow = useCallback(async (client: NonNullable<typeof supabase>, authUserId: string) => {
+    let error: ProfileQueryError = null
+    try {
+      const rpc = await client
+        .rpc('get_my_portal_profile')
+        .abortSignal(abortSignalTimeout(PROFILE_FETCH_TIMEOUT_MS))
+      if (!rpc.error) {
+        const profile = asUser(rpc.data)
+        if (profile) return { profile, error: null }
+      } else {
+        error = rpc.error
+      }
+    } catch (e) {
+      error = { message: e instanceof Error ? e.message : String(e), name: e instanceof Error ? e.name : undefined }
+    }
+
+    try {
+      const result = await client
+        .from('users')
+        .select(PROFILE_SELECT)
+        .eq('auth_user_id', authUserId)
+        .abortSignal(abortSignalTimeout(PROFILE_FETCH_TIMEOUT_MS))
+        .maybeSingle()
+      return { profile: asUser(result.data), error: result.error ?? error }
+    } catch (e) {
+      return {
+        profile: null as User | null,
+        error: {
+          message: e instanceof Error ? e.message : String(e),
+          name: e instanceof Error ? e.name : undefined,
+        } as ProfileQueryError,
+      }
+    }
+  }, [])
+
+  const loadProfile = useCallback(async (
+    authUserId: string,
+    preferCache = false,
+    freshLogin = false,
+    epoch = profileEpochRef.current,
+  ): Promise<boolean> => {
     const client = supabase
     if (!client) return false
-    if (inFlightProfileRef.current?.id === authUserId) return inFlightProfileRef.current.promise
+    if (epoch !== profileEpochRef.current) return false
+    if (
+      inFlightProfileRef.current?.id === authUserId &&
+      inFlightProfileRef.current.epoch === epoch
+    ) {
+      return inFlightProfileRef.current.promise
+    }
 
     const run = (async (): Promise<boolean> => {
+      if (epoch !== profileEpochRef.current) return false
+
       let usedCache = false
       if (preferCache) {
         try {
@@ -73,26 +143,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsProfileLoading(true)
 
       for (let attempt = 0; attempt < PROFILE_RETRY_COUNT; attempt++) {
-        let profile: User | null = null
-        let error: { message?: string; code?: string; name?: string } | null = null
-        try {
-          const result = await client
-            .from('users')
-            .select(PROFILE_SELECT)
-            .eq('auth_user_id', authUserId)
-            .abortSignal(abortSignalTimeout(PROFILE_FETCH_TIMEOUT_MS))
-            .maybeSingle()
-          profile = (result.data as User | null) ?? null
-          error = result.error
-        } catch (e) {
-          error = { message: e instanceof Error ? e.message : String(e), name: e instanceof Error ? e.name : undefined }
-        }
+        if (epoch !== profileEpochRef.current) return false
+        const { profile, error } = await fetchProfileRow(client, authUserId)
 
-        if (!error && profile) {
-          const p = profile as User & { is_blocked?: boolean; block_reason?: string | null; is_resigned?: boolean }
-          if (p.is_blocked || p.is_resigned || !p.is_active) {
+        if (profile) {
+          if (isClosedAccount(profile)) {
             setAccountClosedInfo({
-              reason: p.is_blocked ? 'blocked' : p.is_resigned ? 'resigned' : 'deactivated',
+              reason: profile.is_blocked ? 'blocked' : profile.is_resigned ? 'resigned' : 'deactivated',
             })
             setBlockedInfo(null)
             setUser(null)
@@ -105,11 +162,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           setBlockedInfo(null)
           setAccountClosedInfo(null)
-          const nextUser = profile as User
-          setUser(nextUser)
-          sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: nextUser }))
-          if (freshLogin) resetProfilePromptSession(nextUser.id)
-          prefetchRoleDashboard(nextUser.role)
+          setUser(profile)
+          sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: profile }))
+          if (freshLogin) resetProfilePromptSession(profile.id)
+          prefetchRoleDashboard(profile.role)
           lastLoadedAuthUserIdRef.current = authUserId
           lastLoadedAtRef.current = Date.now()
           setAuthReady(true)
@@ -134,33 +190,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await sleep(600 * 2 ** attempt)
       }
 
+      if (epoch !== profileEpochRef.current) return false
       setAuthReady(true)
       setIsProfileLoading(false)
       loadingAuthUserIdRef.current = null
       return usedCache || lastLoadedAuthUserIdRef.current === authUserId
     })()
 
-    inFlightProfileRef.current = { id: authUserId, promise: run }
+    inFlightProfileRef.current = { epoch, id: authUserId, promise: run }
     try {
       return await run
     } finally {
-      if (inFlightProfileRef.current?.id === authUserId) inFlightProfileRef.current = null
+      if (
+        inFlightProfileRef.current?.id === authUserId &&
+        inFlightProfileRef.current.epoch === epoch
+      ) {
+        inFlightProfileRef.current = null
+      }
     }
-  }, [])
+  }, [fetchProfileRow])
 
   useEffect(() => {
-    if (!supabase) {
+    const client = supabase
+    if (!client) {
       setAuthReady(true)
       return
     }
     let mounted = true
+
     void (async () => {
       try {
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        const { data: { session }, error: sessionError } = await client.auth.getSession()
         if (!mounted) return
         const errMsg = [sessionError?.message, sessionError?.name].filter(Boolean).join(' ')
         if (sessionError && isInvalidAuthSessionError(errMsg)) {
-          await supabase.auth.signOut({ scope: 'local' })
+          bumpProfileEpoch()
+          await client.auth.signOut({ scope: 'local' })
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
@@ -168,32 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (session?.user) {
-          try {
-            const { data: userData, error: userErr } = await withTimeout(
-              supabase.auth.getUser(),
-              LOGIN_RPC_TIMEOUT_MS,
-              'Session check timed out',
-            )
-            const um = [userErr?.message, userErr?.name].filter(Boolean).join(' ')
-            if (userErr && isInvalidAuthSessionError(um)) {
-              await supabase.auth.signOut({ scope: 'local' })
-              setUser(null)
-              setAuthReady(true)
-              setIsProfileLoading(false)
-              sessionStorage.removeItem(PROFILE_CACHE_KEY)
-              return
-            }
-            if (!userErr && !userData.user) {
-              await supabase.auth.signOut({ scope: 'local' })
-              setUser(null)
-              setAuthReady(true)
-              setIsProfileLoading(false)
-              sessionStorage.removeItem(PROFILE_CACHE_KEY)
-              return
-            }
-          } catch {
-            // Auth API timeout / 5xx — keep the local session and load the profile.
-          }
+          // Do not call getUser() here — Auth /user 504s hold the GoTrue lock and block login.
           void loadProfile(session.user.id, true)
         } else {
           setUser(null)
@@ -205,7 +245,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return
         const msg = e instanceof Error ? e.message : String(e)
         if (isInvalidAuthSessionError(msg)) {
-          await supabase.auth.signOut({ scope: 'local' })
+          bumpProfileEpoch()
+          await client.auth.signOut({ scope: 'local' })
         }
         setUser(null)
         setAuthReady(true)
@@ -214,62 +255,65 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     })()
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange((event, session) => {
+      // Defer so this callback never deadlocks signInWithPassword (GoTrue holds a lock
+      // until onAuthStateChange listeners finish).
+      window.setTimeout(() => {
         if (!mounted) return
         if (event === 'TOKEN_REFRESHED') {
           if (!session) {
-            await supabase.auth.signOut({ scope: 'local' })
+            bumpProfileEpoch()
             setUser(null)
             setAuthReady(true)
             sessionStorage.removeItem(PROFILE_CACHE_KEY)
           }
           return
         }
-        try {
-          if (session?.user) {
-            const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
-            if (sameUser) {
-              setAuthReady(true)
-              return
-            }
-            void loadProfile(session.user.id, true)
-          } else {
-            setUser(null)
-            setAuthReady(true)
-            setIsProfileLoading(false)
-            sessionStorage.removeItem(PROFILE_CACHE_KEY)
-            lastLoadedAuthUserIdRef.current = null
-            lastLoadedAtRef.current = 0
-          }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e)
-          if (isInvalidAuthSessionError(msg)) {
-            await supabase.auth.signOut({ scope: 'local' })
-          }
+        if (event === 'SIGNED_OUT') {
+          if (signingInRef.current) return
+          bumpProfileEpoch()
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
           sessionStorage.removeItem(PROFILE_CACHE_KEY)
           lastLoadedAuthUserIdRef.current = null
           lastLoadedAtRef.current = 0
+          return
         }
-      },
-    )
+        if (session?.user) {
+          const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
+          if (sameUser) {
+            setAuthReady(true)
+            return
+          }
+          void loadProfile(session.user.id, true)
+        }
+      }, 0)
+    })
     return () => {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [loadProfile])
+  }, [bumpProfileEpoch, loadProfile])
 
   const signIn = useCallback(async (email: string, password: string) => {
-    if (!supabase) {
+    const client = supabase
+    if (!client) {
       return { success: false, error: 'Supabase is not configured' }
     }
+    signingInRef.current = true
+    bumpProfileEpoch()
+    const epoch = profileEpochRef.current
     try {
       const normalizedEmail = email.trim().toLowerCase()
       try {
-        const { data: accessCheck, error: accessErr } = await supabase
+        await client.auth.signOut({ scope: 'local' })
+      } catch {
+        // Ignore — clearing a stale refresh token should not block password login.
+      }
+
+      try {
+        const { data: accessCheck, error: accessErr } = await client
           .rpc('check_portal_login_allowed', { p_email: normalizedEmail })
           .abortSignal(abortSignalTimeout(LOGIN_RPC_TIMEOUT_MS))
         if (!accessErr && isPortalAccessDenied(accessCheck as { allowed?: boolean; reason?: string })) {
@@ -280,11 +324,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { data: authData, error: authError } = await withTimeout(
-        supabase.auth.signInWithPassword({
+        client.auth.signInWithPassword({
           email: normalizedEmail,
           password: password.trim(),
         }),
-        25_000,
+        PASSWORD_LOGIN_TIMEOUT_MS,
         'Login is taking too long. The server is busy — please try again.',
       )
       if (authError) {
@@ -299,7 +343,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
       }
-      const loaded = await loadProfile(authData.session.user.id, false, true)
+      const loaded = await loadProfile(authData.session.user.id, false, true, epoch)
       if (!loaded) {
         return {
           success: false,
@@ -310,11 +354,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Login failed'
       return { success: false, error: message }
+    } finally {
+      signingInRef.current = false
     }
-  }, [loadProfile])
+  }, [bumpProfileEpoch, loadProfile])
 
   const logout = useCallback(async () => {
     const userId = user?.id
+    bumpProfileEpoch()
     try {
       if (supabase) await supabase.auth.signOut()
     } finally {
@@ -326,7 +373,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       lastLoadedAuthUserIdRef.current = null
       lastLoadedAtRef.current = 0
     }
-  }, [user?.id])
+  }, [bumpProfileEpoch, user?.id])
 
   const value = useMemo((): AuthContextType => {
     return {
