@@ -70,7 +70,7 @@ export default function ManagerDashboard() {
     user?.full_name ?? 'Manager',
     mrs,
   );
-  useDashboardRefresh(!!user?.id);
+  useDashboardRefresh(deferReady && !!user?.id);
   const { data: areas = [] } = useAllAreas();
   const saveMrSubAreaAccess = useSaveMrSubAreaAccess();
 

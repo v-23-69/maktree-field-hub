@@ -54,10 +54,10 @@ export default function MRDashboard() {
   const { data: todayPlan } = useTodayTpPlan(userId);
   const { data: allowedDates = [] } = useAllowedReportDates(userId);
   // Deferred queries (below the fold)
-  const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(userId);
+  const { data: subAreas = [], isLoading: subAreasLoading } = useMrSubAreas(deferReady ? userId : '');
   const { data: targetRows = [], isLoading: targetsLoading } = useMrTargets(deferReady ? userId : '');
   const { data: stats, isLoading: statsLoading } = useMrDashboardStats(deferReady ? userId : '');
-  useDashboardRefresh(!!userId);
+  useDashboardRefresh(deferReady && !!userId);
   const { data: todayStrike } = useTodayStrike(deferReady ? userId : '');
   const markStrike = useMarkStrike();
   const { data: strikeCount = 0 } = useStrikeCount(deferReady ? userId : '');

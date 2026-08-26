@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { sleep } from '@/lib/asyncTimeout'
 import { invalidateDashboardQueriesForTables } from '@/lib/invalidateDashboardQueries'
 
 const WATCH_TABLES = [
@@ -27,9 +28,10 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
 
   useEffect(() => {
     if (!enabled || !supabase) return
+    const client = supabase
 
     let cancelled = false
-    let channel: ReturnType<typeof supabase.channel> | null = null
+    let channel: ReturnType<typeof client.channel> | null = null
     const pendingTables = new Set<string>()
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -47,10 +49,13 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
     }
 
     void (async () => {
-      const { data: { session } } = await supabase.auth.getSession()
+      await sleep(12_000)
+      if (cancelled) return
+
+      const { data: { session } } = await client.auth.getSession()
       if (cancelled || !session) return
 
-      channel = supabase.channel('maktree-dashboard-realtime')
+      channel = client.channel('maktree-dashboard-realtime')
 
       for (const table of WATCH_TABLES) {
         channel.on(
@@ -67,7 +72,7 @@ export function useSupabaseRealtimeDashboard(enabled: boolean) {
       cancelled = true
       if (debounceTimer) clearTimeout(debounceTimer)
       pendingTables.clear()
-      if (channel) void supabase.removeChannel(channel)
+      if (channel) void client.removeChannel(channel)
     }
   }, [enabled, queryClient])
 }

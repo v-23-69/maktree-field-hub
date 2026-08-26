@@ -1,13 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
-import { LIVE_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import { showBrowserNotification } from '@/lib/notifications/showBrowserNotification'
 import type { UserNotification } from '@/types/database.types'
 
 const NOTIFICATION_QUERY_OPTIONS = {
-  staleTime: 5_000,
-  refetchInterval: 12_000,
+  staleTime: 20_000,
+  refetchInterval: 45_000,
   refetchOnWindowFocus: true,
   refetchOnReconnect: true,
 } as const
@@ -35,25 +34,32 @@ export function useUserNotifications(userId: string) {
   useEffect(() => {
     if (!userId || !supabase) return
 
-    const channel = supabase
-      .channel(`user-notifications-${userId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_notifications',
-          filter: `user_id=eq.${userId}`,
-        },
-        () => {
-          void queryClient.invalidateQueries({ queryKey: ['user-notifications', userId] })
-          void queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
-        },
-      )
-      .subscribe()
+    let cancelled = false
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    const timer = window.setTimeout(() => {
+      if (cancelled || !supabase) return
+      channel = supabase
+        .channel(`user-notifications-${userId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'user_notifications',
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            void queryClient.invalidateQueries({ queryKey: ['user-notifications', userId] })
+            void queryClient.invalidateQueries({ queryKey: ['manager-pending-counts'] })
+          },
+        )
+        .subscribe()
+    }, 12_000)
 
     return () => {
-      void supabase.removeChannel(channel)
+      cancelled = true
+      window.clearTimeout(timer)
+      if (channel) void supabase.removeChannel(channel)
     }
   }, [userId, queryClient])
 
