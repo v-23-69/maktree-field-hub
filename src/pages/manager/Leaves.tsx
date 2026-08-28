@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -9,10 +10,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
 import { useManagerDoctorDeletionRequests, useResolveDoctorDeletion } from '@/hooks/useDoctorDeletion'
 import { formatDisplayDate } from '@/lib/dateUtils'
+import { leaveCategoryLabel } from '@/lib/leaveLabels'
 
 type MainTab = 'leave' | 'doctor-removals' | 'calendar'
 
 export default function ManagerLeaves() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const managerId = user?.id ?? ''
   const { data: leaves = [] } = useManagerLeaves(managerId)
@@ -48,6 +51,9 @@ export default function ManagerLeaves() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Leaves & approvals" />
       <div className="p-4 md:px-6 space-y-3 max-w-2xl lg:max-w-4xl mx-auto">
+        <Button variant="outline" className="w-full rounded-xl" onClick={() => navigate('/manager/my-leave')}>
+          Log my own leave
+        </Button>
         <div className="grid grid-cols-3 gap-2">
           <Button variant={mainTab === 'leave' ? 'default' : 'outline'} onClick={() => setMainTab('leave')}>
             Team leave
@@ -85,7 +91,7 @@ export default function ManagerLeaves() {
                   <p className="text-sm font-semibold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')} ·{' '}
-                    {(leave.leave_category ?? 'casual') === 'sick' ? 'Sick' : 'Casual'}
+                    {leaveCategoryLabel(leave.leave_category)}
                   </p>
                   <p className="text-xs text-foreground">{leave.reason}</p>
                   <Input

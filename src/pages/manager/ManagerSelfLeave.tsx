@@ -49,7 +49,7 @@ export default function ManagerSelfLeavePage() {
           <Textarea value={remark} onChange={e => setRemark(e.target.value)} placeholder="Remark (optional)" className="rounded-lg min-h-[72px]" />
           <Button
             className="w-full rounded-xl"
-            disabled={!leaveDate || upsert.isPending}
+            disabled={!leaveDate || !managerId || upsert.isPending}
             onClick={() =>
               void upsert
                 .mutateAsync({
@@ -62,7 +62,7 @@ export default function ManagerSelfLeavePage() {
                   toast.success('Leave saved')
                   setRemark('')
                 })
-                .catch(e => toast.error(e instanceof Error ? e.message : 'Failed'))
+                .catch(e => toast.error(e instanceof Error ? e.message : 'Failed to save leave'))
             }
           >
             Save leave day

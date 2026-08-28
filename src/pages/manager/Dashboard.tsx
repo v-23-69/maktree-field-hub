@@ -402,6 +402,18 @@ export default function ManagerDashboard() {
         <DashboardSection title="Quick actions" className="max-md:order-[35]">
           <div className={managerQuickActionGridClass}>
             <ManagerQuickAction
+              label="My leave"
+              iconClassName="bg-teal-500/10"
+              onClick={() => navigate('/manager/my-leave')}
+              icon={<Umbrella className="h-4 w-4 md:h-5 md:w-5 text-teal-600 dark:text-teal-400" />}
+            />
+            <ManagerQuickAction
+              label="Team leave"
+              iconClassName="bg-teal-500/10"
+              onClick={() => navigate('/manager/leaves')}
+              icon={<ClipboardList className="h-4 w-4 md:h-5 md:w-5 text-teal-600 dark:text-teal-400" />}
+            />
+            <ManagerQuickAction
               label="Add MR"
               iconClassName="bg-sky-500/10"
               onClick={() => navigate('/manager/team', { state: { openManage: 'create-mr' } })}
