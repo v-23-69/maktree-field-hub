@@ -1,6 +1,6 @@
 /* Maktree Field Hub — app-shell + static asset caching for PWA installability & speed */
-const SHELL_CACHE = "maktree-shell-v9";
-const ASSET_CACHE = "maktree-assets-v2";
+const SHELL_CACHE = "maktree-shell-v10";
+const ASSET_CACHE = "maktree-assets-v3";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

@@ -15,12 +15,14 @@ import {
 
 const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
 const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
+/** When PostgREST/Auth is overloaded, allow a recently cached profile so login still completes. */
+const PROFILE_STALE_CACHE_MAX_MS = 24 * 60 * 60 * 1000
 const PROFILE_SELECT =
   'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
-const LOGIN_RPC_TIMEOUT_MS = 2_500
-const PROFILE_FETCH_TIMEOUT_MS = 10_000
-const PROFILE_RETRY_COUNT = 3
-const PASSWORD_LOGIN_TIMEOUT_MS = 20_000
+const LOGIN_RPC_TIMEOUT_MS = 8_000
+const PROFILE_FETCH_TIMEOUT_MS = 15_000
+const PROFILE_RETRY_COUNT = 5
+const PASSWORD_LOGIN_TIMEOUT_MS = 30_000
 
 type ProfileQueryError = { message?: string; code?: string; name?: string } | null
 
@@ -33,6 +35,26 @@ function asUser(row: unknown): User | null {
   const u = row as Partial<User>
   if (!u.id || !u.role) return null
   return u as User
+}
+
+function readCachedProfile(authUserId: string, maxAgeMs: number): User | null {
+  try {
+    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY)
+    if (!raw) return null
+    const cached = JSON.parse(raw) as { ts: number; user: User }
+    if (
+      cached?.user?.auth_user_id === authUserId &&
+      Date.now() - cached.ts < maxAgeMs &&
+      cached.user.is_active !== false &&
+      !cached.user.is_resigned &&
+      !cached.user.is_blocked
+    ) {
+      return cached.user
+    }
+  } catch {
+    sessionStorage.removeItem(PROFILE_CACHE_KEY)
+  }
+  return null
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -115,27 +137,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       let usedCache = false
       if (preferCache) {
-        try {
-          const raw = sessionStorage.getItem(PROFILE_CACHE_KEY)
-          if (raw) {
-            const cached = JSON.parse(raw) as { ts: number; user: User }
-            if (
-              cached?.user?.auth_user_id === authUserId &&
-              Date.now() - cached.ts < PROFILE_CACHE_TTL_MS &&
-              cached.user.is_active !== false &&
-              !cached.user.is_resigned &&
-              !cached.user.is_blocked
-            ) {
-              usedCache = true
-              setBlockedInfo(null)
-              setAccountClosedInfo(null)
-              setUser(cached.user)
-              setAuthReady(true)
-              setIsProfileLoading(false)
-            }
-          }
-        } catch {
-          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+        const cached = readCachedProfile(authUserId, PROFILE_CACHE_TTL_MS)
+        if (cached) {
+          usedCache = true
+          setBlockedInfo(null)
+          setAccountClosedInfo(null)
+          setUser(cached)
+          setAuthReady(true)
+          setIsProfileLoading(false)
         }
       }
 
@@ -191,6 +200,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (epoch !== profileEpochRef.current) return false
+
+      const staleCached = readCachedProfile(authUserId, PROFILE_STALE_CACHE_MAX_MS)
+      if (staleCached) {
+        setBlockedInfo(null)
+        setAccountClosedInfo(null)
+        setUser(staleCached)
+        lastLoadedAuthUserIdRef.current = authUserId
+        lastLoadedAtRef.current = Date.now()
+        setAuthReady(true)
+        setIsProfileLoading(false)
+        loadingAuthUserIdRef.current = null
+        return true
+      }
+
       setAuthReady(true)
       setIsProfileLoading(false)
       loadingAuthUserIdRef.current = null
@@ -280,9 +303,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           lastLoadedAtRef.current = 0
           return
         }
+        if (event === 'SIGNED_IN' && session?.user) {
+          void loadProfile(session.user.id, true, true)
+          return
+        }
         if (session?.user) {
           const sameUser = lastLoadedAuthUserIdRef.current === session.user.id
-          if (sameUser) {
+          if (sameUser && Date.now() - lastLoadedAtRef.current < PROFILE_CACHE_TTL_MS) {
             setAuthReady(true)
             return
           }
@@ -306,11 +333,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const epoch = profileEpochRef.current
     try {
       const normalizedEmail = email.trim().toLowerCase()
-      try {
-        await client.auth.signOut({ scope: 'local' })
-      } catch {
-        // Ignore — clearing a stale refresh token should not block password login.
-      }
 
       try {
         const { data: accessCheck, error: accessErr } = await client
@@ -343,8 +365,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
       }
-      const loaded = await loadProfile(authData.session.user.id, false, true, epoch)
+
+      let loaded = await loadProfile(authData.session.user.id, true, true, epoch)
       if (!loaded) {
+        await sleep(1500)
+        loaded = await loadProfile(authData.session.user.id, true, false, epoch)
+      }
+      if (!loaded) {
+        const stale = readCachedProfile(authData.session.user.id, PROFILE_STALE_CACHE_MAX_MS)
+        if (stale) {
+          setBlockedInfo(null)
+          setAccountClosedInfo(null)
+          setUser(stale)
+          lastLoadedAuthUserIdRef.current = authData.session.user.id
+          lastLoadedAtRef.current = Date.now()
+          setAuthReady(true)
+          return { success: true }
+        }
         return {
           success: false,
           error: 'Signed in, but the server is busy loading your profile. Please wait a few seconds and try again.',
