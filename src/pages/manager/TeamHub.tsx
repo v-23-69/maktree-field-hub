@@ -382,7 +382,7 @@ export default function TeamHub() {
                     <p className="text-sm font-semibold truncate">{mr.full_name}</p>
                     <p className="text-[10px] text-muted-foreground">
                       {`DCR: ${tr?.submitted ? 'Done' : 'Pending'} · Exp: ${ex?.status === 'submitted' ? 'Done' : ex?.status === 'draft' ? 'Draft' : '—'}${tp ? ` · TP: ${tp.status}` : ''}`}
-                    </p
+                    </p>
                   </div>
                   {paused ? (
                     <Lock className="h-4 w-4 text-destructive shrink-0" />
