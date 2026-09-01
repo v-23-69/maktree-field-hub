@@ -16,7 +16,7 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children, allowedRoles, scope }: ProtectedRouteProps) {
   const { user, isAuthenticated, authReady, isProfileLoading } = useAuth();
 
-  if (!authReady) return <LoadingSpinner />;
+  if (!authReady) return <LoadingSpinner fullScreen showLogo={false} message="Checking your session…" />;
   if (isProfileLoading && user) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
@@ -28,7 +28,7 @@ export default function ProtectedRoute({ children, allowedRoles, scope }: Protec
       </div>
     );
   }
-  if (isProfileLoading) return <LoadingSpinner />;
+  if (isProfileLoading) return <LoadingSpinner fullScreen showLogo={false} message="Getting your profile ready…" />;
   if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return <Navigate to={`/${user.role}/dashboard`} replace />;

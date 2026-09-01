@@ -40,7 +40,7 @@ export default function BottomNav({ role }: { role: UserRole }) {
   const location = useLocation();
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 glass border-t"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      style={{ paddingBottom: 'var(--safe-area-inset-bottom, 0px)' }}
     >
       <div className="mx-auto flex w-full max-w-lg md:max-w-2xl lg:max-w-3xl items-stretch md:px-4">
         {items.map(item => {

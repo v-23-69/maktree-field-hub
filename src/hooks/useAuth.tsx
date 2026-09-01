@@ -1,6 +1,7 @@
 import { useContext, useState, useCallback, useEffect, ReactNode, useMemo, useRef } from 'react'
 import { User, UserRole } from '@/types/database.types'
 import { supabase } from '@/lib/supabase'
+import { unregisterDevicePushToken } from '@/lib/notifications/registerDevicePushToken'
 import { prefetchRoleDashboard } from '@/lib/prefetchDashboard'
 import { resetProfilePromptSession } from '@/lib/profileCompletion'
 import { AuthContext, type AuthContextType } from '@/contexts/auth-context'
@@ -13,11 +14,14 @@ import {
   withTimeout,
 } from '@/lib/asyncTimeout'
 
-const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
-const PROFILE_CACHE_TTL_MS = 5 * 60 * 1000
-/** When PostgREST/Auth is overloaded, allow a recently cached profile so login still completes. */
-const PROFILE_STALE_CACHE_MAX_MS = 24 * 60 * 60 * 1000
-const PROFILE_SELECT =
+import {
+  clearCachedProfile,
+  PROFILE_CACHE_TTL_MS,
+  PROFILE_STALE_CACHE_MAX_MS,
+  readAnyCachedProfile,
+  readCachedProfile,
+  writeCachedProfile,
+} from '@/lib/authProfileCache'
   'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
 const LOGIN_RPC_TIMEOUT_MS = 8_000
 const PROFILE_FETCH_TIMEOUT_MS = 15_000
@@ -37,29 +41,9 @@ function asUser(row: unknown): User | null {
   return u as User
 }
 
-function readCachedProfile(authUserId: string, maxAgeMs: number): User | null {
-  try {
-    const raw = sessionStorage.getItem(PROFILE_CACHE_KEY)
-    if (!raw) return null
-    const cached = JSON.parse(raw) as { ts: number; user: User }
-    if (
-      cached?.user?.auth_user_id === authUserId &&
-      Date.now() - cached.ts < maxAgeMs &&
-      cached.user.is_active !== false &&
-      !cached.user.is_resigned &&
-      !cached.user.is_blocked
-    ) {
-      return cached.user
-    }
-  } catch {
-    sessionStorage.removeItem(PROFILE_CACHE_KEY)
-  }
-  return null
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [authReady, setAuthReady] = useState(true)
+  const [user, setUser] = useState<User | null>(() => readAnyCachedProfile(PROFILE_STALE_CACHE_MAX_MS))
+  const [authReady, setAuthReady] = useState(false)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
   const [accountClosedInfo, setAccountClosedInfo] = useState<{
@@ -172,7 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setBlockedInfo(null)
           setAccountClosedInfo(null)
           setUser(profile)
-          sessionStorage.setItem(PROFILE_CACHE_KEY, JSON.stringify({ ts: Date.now(), user: profile }))
+          writeCachedProfile(profile)
           if (freshLogin) resetProfilePromptSession(profile.id)
           prefetchRoleDashboard(profile.role)
           lastLoadedAuthUserIdRef.current = authUserId
@@ -186,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const lastErrMsg = [error?.message, error?.code, error?.name].filter(Boolean).join(' ')
         if (error && isInvalidAuthSessionError(lastErrMsg)) {
           await client.auth.signOut({ scope: 'local' })
-          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          clearCachedProfile()
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
@@ -252,7 +236,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
-          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          clearCachedProfile()
           return
         }
         if (session?.user) {
@@ -262,7 +246,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
-          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          clearCachedProfile()
         }
       } catch (e) {
         if (!mounted) return
@@ -274,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null)
         setAuthReady(true)
         setIsProfileLoading(false)
-        sessionStorage.removeItem(PROFILE_CACHE_KEY)
+        clearCachedProfile()
       }
     })()
 
@@ -288,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             bumpProfileEpoch()
             setUser(null)
             setAuthReady(true)
-            sessionStorage.removeItem(PROFILE_CACHE_KEY)
+            clearCachedProfile()
           }
           return
         }
@@ -298,7 +282,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null)
           setAuthReady(true)
           setIsProfileLoading(false)
-          sessionStorage.removeItem(PROFILE_CACHE_KEY)
+          clearCachedProfile()
           lastLoadedAuthUserIdRef.current = null
           lastLoadedAtRef.current = 0
           return
@@ -400,13 +384,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userId = user?.id
     bumpProfileEpoch()
     try {
+      await unregisterDevicePushToken()
       if (supabase) await supabase.auth.signOut()
     } finally {
       if (userId) resetProfilePromptSession(userId)
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)
-      sessionStorage.removeItem(PROFILE_CACHE_KEY)
+      clearCachedProfile()
       lastLoadedAuthUserIdRef.current = null
       lastLoadedAtRef.current = 0
     }

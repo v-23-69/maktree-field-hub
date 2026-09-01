@@ -1,6 +1,23 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { DASHBOARD_QUERY_OPTIONS } from '@/lib/liveQueryOptions'
 import type { User } from '@/types/database.types'
+
+const ENRICH_TIMEOUT_MS = 8_000
+
+async function withTimeout<T>(promise: PromiseLike<T>, ms: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise<T>(resolve => {
+        timer = setTimeout(() => resolve(fallback), ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 /** Stable sort + one row per MR (duplicate mr_manager_map rows or RPC oddities). */
 function dedupeManagersMrs(rows: User[]): User[] {
@@ -28,12 +45,17 @@ export function useManagerMrs(managerId: string) {
           const rows = dedupeManagersMrs((rpcRes.data ?? []) as User[])
           const ids = rows.map(r => r.id).filter(Boolean)
           if (ids.length === 0) return rows
-          const { data: extras, error: exErr } = await supabase
-            .from('users')
-            .select('id, profile_photo_url, is_paused, pause_reason, is_resigned, is_active')
-            .in('id', ids)
-          if (exErr) return rows
-          const byId = new Map((extras ?? []).map(u => [u.id as string, u]))
+          const extras = await withTimeout(
+            supabase
+              .from('users')
+              .select('id, profile_photo_url, is_paused, pause_reason, is_resigned, is_active')
+              .in('id', ids),
+            ENRICH_TIMEOUT_MS,
+            { data: null, error: { message: 'timeout' } },
+          )
+          const { data: extraRows, error: exErr } = extras
+          if (exErr || !extraRows) return rows
+          const byId = new Map((extraRows ?? []).map(u => [u.id as string, u]))
           return rows.map(r => {
             const x = byId.get(r.id)
             if (!x) return r
@@ -72,6 +94,7 @@ export function useManagerMrs(managerId: string) {
       }
     },
     enabled: !!managerId && !!supabase,
+    ...DASHBOARD_QUERY_OPTIONS,
   })
 }
 

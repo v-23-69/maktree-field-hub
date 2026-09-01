@@ -10,7 +10,7 @@ export default function LazySpecialityBarChart(props: SpecialityBarChartProps) {
     <Suspense
       fallback={
         <div className="flex w-full items-center justify-center" style={{ height: heightPx }} aria-hidden>
-          <LoadingSpinner />
+          <LoadingSpinner compact message="Loading chart…" />
         </div>
       }
     >

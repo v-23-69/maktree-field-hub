@@ -1,5 +1,5 @@
 /* Maktree Field Hub — app-shell + static asset caching for PWA installability & speed */
-const SHELL_CACHE = "maktree-shell-v10";
+const SHELL_CACHE = "maktree-shell-v11";
 const ASSET_CACHE = "maktree-assets-v3";
 
 self.addEventListener("install", (event) => {
@@ -32,6 +32,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
 
   if (url.hostname.includes("supabase.co")) return;
+  if (url.pathname.startsWith("/downloads/") || url.pathname.endsWith(".apk")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(

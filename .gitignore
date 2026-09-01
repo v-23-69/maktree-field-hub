@@ -30,3 +30,17 @@ dist-ssr
 
 # Supabase CLI local cache (machine-specific; do not commit)
 supabase/.temp/
+
+# Capacitor / Android local build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/local.properties
+android/.idea/
+android/app/google-services.json
+*.keystore
+*.jks
+*.p12
+keystore.properties
+android/keystore.properties
+!android/app/debug.keystore

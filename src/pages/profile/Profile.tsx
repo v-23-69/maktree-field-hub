@@ -26,6 +26,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/useAuth'
 import { useProfile, useUpdateProfile, useUploadProfilePhoto } from '@/hooks/useProfile'
 import { useTheme } from '@/hooks/useTheme'
+import { useAppVersion } from '@/hooks/useAppVersion'
 import BottomNav from '@/components/shared/BottomNav'
 import ProfileSummaryCard, {
   profileStatFromContact,
@@ -44,6 +45,7 @@ export default function ProfilePage() {
   const { data: profile, isLoading } = useProfile(effectiveUserId)
   const updateProfile = useUpdateProfile()
   const uploadPhoto = useUploadProfilePhoto()
+  const { label: appVersionLabel } = useAppVersion()
   const [form, setForm] = useState<Record<string, string>>({})
   const [editingAadhaar, setEditingAadhaar] = useState(false)
   const [showEdit, setShowEdit] = useState(false)
@@ -278,6 +280,10 @@ export default function ProfilePage() {
 
         {/* Theme */}
         <ThemeSelector />
+
+        {!userId && (
+          <p className="text-center text-[11px] text-muted-foreground/80 pb-1">{appVersionLabel}</p>
+        )}
 
         {/* Logout */}
         <Button

@@ -144,12 +144,13 @@ export default function ManagerReports() {
     const mrParam = searchParams.get('mrId')
     const dateParam = searchParams.get('date')
     const viewParam = searchParams.get('view')
-    if (mrParam && mrParam !== selectedMr) setSelectedMr(mrParam)
-    if (dateParam && dateParam !== selectedDate) setSelectedDate(dateParam)
+    const tabParam = searchParams.get('tab')
+
+    if (tabParam === 'expenses') setActiveTab('expenses')
+    if (mrParam) setSelectedMr(mrParam)
+    if (dateParam) setSelectedDate(dateParam)
     if (viewParam === '1' && mrParam && dateParam) setShowReport(true)
-    // one-time sync from URL
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     if (!selectedMr) return

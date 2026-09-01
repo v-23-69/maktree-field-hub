@@ -9,6 +9,7 @@ import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
 import EmptyState from '@/components/shared/EmptyState'
 import { Button } from '@/components/ui/button'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
 import {
@@ -36,8 +37,10 @@ export default function TeamHub() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const queryClient = useQueryClient()
   const managerId = user?.id ?? ''
-  const { data: mrs = [], isLoading } = useManagerMrs(managerId)
+  const { data: mrs = [], isPending, isError, error, refetch } = useManagerMrs(managerId)
+  const teamLoading = isPending && mrs.length === 0
   const mrIds = useMemo(() => mrs.map(m => m.id), [mrs])
   const today = todayInputDate()
   const monthStart = `${today.slice(0, 7)}-01`
@@ -102,10 +105,34 @@ export default function TeamHub() {
     })
   }, [mrs, search, reportByMr])
 
-  if (isLoading) {
+  if (teamLoading) {
     return (
-      <div className="min-h-screen bg-background pb-24 flex items-center justify-center">
-        <LoadingSpinner />
+      <div className="min-h-screen bg-background pb-24">
+        <PageHeader title="Team" showBack />
+        <LoadingSpinner message="Loading your team…" />
+        <BottomNav role="manager" />
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <PageHeader title="Team" showBack />
+        <div className="px-4 py-8 space-y-4">
+          <EmptyState
+            icon={Users}
+            title="Could not load team"
+            description={error instanceof Error ? error.message : 'Please check your connection and try again.'}
+          />
+          <Button
+            className="w-full rounded-xl"
+            onClick={() => void queryClient.invalidateQueries({ queryKey: ['manager-mrs', managerId] }).then(() => refetch())}
+          >
+            Try again
+          </Button>
+        </div>
+        <BottomNav role="manager" />
       </div>
     )
   }

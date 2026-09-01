@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
+import { useRequestDeepLink } from '@/hooks/useRequestDeepLink'
 import { useManagerUnlockRequests, useResolveUnlockRequest } from '@/hooks/useUnlockRequests'
 import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
 import { useManagerDoctorDeletionRequests, useResolveDoctorDeletion } from '@/hooks/useDoctorDeletion'
@@ -214,6 +215,8 @@ export default function UnlockRequests() {
     docDelListLoading ||
     docAddListLoading
 
+  useRequestDeepLink(isLoading)
+
   const statusBadge = (status: string) => {
     if (status === 'approved') {
       return <Badge className="bg-emerald-600/10 text-emerald-800 border-emerald-600/30">Approved</Badge>
@@ -263,6 +266,7 @@ export default function UnlockRequests() {
     return (
       <div
         key={`late-dcr-${req.id}`}
+        id={`request-${req.id}`}
         className="rounded-xl bg-card border border-border p-4 shadow-sm space-y-3"
       >
         <div className="flex flex-wrap items-center gap-2">
@@ -334,6 +338,7 @@ export default function UnlockRequests() {
     return (
       <div
         key={`unlock-${req.id}`}
+        id={`request-${req.id}`}
         className="rounded-xl bg-card border border-border p-4 shadow-sm space-y-3"
       >
         <div className="flex items-start justify-between gap-3">
@@ -430,7 +435,7 @@ export default function UnlockRequests() {
     is_late?: boolean | null
     edit_count?: number | null
   }) => (
-    <div key={`tp-${tp.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+    <div key={`tp-${tp.id}`} id={`request-${tp.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="tour-program" />
         <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Awaiting approval</Badge>
@@ -555,7 +560,7 @@ export default function UnlockRequests() {
     tour_program_id?: string | null
     created_at?: string | null
   }) => (
-    <div key={`tpdel-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+    <div key={`tpdel-${req.id}`} id={`request-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="tp-deletion" />
         <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>
@@ -625,7 +630,7 @@ export default function UnlockRequests() {
   )
 
   const renderLeaveCard = (leave: LeaveRequest) => (
-    <div key={`leave-${leave.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+    <div key={`leave-${leave.id}`} id={`request-${leave.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="leave" />
         <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>
@@ -698,7 +703,7 @@ export default function UnlockRequests() {
       ? `${req.sub_area.area?.name ?? ''} / ${req.sub_area.name}`.replace(/^ \/ /, '')
       : '—'
   return (
-    <div key={`docadd-${req.id}`} className="rounded-xl border border-destructive/40 bg-card p-4 shadow-sm space-y-3">
+    <div key={`docadd-${req.id}`} id={`request-${req.id}`} className="rounded-xl border border-destructive/40 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="doctor-add" />
         <Badge className="bg-destructive/10 text-destructive border-destructive/30">Pending</Badge>
@@ -775,7 +780,7 @@ export default function UnlockRequests() {
   }
 
   const renderDoctorRemovalCard = (req: DoctorDeletionRequest) => (
-    <div key={`docdel-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
+    <div key={`docdel-${req.id}`} id={`request-${req.id}`} className="rounded-xl border border-border/80 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="doctor-removal" />
         <Badge className="bg-amber-500/10 text-amber-900 border-amber-500/30">Pending</Badge>

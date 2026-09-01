@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageHeader from '@/components/shared/PageHeader';
 import BottomNav from '@/components/shared/BottomNav';
+import { prefetchManagerTabs } from '@/lib/prefetchDashboard';
 import { Calendar, CalendarDays, Receipt, FileText, CheckCircle2, MapPinned, UserPlus, AlertTriangle, Lock, Zap, CalendarOff, Target, ClipboardList, Umbrella, Users, Check, Tablet, Store, Archive, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ export default function ManagerDashboard() {
 
   const [deferReady, setDeferReady] = useState(false);
   useEffect(() => { const t = setTimeout(() => setDeferReady(true), 250); return () => clearTimeout(t); }, []);
+  useEffect(() => { prefetchManagerTabs(); }, []);
 
   // Critical queries
   const { data: mrs = [] } = useManagerMrs(user?.id ?? '');

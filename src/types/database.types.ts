@@ -270,6 +270,16 @@ export interface UserNotification {
   created_at: string
 }
 
+export interface DevicePushToken {
+  id: string
+  user_id: string
+  token: string
+  platform: 'android' | 'ios' | 'web'
+  last_seen_at: string
+  created_at: string
+  updated_at: string
+}
+
 /** MR requests removal of a doctor; manager approves → doctor deactivated. */
 export interface DoctorDeletionRequest {
   id: string

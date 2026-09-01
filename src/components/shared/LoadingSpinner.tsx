@@ -1,9 +1,28 @@
-import { Loader2 } from 'lucide-react';
+import PageLoadingState from '@/components/shared/PageLoadingState'
 
-export default function LoadingSpinner() {
+type LoadingSpinnerProps = {
+  fullScreen?: boolean
+  compact?: boolean
+  showLogo?: boolean
+  message?: string
+  className?: string
+}
+
+/** Branded loading state — Maktree logo + friendly status text. */
+export default function LoadingSpinner({
+  fullScreen = false,
+  compact = false,
+  showLogo = true,
+  message,
+  className,
+}: LoadingSpinnerProps = {}) {
   return (
-    <div className="flex min-h-[200px] items-center justify-center">
-      <Loader2 className="h-8 w-8 animate-spin text-primary" />
-    </div>
-  );
+    <PageLoadingState
+      fullScreen={fullScreen}
+      compact={compact}
+      showLogo={showLogo}
+      message={message}
+      className={className}
+    />
+  )
 }

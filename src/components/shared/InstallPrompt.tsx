@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/hooks/useAuth'
+import { isNativeApp } from '@/lib/capacitor'
 
 const DISMISS_KEY = 'maktree-install-hint-dismissed'
 const DISMISS_DURATION_MS = 7 * 24 * 60 * 60 * 1000
@@ -40,6 +41,7 @@ export default function InstallPrompt() {
   const [mode, setMode] = useState<'none' | 'native' | 'manual-ios' | 'manual-android'>('none')
 
   useEffect(() => {
+    if (isNativeApp()) return
     if (!authReady || !isAuthenticated) return
     if (isStandalone() || wasDismissedRecently()) return
 
@@ -56,6 +58,7 @@ export default function InstallPrompt() {
   }, [authReady, isAuthenticated])
 
   useEffect(() => {
+    if (isNativeApp()) return
     if (!authReady || !isAuthenticated) return
     if (isStandalone() || wasDismissedRecently()) return
     if (nativeRef.current) return
@@ -79,6 +82,7 @@ export default function InstallPrompt() {
   }
 
   if (!authReady || !isAuthenticated) return null
+  if (isNativeApp()) return null
   if (isStandalone()) return null
   if (mode === 'none') return null
 

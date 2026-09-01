@@ -1,4 +1,4 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -6,11 +6,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/hooks/useTheme";
 import ProtectedRoute from "@/components/shared/ProtectedRoute";
-import LoadingSpinner from "@/components/shared/LoadingSpinner";
+import GetStarted from "@/pages/GetStarted";
+import { isNativeApp, isStandaloneWebApp } from "@/lib/capacitor";
+import PageLoadingState from "@/components/shared/PageLoadingState";
 import InstallPrompt from "@/components/shared/InstallPrompt";
 import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
 import NotificationProvider from "@/components/shared/NotificationProvider";
+import NativeSplashGate from "@/components/shared/NativeSplashGate";
+import { lazyPage } from "@/lib/lazyPage";
 import type { UserRole } from "@/types/database.types";
 
 function AppRoute({
@@ -29,58 +33,54 @@ function AppRoute({
   );
 }
 
-const Login = lazy(() => import("@/pages/auth/Login"));
-const BlockedComplaint = lazy(() => import("@/pages/auth/BlockedComplaint"));
-const AccountBlocked = lazy(() => import("@/pages/auth/AccountBlocked"));
-const MRDashboard = lazy(() => import("@/pages/mr/Dashboard"));
-const NewReport = lazy(() => import("@/pages/mr/NewReport"));
-const ReportHistory = lazy(() => import("@/pages/mr/ReportHistory"));
-const ReportDetail = lazy(() => import("@/pages/mr/ReportDetail"));
-const MasterList = lazy(() => import("@/pages/mr/MasterList"));
-const MRLeave = lazy(() => import("@/pages/mr/Leave"));
-const MRExpense = lazy(() => import("@/pages/mr/Expense"));
-const MRTourProgram = lazy(() => import("@/pages/mr/TourProgram"));
-const ManagerDashboard = lazy(() => import("@/pages/manager/Dashboard"));
-const ManagerReports = lazy(() => import("@/pages/manager/Reports"));
-const ManagerAnalytics = lazy(() => import("@/pages/manager/Analytics"));
-const ManagerHistory = lazy(() => import("@/pages/manager/ManagerHistory"));
-const ManagerResignedEmployees = lazy(() => import("@/pages/manager/ManagerResignedEmployees"));
-const ManagerLateDcrGrant = lazy(() => import("@/pages/manager/ManagerLateDcrGrant"));
-const ManagerBackup = lazy(() => import("@/pages/manager/ManagerBackup"));
-const UnlockRequests = lazy(() => import("@/pages/manager/UnlockRequests"));
-const ManagerTargets = lazy(() => import("@/pages/manager/Targets"));
-const ManagerLeaves = lazy(() => import("@/pages/manager/Leaves"));
-const ManagerSelfLeave = lazy(() => import("@/pages/manager/ManagerSelfLeave"));
-const TeamVisitFrequency = lazy(() => import("@/pages/manager/TeamVisitFrequency"));
-const MRAnalytics = lazy(() => import("@/pages/mr/Analytics"));
-const MRVisitFrequency = lazy(() => import("@/pages/mr/VisitFrequency"));
-const ManagerHolidays = lazy(() => import("@/pages/manager/Holidays"));
-const ManagerTerritories = lazy(() => import("@/pages/manager/ManagerTerritories"));
-const ManagerTeamHub = lazy(() => import("@/pages/manager/TeamHub"));
-const ManagerTeamMrDetail = lazy(() => import("@/pages/manager/TeamMrDetail"));
-const ManagerDcrImport = lazy(() => import("@/pages/manager/ManagerDcrImport"));
-const ManagerTerritoryAreas = lazy(() => import("@/pages/manager/ManagerTerritoryAreas"));
-const ManagerVacantAreas = lazy(() => import("@/pages/manager/ManagerVacantAreas"));
-const ManagerCustomAreas = lazy(() => import("@/pages/manager/ManagerCustomAreas"));
-const ManagerCustomAreaDetail = lazy(() => import("@/pages/manager/ManagerCustomAreaDetail"));
-const ManagerEDetailing = lazy(() => import("@/pages/manager/ManagerEDetailing"));
-const AdminDashboard = lazy(() => import("@/pages/admin/Dashboard"));
-const AdminUsers = lazy(() => import("@/pages/admin/Users"));
-const AdminDoctors = lazy(() => import("@/pages/admin/Doctors"));
-const AdminAreas = lazy(() => import("@/pages/admin/Areas"));
-const AdminMRAccess = lazy(() => import("@/pages/admin/MRAccess"));
-const AdminTargets = lazy(() => import("@/pages/admin/Targets"));
-const AdminHolidays = lazy(() => import("@/pages/admin/Holidays"));
-const NotFound = lazy(() => import("@/pages/NotFound"));
-const ProfilePage = lazy(() => import("@/pages/profile/Profile"));
-const ContactSupport = lazy(() => import("@/pages/profile/ContactSupport"));
+const Login = lazyPage(() => import("@/pages/auth/Login"));
+const BlockedComplaint = lazyPage(() => import("@/pages/auth/BlockedComplaint"));
+const AccountBlocked = lazyPage(() => import("@/pages/auth/AccountBlocked"));
+const MRDashboard = lazyPage(() => import("@/pages/mr/Dashboard"));
+const NewReport = lazyPage(() => import("@/pages/mr/NewReport"));
+const ReportHistory = lazyPage(() => import("@/pages/mr/ReportHistory"));
+const ReportDetail = lazyPage(() => import("@/pages/mr/ReportDetail"));
+const MasterList = lazyPage(() => import("@/pages/mr/MasterList"));
+const MRLeave = lazyPage(() => import("@/pages/mr/Leave"));
+const MRExpense = lazyPage(() => import("@/pages/mr/Expense"));
+const MRTourProgram = lazyPage(() => import("@/pages/mr/TourProgram"));
+const ManagerDashboard = lazyPage(() => import("@/pages/manager/Dashboard"));
+const ManagerReports = lazyPage(() => import("@/pages/manager/Reports"));
+const ManagerAnalytics = lazyPage(() => import("@/pages/manager/Analytics"));
+const ManagerHistory = lazyPage(() => import("@/pages/manager/ManagerHistory"));
+const ManagerResignedEmployees = lazyPage(() => import("@/pages/manager/ManagerResignedEmployees"));
+const ManagerLateDcrGrant = lazyPage(() => import("@/pages/manager/ManagerLateDcrGrant"));
+const ManagerBackup = lazyPage(() => import("@/pages/manager/ManagerBackup"));
+const UnlockRequests = lazyPage(() => import("@/pages/manager/UnlockRequests"));
+const ManagerTargets = lazyPage(() => import("@/pages/manager/Targets"));
+const ManagerLeaves = lazyPage(() => import("@/pages/manager/Leaves"));
+const ManagerSelfLeave = lazyPage(() => import("@/pages/manager/ManagerSelfLeave"));
+const TeamVisitFrequency = lazyPage(() => import("@/pages/manager/TeamVisitFrequency"));
+const MRAnalytics = lazyPage(() => import("@/pages/mr/Analytics"));
+const MRVisitFrequency = lazyPage(() => import("@/pages/mr/VisitFrequency"));
+const ManagerHolidays = lazyPage(() => import("@/pages/manager/Holidays"));
+const ManagerTerritories = lazyPage(() => import("@/pages/manager/ManagerTerritories"));
+const ManagerTeamHub = lazyPage(() => import("@/pages/manager/TeamHub"));
+const ManagerTeamMrDetail = lazyPage(() => import("@/pages/manager/TeamMrDetail"));
+const ManagerDcrImport = lazyPage(() => import("@/pages/manager/ManagerDcrImport"));
+const ManagerTerritoryAreas = lazyPage(() => import("@/pages/manager/ManagerTerritoryAreas"));
+const ManagerVacantAreas = lazyPage(() => import("@/pages/manager/ManagerVacantAreas"));
+const ManagerCustomAreas = lazyPage(() => import("@/pages/manager/ManagerCustomAreas"));
+const ManagerCustomAreaDetail = lazyPage(() => import("@/pages/manager/ManagerCustomAreaDetail"));
+const ManagerEDetailing = lazyPage(() => import("@/pages/manager/ManagerEDetailing"));
+const AdminDashboard = lazyPage(() => import("@/pages/admin/Dashboard"));
+const AdminUsers = lazyPage(() => import("@/pages/admin/Users"));
+const AdminDoctors = lazyPage(() => import("@/pages/admin/Doctors"));
+const AdminAreas = lazyPage(() => import("@/pages/admin/Areas"));
+const AdminMRAccess = lazyPage(() => import("@/pages/admin/MRAccess"));
+const AdminTargets = lazyPage(() => import("@/pages/admin/Targets"));
+const AdminHolidays = lazyPage(() => import("@/pages/admin/Holidays"));
+const NotFound = lazyPage(() => import("@/pages/NotFound"));
+const ProfilePage = lazyPage(() => import("@/pages/profile/Profile"));
+const ContactSupport = lazyPage(() => import("@/pages/profile/ContactSupport"));
 
 function PageLoader() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <LoadingSpinner />
-    </div>
-  );
+  return <PageLoadingState fullScreen message="Getting the page ready for you…" showLogo={false} />;
 }
 
 const queryClient = new QueryClient({
@@ -98,14 +98,16 @@ const queryClient = new QueryClient({
 function RootRedirect() {
   const { user, isAuthenticated, authReady } = useAuth();
   if (!authReady) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <LoadingSpinner />
-      </div>
-    );
+    return <PageLoadingState fullScreen message="Restoring your session…" showLogo={false} />;
   }
-  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-  return <Navigate to={getRoleDashboard(user.role)} replace />;
+  if (isAuthenticated && user) {
+    return <Navigate to={getRoleDashboard(user.role)} replace />;
+  }
+  // Android APK and installed PWAs must still open login, not the public download page.
+  if (isNativeApp() || isStandaloneWebApp()) {
+    return <Navigate to="/login" replace />;
+  }
+  return <GetStarted />;
 }
 
 const App = () => (
@@ -114,6 +116,7 @@ const App = () => (
       <TooltipProvider>
         <Sonner />
         <AuthProvider>
+          <NativeSplashGate />
           <HashRouter>
           <EmployeeBirthdayProvider>
           <NotificationProvider>

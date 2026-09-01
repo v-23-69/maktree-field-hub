@@ -162,8 +162,8 @@ export default function NotificationBell({ userId, role }: Props) {
       </button>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0">
-          <SheetHeader className="px-4 pt-4 pb-3 border-b border-border/60 text-left">
+        <SheetContent side="right" className="w-full sm:max-w-md flex flex-col p-0 gap-0 max-w-md">
+          <SheetHeader className="px-4 pr-14 py-4 border-b border-border/60 text-left shrink-0 bg-background">
             <SheetTitle className="text-base">Notifications</SheetTitle>
             <SheetDescription className="text-xs">
               {role === 'manager'

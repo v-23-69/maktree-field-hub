@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="supabase_url">https://limgkjuywvudkxnantda.supabase.co</string>
+    <string name="supabase_anon_key">eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpbWdranV5d3Z1ZGt4bmFudGRhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxNTU3NDAsImV4cCI6MjA4OTczMTc0MH0.fK7zx0nBqpy8fJAoXQx7OznwfbNGOhhD6SV0O7hTFQw</string>
+    <string name="notification_action_approve">Approve</string>
+    <string name="notification_action_decline">Decline</string>
+</resources>

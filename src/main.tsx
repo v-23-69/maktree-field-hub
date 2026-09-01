@@ -3,8 +3,13 @@ import App from "./App.tsx";
 import "./index.css";
 import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import { initMobilePortraitLock } from "@/lib/mobileOrientation";
+import { initNativeShell, isNativeApp } from "@/lib/capacitor";
 
 initMobilePortraitLock();
+if (isNativeApp()) {
+  document.documentElement.classList.add("cap-native");
+}
+void initNativeShell();
 
 createRoot(document.getElementById("root")!).render(
   <ErrorBoundary>
@@ -12,7 +17,8 @@ createRoot(document.getElementById("root")!).render(
   </ErrorBoundary>,
 );
 
-if ("serviceWorker" in navigator) {
+// PWA service worker — web only (Capacitor uses native shell instead)
+if (!isNativeApp() && "serviceWorker" in navigator) {
   const register = () => {
     void navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })

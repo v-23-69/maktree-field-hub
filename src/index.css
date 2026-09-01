@@ -49,6 +49,12 @@
     --glass-border: rgba(255, 255, 255, 0.45);
     --glass-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
 
+    /* Safe area for notched devices / PWA standalone. */
+    --safe-area-inset-top: env(safe-area-inset-top, 0px);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-inset-left: env(safe-area-inset-left, 0px);
+    --safe-area-inset-right: env(safe-area-inset-right, 0px);
+
     --chart-1: hsl(221 83% 53%);
     --chart-2: hsl(199 89% 48%);
     --chart-3: hsl(150 62% 36%);

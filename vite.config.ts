@@ -5,6 +5,9 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Absolute base on Vercel so PWA/asset URLs stay /assets/...
+  // Relative base only for Capacitor (`vite build --mode capacitor`).
+  base: mode === "capacitor" ? "./" : "/",
   server: {
     host: "::",
     port: 8080,

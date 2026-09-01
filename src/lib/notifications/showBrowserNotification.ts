@@ -1,4 +1,5 @@
 import { normalizeNotificationUrl } from '@/lib/notifications/notificationRoutes'
+import { isNativeApp } from '@/lib/capacitor'
 
 export type BrowserNotificationPayload = {
   id: string
@@ -23,8 +24,9 @@ export function hasShownNotification(id: string): boolean {
   return shownIds.has(id)
 }
 
-/** System notification (WhatsApp-style on mobile when PWA installed + permission granted). */
+/** System notification (web/PWA). Skipped in Capacitor — native push is Phase 2. */
 export function showBrowserNotification(payload: BrowserNotificationPayload): void {
+  if (isNativeApp()) return
   if (typeof window === 'undefined' || !('Notification' in window)) return
   if (Notification.permission !== 'granted') return
   if (hasShownNotification(payload.id)) return
@@ -75,6 +77,7 @@ export function showBrowserNotification(payload: BrowserNotificationPayload): vo
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
+  if (isNativeApp()) return 'denied'
   if (typeof window === 'undefined' || !('Notification' in window)) return 'denied'
   if (Notification.permission === 'granted') return 'granted'
   if (Notification.permission === 'denied') return 'denied'

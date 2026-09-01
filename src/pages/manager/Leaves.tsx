@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/hooks/useAuth'
+import { useLeaveDeepLink } from '@/hooks/useLeaveDeepLink'
 import { useManagerLeaves, useResolveLeave } from '@/hooks/useLeaves'
 import { useManagerDoctorDeletionRequests, useResolveDoctorDeletion } from '@/hooks/useDoctorDeletion'
 import { formatDisplayDate } from '@/lib/dateUtils'
@@ -16,6 +17,7 @@ type MainTab = 'leave' | 'doctor-removals' | 'calendar'
 
 export default function ManagerLeaves() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const managerId = user?.id ?? ''
   const { data: leaves = [] } = useManagerLeaves(managerId)
@@ -26,6 +28,15 @@ export default function ManagerLeaves() {
   const [docNotes, setDocNotes] = useState<Record<string, string>>({})
   const [leaveTab, setLeaveTab] = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [mainTab, setMainTab] = useState<MainTab>('leave')
+
+  useEffect(() => {
+    if (searchParams.get('leaveId')) {
+      setMainTab('leave')
+      setLeaveTab('pending')
+    }
+  }, [searchParams])
+
+  useLeaveDeepLink(leaves.length >= 0)
 
   const filteredLeaves = useMemo(() => {
     return leaves.filter(l => l.status === leaveTab)
@@ -87,7 +98,7 @@ export default function ManagerLeaves() {
 
             {leaveTab === 'pending' &&
               filteredLeaves.map(leave => (
-                <div key={leave.id} className="rounded-xl border p-3 space-y-2">
+                <div key={leave.id} id={`leave-${leave.id}`} className="rounded-xl border p-3 space-y-2">
                   <p className="text-sm font-semibold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')} ·{' '}
@@ -135,7 +146,7 @@ export default function ManagerLeaves() {
 
             {leaveTab !== 'pending' &&
               filteredLeaves.map(leave => (
-                <div key={leave.id} className="rounded-xl border p-3 space-y-1">
+                <div key={leave.id} id={`leave-${leave.id}`} className="rounded-xl border p-3 space-y-1">
                   <p className="text-sm font-semibold text-foreground">{leave.mr?.full_name ?? 'MR'}</p>
                   <p className="text-xs text-muted-foreground">
                     {formatDisplayDate(leave.leave_date)} · {leave.leave_type.replace('_', ' ')}

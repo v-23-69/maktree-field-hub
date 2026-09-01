@@ -93,6 +93,18 @@ export default {
           from: { transform: "translateX(-100%)" },
           to: { transform: "translateX(0)" },
         },
+        "maktree-breathe": {
+          "0%, 100%": { transform: "scale(1)", opacity: "1" },
+          "50%": { transform: "scale(1.04)", opacity: "0.92" },
+        },
+        "maktree-glow": {
+          "0%, 100%": { transform: "scale(0.92)", opacity: "0.35" },
+          "50%": { transform: "scale(1.08)", opacity: "0.55" },
+        },
+        "maktree-dot": {
+          "0%, 80%, 100%": { transform: "scale(0.65)", opacity: "0.35" },
+          "40%": { transform: "scale(1)", opacity: "1" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -101,6 +113,9 @@ export default {
         "fade-in": "fade-in 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-up": "slide-up 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-in-left": "slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        "maktree-breathe": "maktree-breathe 2.4s ease-in-out infinite",
+        "maktree-glow": "maktree-glow 2.4s ease-in-out infinite",
+        "maktree-dot": "maktree-dot 1.2s ease-in-out infinite",
       },
     },
   },

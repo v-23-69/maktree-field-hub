@@ -1,6 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
+import { isNativeApp } from '@/lib/capacitor';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,11 +67,9 @@ export default function Login() {
     }
   };
 
-  if (!authReady) {
+  if (!authReady || user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <LoadingSpinner />
-      </div>
+      <LoadingSpinner fullScreen message="Restoring your session…" />
     );
   }
 
@@ -79,6 +78,14 @@ export default function Login() {
       <div className="w-full max-w-sm md:max-w-md min-w-0 animate-fade-in-up md:glass-card md:p-8 md:rounded-2xl">
         <div className="mb-10 flex flex-col items-center">
           <MaktreeBrand variant="login" />
+          {!isNativeApp() ? (
+            <Link
+              to="/"
+              className="mt-4 text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              ← Get started
+            </Link>
+          ) : null}
         </div>
 
         <form onSubmit={handleLogin} className="space-y-5">
