@@ -32,7 +32,7 @@ export function istNowParts(now = new Date()): { ymd: string; minutes: number } 
 
 export type PlanWindow = 'open' | 'locked' | 'closed' | 'too_far'
 
-/** Tomorrow opens at 18:00 IST. Today closes at 11:00 IST. Only one day ahead. */
+/** Tomorrow opens at 18:00 IST. The screen asks for the plan by 10:00 IST. It actually closes at 11:00 IST, after the last reminder. */
 export function dailyPlanWindow(planDate: string, now = new Date()): PlanWindow {
   const { ymd, minutes } = istNowParts(now)
   const tomorrow = addDaysYmd(ymd, 1)
@@ -105,7 +105,7 @@ export function describeDoctorSpot(input: {
     }
   }
 
-  if (!onDaily && !onPriority && planStatus === 'approved') {
+  if (!onDaily && !onPriority && (planStatus === 'approved' || planStatus === 'pending')) {
     return {
       mode: 'not_on_plan',
       title: 'Not on today’s plan',

@@ -411,13 +411,25 @@ export default function MRDashboard() {
           )}
         >
           <p className={cn('text-sm font-bold', planNeedsSubmit ? 'text-white' : 'text-foreground')}>
-            {planNeedsSubmit ? 'Submit your daily plan' : 'Daily plan submitted'}
+            {planNeedsSubmit
+              ? 'Submit your daily plan'
+              : focusPlanDate === planTomorrow
+                ? 'Tomorrow’s plan is lined up'
+                : 'Today’s plan is lined up'}
           </p>
           <p className={cn('mt-1 text-xs', planNeedsSubmit ? 'text-white/90' : 'text-muted-foreground')}>
-            {focusPlanDate === planTomorrow
-              ? 'Tomorrow’s doctors. Submit the plan so your calls can be filed.'
-              : 'Today’s doctors. Submit the plan before 11:00 AM.'}
+            {planNeedsSubmit
+              ? 'Submit the plan before 10:00 AM. After the 11:00 AM reminder it cannot be submitted.'
+              : focusPlanDate === planTomorrow
+                ? 'These doctors are ready for tomorrow. In the morning, file each DCR and capture the clinic at the hospital.'
+                : 'File each DCR from this plan. Capture the clinic when you are at the hospital. After a location is saved, that visit opens only on site.'}
           </p>
+          {!planNeedsSubmit && (focusPlan?.calls.length ?? 0) > 0 && (
+            <p className={cn('mt-2 text-xs leading-relaxed', planNeedsSubmit ? 'text-white/90' : 'text-foreground')}>
+              {(focusPlan?.calls ?? []).slice(0, 8).map(call => call.doctor_name).join(', ')}
+              {(focusPlan?.calls.length ?? 0) > 8 ? ` +${(focusPlan?.calls.length ?? 0) - 8} more` : ''}
+            </p>
+          )}
           {planNeedsSubmit && (
             <span className="mt-3 inline-flex h-9 items-center rounded-xl bg-white px-3 text-xs font-bold text-red-600">
               Submit plan
