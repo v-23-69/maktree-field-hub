@@ -18,8 +18,6 @@ import DoctorMasterDrawer from '@/components/mr/DoctorMasterDrawer'
 import AreaSelectPager from '@/components/mr/AreaSelectPager'
 import { cn } from '@/lib/utils'
 import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge'
-import CaptureLocationButton from '@/components/field/CaptureLocationButton'
-import { useLocatedDoctorIds } from '@/hooks/useFieldPlan'
 import VisitingCardIntakeControls from '@/components/doctors/VisitingCardIntakeControls'
 import VisitingCardIntakeOverlay from '@/components/doctors/VisitingCardIntakeOverlay'
 import { useVisitingCardIntake, useApplyVisitingCardResult } from '@/hooks/useVisitingCardIntake'
@@ -159,8 +157,6 @@ export default function MasterList() {
       doctorPage === 0 ? doctorsPage.rows : [...prev, ...doctorsPage.rows],
     )
   }, [doctorsPage, doctorPage])
-
-  const locatedDoctors = useLocatedDoctorIds(doctors.map(doc => doc.id))
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerDoctorId, setDrawerDoctorId] = useState<string | null>(null)
@@ -377,7 +373,7 @@ export default function MasterList() {
                           </p>
                           <ul className="space-y-1.5 mt-1">
                             {incompleteDoctors.map(doc => (
-                              <DoctorRow key={doc.id} doc={doc} located={locatedDoctors.data?.has(doc.id) ?? false} onPress={() => openEdit(doc)} />
+                              <DoctorRow key={doc.id} doc={doc} onPress={() => openEdit(doc)} />
                             ))}
                           </ul>
                         </li>
@@ -389,7 +385,7 @@ export default function MasterList() {
                           </p>
                           <ul className="space-y-1.5 mt-1">
                             {completeDoctors.map(doc => (
-                              <DoctorRow key={doc.id} doc={doc} located={locatedDoctors.data?.has(doc.id) ?? false} onPress={() => openEdit(doc)} />
+                              <DoctorRow key={doc.id} doc={doc} onPress={() => openEdit(doc)} />
                             ))}
                           </ul>
                         </li>
@@ -485,7 +481,7 @@ function PendingDoctorRow({ request }: { request: DoctorAddRequest }) {
   )
 }
 
-function DoctorRow({ doc, located, onPress }: { doc: Doctor; located: boolean; onPress: () => void }) {
+function DoctorRow({ doc, onPress }: { doc: Doctor; onPress: () => void }) {
   const complete = doc.master_list_complete
   const missing = missingCount(doc)
 
@@ -530,7 +526,6 @@ function DoctorRow({ doc, located, onPress }: { doc: Doctor; located: boolean; o
           </div>
         </div>
       </button>
-      <CaptureLocationButton doctorId={doc.id} compact captured={located} />
     </li>
   )
 }

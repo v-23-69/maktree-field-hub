@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
-import { Check, MapPin, Lock } from 'lucide-react'
+import { Check, Lock, MapPin } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -14,16 +14,16 @@ import { useMrSubAreasGrouped } from '@/hooks/useAreas'
 import { useDoctorsForMrDcr } from '@/hooks/useDoctors'
 import { useWorkingWithReportOptions } from '@/hooks/useManagers'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
-import { gpsCapturePaused, subscribeGpsCapture } from '@/lib/gpsCapture'
 import { clearPageMemory, readPageMemory, writePageMemory } from '@/lib/pageMemory'
 import {
   doctorNameOf,
+  useClearDoctorLocation,
   useFieldDayBoard,
-  useLocatedDoctorIds,
   usePlanAutoApproveSettings,
   useReviewFieldPlan,
   useSetPlanAutoApprove,
   useSubmitFieldPlan,
+  useTeamClinicLocations,
   useTeamFieldPlans,
   type TeamFieldPlan,
 } from '@/hooks/useFieldPlan'
@@ -125,18 +125,13 @@ export default function FieldPlanPage() {
     if (!q) return true
     return d.full_name.toLowerCase().includes(q) || (d.speciality ?? '').toLowerCase().includes(q)
   })
-  const lookupIds = useMemo(
-    () => [...new Set([...selected, ...visibleDoctors.map(d => d.id)])],
-    [selected, visibleDoctors],
+  const clinicCalls = (board.data?.calls ?? []).filter(call => priorityMode ? call.source === 'priority_call' : true)
+  const showClinics = clinicCalls.length > 0 && (
+    priorityMode
+    || board.data?.plan_status === 'pending'
+    || board.data?.plan_status === 'approved'
+    || board.data?.plan_status === 'missed'
   )
-  const located = useLocatedDoctorIds(lookupIds)
-  const [gpsPaused, setGpsPaused] = useState(gpsCapturePaused)
-  useEffect(() => subscribeGpsCapture(() => setGpsPaused(gpsCapturePaused())), [])
-  const hasLocation = (id: string) => (
-    located.data?.has(id)
-    || (board.data?.calls.some(c => c.doctor_id === id && c.has_location) ?? false)
-  )
-  const missingLocations = located.isLoading ? [] : selected.filter(id => !hasLocation(id))
 
   const toggleDoctor = (id: string) => {
     if (!priorityMode && dailyLocked) {
@@ -182,8 +177,8 @@ export default function FieldPlanPage() {
   const priorityAlready = (board.data?.calls ?? []).filter(c => c.source === 'priority_call').length
   const countLabel = priorityMode ? `${selected.length} selected` : `${selected.length}/${PLAN_MAX_CALLS}`
   const canSubmit = priorityMode
-    ? selected.length >= 1 && selected.length + priorityAlready <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !submit.isPending && (missingLocations.length === 0 || gpsPaused)
-    : selected.length >= PLAN_MIN_CALLS && selected.length <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !dailyLocked && !submit.isPending && (missingLocations.length === 0 || gpsPaused)
+    ? selected.length >= 1 && selected.length + priorityAlready <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !submit.isPending
+    : selected.length >= PLAN_MIN_CALLS && selected.length <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !dailyLocked && !submit.isPending
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -209,7 +204,7 @@ export default function FieldPlanPage() {
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     {priorityMode
                       ? 'Add one or more doctors. You can submit again later if more doctors are free, and you can mark several doctors unavailable. No approval. Your managers are notified each time.'
-                      : `Select areas inside your headquarter, then ${PLAN_MIN_CALLS} to ${PLAN_MAX_CALLS} doctors. The plan opens at 6:00 PM the day before and closes at 11:00 AM.`}
+                      : `Select areas inside your headquarter, then ${PLAN_MIN_CALLS} to ${PLAN_MAX_CALLS} doctors. Submit the plan first. Capture each clinic later, when you are at that hospital. The plan opens at 6:00 PM the day before and closes at 11:00 AM.`}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{countLabel}</span>
@@ -250,6 +245,30 @@ export default function FieldPlanPage() {
                 </p>
               )}
             </div>
+
+            {showClinics && (
+              <section className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Clinics on this plan</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  Open this plan when you are inside the hospital, then capture that clinic.
+                </p>
+                {clinicCalls.map(call => (
+                  <div key={call.call_id} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">{call.doctor_name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{call.sub_area_name || call.speciality}</span>
+                    </span>
+                    {call.has_location ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+                        <MapPin className="h-3 w-3" />Saved
+                      </span>
+                    ) : (
+                      <CaptureLocationButton doctorId={call.doctor_id} compact />
+                    )}
+                  </div>
+                ))}
+              </section>
+            )}
 
             <section className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Working with</p>
@@ -298,24 +317,16 @@ export default function FieldPlanPage() {
               <div className="space-y-2">
                 {visibleDoctors.map(doc => {
                   const on = selected.includes(doc.id)
-                  const saved = hasLocation(doc.id)
                   return (
-                    <div key={doc.id} className={cn('flex items-center gap-2 rounded-2xl border p-3', on ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card')}>
-                      <button type="button" onClick={() => toggleDoctor(doc.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-                        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
-                          {on ? <Check className="h-4 w-4" /> : doc.full_name.slice(0, 1)}
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold">{doc.full_name}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{doc.speciality || doc.sub_area?.name}</span>
-                        </span>
-                      </button>
-                      {saved ? (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><MapPin className="h-3 w-3" />Saved</span>
-                      ) : (
-                        <CaptureLocationButton doctorId={doc.id} compact />
-                      )}
-                    </div>
+                    <button key={doc.id} type="button" onClick={() => toggleDoctor(doc.id)} className={cn('flex w-full items-center gap-3 rounded-2xl border p-3 text-left', on ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card')}>
+                      <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold', on ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                        {on ? <Check className="h-4 w-4" /> : doc.full_name.slice(0, 1)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold">{doc.full_name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">{doc.speciality || doc.sub_area?.name}</span>
+                      </span>
+                    </button>
                   )
                 })}
               </div>
@@ -335,14 +346,7 @@ export default function FieldPlanPage() {
             )}
             {!priorityMode && selected.length < PLAN_MIN_CALLS && (
               <p className="text-center text-[11px] text-muted-foreground">
-                {PLAN_MIN_CALLS} calls are required. You can add up to {PLAN_MAX_CALLS}.
-              </p>
-            )}
-            {missingLocations.length > 0 && (
-              <p className="text-center text-[11px] font-semibold text-red-600">
-                {gpsPaused
-                  ? 'GPS is having trouble. Submit the plan and capture these clinic locations later.'
-                  : 'Capture the clinic location for every doctor on this plan. It is required.'}
+                {PLAN_MIN_CALLS} calls are required. You can add up to {PLAN_MAX_CALLS}. Clinic locations are not needed yet.
               </p>
             )}
           </>
@@ -356,10 +360,13 @@ export default function FieldPlanPage() {
 function TeamPlans({ date, onDate, today, tomorrow }: { date: string; onDate: (d: string) => void; today: string; tomorrow: string }) {
   const plans = useTeamFieldPlans(date, true)
   const settings = usePlanAutoApproveSettings(true)
+  const locations = useTeamClinicLocations(true)
+  const clearLocation = useClearDoctorLocation()
   const review = useReviewFieldPlan()
   const auto = useSetPlanAutoApprove()
   const { user } = useAuth()
   const team = useManagerMrs(user?.id ?? '')
+  const [confirmDoctorId, setConfirmDoctorId] = useState<string | null>(null)
 
   const byUser = useMemo(() => {
     const map = new Map<string, TeamFieldPlan[]>()
@@ -380,6 +387,46 @@ function TeamPlans({ date, onDate, today, tomorrow }: { date: string; onDate: (d
         <DateChip active={date === tomorrow} label="Tomorrow" onClick={() => onDate(tomorrow)} />
       </div>
       {plans.isLoading && <LoadingSpinner />}
+      {(locations.data ?? []).length > 0 && (
+        <section className="glass-card space-y-2 p-4">
+          <p className="text-sm font-bold">Saved clinic locations</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Delete a location if it was captured in the wrong place. The MR can capture it again at the hospital.
+          </p>
+          {(locations.data ?? []).map(row => (
+            <div key={row.doctor_id} className="flex items-center gap-3 rounded-xl border border-border/70 px-3 py-2">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold">{row.doctor_name}</span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {row.captured_by_name ? `Captured by ${row.captured_by_name}` : 'Captured'}
+                </span>
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                variant={confirmDoctorId === row.doctor_id ? 'destructive' : 'outline'}
+                className="shrink-0 rounded-xl"
+                disabled={clearLocation.isPending}
+                onClick={() => {
+                  if (confirmDoctorId !== row.doctor_id) {
+                    setConfirmDoctorId(row.doctor_id)
+                    return
+                  }
+                  clearLocation.mutate(row.doctor_id, {
+                    onSuccess: () => {
+                      setConfirmDoctorId(null)
+                      toast.success('Clinic location deleted')
+                    },
+                    onError: err => toast.error(err instanceof Error ? err.message : 'Could not delete the location'),
+                  })
+                }}
+              >
+                {confirmDoctorId === row.doctor_id ? 'Confirm delete' : 'Delete location'}
+              </Button>
+            </div>
+          ))}
+        </section>
+      )}
       {rows.map(mr => {
         const mine = byUser.get(mr.id) ?? []
         const daily = mine.find(p => p.kind === 'daily')

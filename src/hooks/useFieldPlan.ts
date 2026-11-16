@@ -242,6 +242,43 @@ export function useLocatedDoctorIds(doctorIds: string[]) {
   })
 }
 
+export type TeamClinicLocation = {
+  doctor_id: string
+  doctor_name: string
+  captured_by_name: string | null
+  captured_at: string
+}
+
+export function useTeamClinicLocations(enabled: boolean) {
+  return useQuery({
+    queryKey: ['team-clinic-locations'],
+    enabled: enabled && !!supabase,
+    queryFn: async (): Promise<TeamClinicLocation[]> => {
+      if (!supabase) return []
+      const { data, error } = await supabase.rpc('team_clinic_locations')
+      if (error) throw error
+      return (Array.isArray(data) ? data : []) as TeamClinicLocation[]
+    },
+  })
+}
+
+export function useClearDoctorLocation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (doctorId: string) => {
+      if (!supabase) throw new Error('Supabase not configured')
+      const { error } = await supabase.rpc('clear_doctor_location', { p_doctor_id: doctorId })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-clinic-locations'] })
+      queryClient.invalidateQueries({ queryKey: ['doctor-locations'] })
+      queryClient.invalidateQueries({ queryKey: ['field-day-board'] })
+      queryClient.invalidateQueries({ queryKey: ['team-field-plans'] })
+    },
+  })
+}
+
 export function useCaptureDoctorLocation() {
   const queryClient = useQueryClient()
   return useMutation({
