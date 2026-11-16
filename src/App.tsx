@@ -10,6 +10,7 @@ import GetStarted from "@/pages/GetStarted";
 import { isNativeApp, isStandaloneWebApp } from "@/lib/capacitor";
 import PageLoadingState from "@/components/shared/PageLoadingState";
 import InstallPrompt from "@/components/shared/InstallPrompt";
+import AppUpdateNotice from "@/components/shared/AppUpdateNotice";
 import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
 import NotificationProvider from "@/components/shared/NotificationProvider";
@@ -133,6 +134,7 @@ const App = () => (
         <Sonner />
         <AuthProvider>
           <NativeSplashGate />
+          <AppUpdateNotice />
           <HashRouter>
           <RememberRoute />
           <EmployeeBirthdayProvider>

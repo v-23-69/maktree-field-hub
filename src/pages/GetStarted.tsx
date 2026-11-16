@@ -65,7 +65,7 @@ export default function GetStarted() {
               Install version {APK_NEW_VERSION}
             </span>
             <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
-              Install it over the app you already have. Delete the old app only if the phone refuses the update.
+              Install it over the app you already have. Delete the old app only if this phone was installed from a computer and Android refuses the update.
             </span>
           </a>
         </div>
