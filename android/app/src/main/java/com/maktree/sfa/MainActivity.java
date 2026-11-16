@@ -6,7 +6,9 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.view.WindowManager;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
 
 import androidx.core.splashscreen.SplashScreen;
@@ -33,6 +35,7 @@ public class MainActivity extends BridgeActivity {
         configureSystemBars();
         super.onCreate(savedInstanceState);
         configureSystemBars();
+        enableCredentialAutofill();
         captureNotificationIntent(getIntent());
     }
 
@@ -55,6 +58,19 @@ public class MainActivity extends BridgeActivity {
         super.onStart();
         configureSystemBars();
         navigateIfReady();
+    }
+
+    /** Lets Android offer saved emails and passwords on the sign-in screen. */
+    private void enableCredentialAutofill() {
+        if (getBridge() == null || getBridge().getWebView() == null) {
+            return;
+        }
+        WebView webView = getBridge().getWebView();
+        WebSettings settings = webView.getSettings();
+        settings.setSaveFormData(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_YES);
+        }
     }
 
     /** WebView below status bar — matches previous PWA layout (no extra logo strip). */

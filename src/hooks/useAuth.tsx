@@ -23,6 +23,7 @@ import {
   writeCachedProfile,
 } from '@/lib/authProfileCache'
 import { clearLastRoute } from '@/lib/pageMemory'
+const PROFILE_SELECT =
   'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
 const LOGIN_RPC_TIMEOUT_MS = 2_500
 const PROFILE_FETCH_TIMEOUT_MS = 15_000

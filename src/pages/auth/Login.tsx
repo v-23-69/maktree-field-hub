@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { isNativeApp } from '@/lib/capacitor';
@@ -23,8 +23,8 @@ export default function Login() {
     clearAccountClosedInfo,
   } = useAuth();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -46,6 +46,8 @@ export default function Login() {
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    const email = emailRef.current?.value ?? '';
+    const password = passwordRef.current?.value ?? '';
     if (!email.trim() || !password) {
       toast.error('Email and password are required');
       return;
@@ -67,7 +69,7 @@ export default function Login() {
     }
   };
 
-  if (!authReady || user) {
+  if (user) {
     return (
       <LoadingSpinner fullScreen message="Restoring your session…" />
     );
@@ -88,19 +90,23 @@ export default function Login() {
           ) : null}
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
-          {isProfileLoading && (
+        <form onSubmit={handleLogin} autoComplete="on" method="post" className="space-y-5">
+          {(isProfileLoading || !authReady) && (
             <p className="text-xs text-center text-muted-foreground">Restoring previous session...</p>
           )}
 
           <div className="space-y-2">
             <Label htmlFor="email" className="text-xs font-semibold">Email</Label>
             <Input
+              ref={emailRef}
               id="email"
+              name="username"
               type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder="your@email.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
               className="touch-target rounded-xl border-2 border-border/60 h-12 text-[15px] font-medium focus:border-primary w-full"
               autoComplete="username"
             />
@@ -110,10 +116,13 @@ export default function Login() {
             <Label htmlFor="password" className="text-xs font-semibold">Password</Label>
             <div className="relative">
               <Input
+                ref={passwordRef}
                 id="password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className="touch-target rounded-xl border-2 border-border/60 h-12 text-[15px] font-medium focus:border-primary w-full pr-12"
                 autoComplete="current-password"
               />
