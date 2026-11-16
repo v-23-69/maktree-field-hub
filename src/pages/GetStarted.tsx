@@ -7,6 +7,7 @@ import {
   APK_NEW_DOWNLOAD_FILENAME,
   APK_NEW_DOWNLOAD_PATH,
   APK_NEW_VERSION,
+  APK_PREVIOUS_VERSION,
 } from '@/lib/apkDownload'
 
 export default function GetStarted() {
@@ -46,9 +47,9 @@ export default function GetStarted() {
               <Smartphone className="h-6 w-6" aria-hidden />
             </span>
             <span className="min-w-0">
-              <span className="block text-[15px] font-bold">Download application</span>
+              <span className="block text-[15px] font-bold">Previous version {APK_PREVIOUS_VERSION}</span>
               <span className="mt-0.5 block text-xs text-primary-foreground/80">
-                Android APK for phones and tablets
+                The last working Android app
               </span>
             </span>
           </a>

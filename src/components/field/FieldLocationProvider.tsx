@@ -48,8 +48,36 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
   const [flagReason, setFlagReason] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [gate, setGate] = useState<'check' | 'need' | 'ready'>(isMr ? 'check' : 'ready')
+  const [paused, setPaused] = useState(false)
   const latest = useRef<Coords | null>(null)
   const gpsNoted = useRef(false)
+  const hadLocation = useRef(false)
+  const alertedOff = useRef(false)
+
+  const notifyLocationOff = () => {
+    if (alertedOff.current) return
+    alertedOff.current = true
+    setPaused(true)
+    toast.message('Turn location on so your DCRs can be submitted.')
+    if (isAndroidApp()) {
+      void FieldLocation.alertLocationOff()
+      return
+    }
+    showBrowserNotification({
+      id: `gps-off-${new Date().toISOString().slice(0, 10)}`,
+      title: 'Turn on location',
+      body: 'Turn location on so your DCRs can be submitted.',
+      url: '/mr/report/new',
+    })
+  }
+
+  const markLocationOn = () => {
+    hadLocation.current = true
+    alertedOff.current = false
+    setPaused(false)
+    setError(null)
+    setPermission('granted')
+  }
 
   useEffect(() => {
     if (!isMr) {
@@ -70,8 +98,16 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
           if (stopped) return
           const on = status.locationGranted && status.gpsEnabled
           setPermission(status.locationGranted ? 'granted' : 'denied')
-          setGate(on ? 'ready' : 'need')
-          if (!on) setError('Location is off')
+          if (on) {
+            markLocationOn()
+            setGate('ready')
+          } else if (hadLocation.current) {
+            setGate('ready')
+            notifyLocationOff()
+          } else {
+            setGate('need')
+            setError('Location is off')
+          }
         } catch {
           if (!stopped) setGate('need')
         }
@@ -116,17 +152,48 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
           accuracy: pos.coords.accuracy,
         }
         latest.current = next
+        markLocationOn()
         setCoords(next)
-        setPermission('granted')
-        setError(null)
       },
       () => {
-        setGate('need')
-        setError('Location is off')
+        if (hadLocation.current) notifyLocationOff()
+        else {
+          setGate('need')
+          setError('Location is off')
+        }
       },
       { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     )
     return () => navigator.geolocation.clearWatch(watch)
+  }, [gate, isMr])
+
+  useEffect(() => {
+    if (!isMr || gate !== 'ready') return
+    const look = async () => {
+      if (!isAndroidApp()) return
+      try {
+        const status = await FieldLocation.status()
+        if (status.locationGranted && status.gpsEnabled) markLocationOn()
+        else if (hadLocation.current) notifyLocationOff()
+      } catch {
+        /* status is checked again on the next pass */
+      }
+    }
+    const timer = window.setInterval(() => { void look() }, 15000)
+    let permissionWatch: PermissionStatus | null = null
+    if (!isAndroidApp() && navigator.permissions?.query) {
+      void navigator.permissions.query({ name: 'geolocation' }).then(status => {
+        permissionWatch = status
+        status.onchange = () => {
+          if (status.state === 'granted') markLocationOn()
+          else if (hadLocation.current) notifyLocationOff()
+        }
+      }).catch(() => undefined)
+    }
+    return () => {
+      window.clearInterval(timer)
+      if (permissionWatch) permissionWatch.onchange = null
+    }
   }, [gate, isMr])
 
   const turnOnLocation = async () => {
@@ -137,8 +204,14 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
         const next = await FieldLocation.status()
         const on = next.locationGranted && next.gpsEnabled
         setPermission(next.locationGranted ? 'granted' : 'denied')
-        setGate(on ? 'ready' : 'need')
-        if (!on) toast.message('Turn location on for Maktree, then come back.')
+        if (on) {
+          markLocationOn()
+          setGate('ready')
+        } else if (hadLocation.current) {
+          notifyLocationOff()
+        } else {
+          setGate('need')
+        }
       } catch (err) {
         toast.error(err instanceof Error ? err.message : 'Could not turn location on')
       }
@@ -156,8 +229,7 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
           accuracy: pos.coords.accuracy,
         }
         setCoords(latest.current)
-        setPermission('granted')
-        setError(null)
+        markLocationOn()
         setGate('ready')
       },
       () => {
@@ -259,6 +331,21 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
           )}
         </div>
       ) : children}
+      {paused && !blocked && (
+        <div className="fixed inset-x-0 bottom-0 z-[75] px-4 pb-[max(5.5rem,env(safe-area-inset-bottom))]">
+          <div className="rounded-2xl border border-red-300 bg-red-50 p-4 text-red-950 shadow-lg">
+            <p className="text-sm font-bold">Turn on location</p>
+            <p className="mt-1 text-xs leading-relaxed">Location is off. Turn it on so your DCRs can be submitted.</p>
+            <button
+              type="button"
+              onClick={() => void turnOnLocation()}
+              className="mt-3 h-10 rounded-xl bg-red-600 px-4 text-sm font-bold text-white"
+            >
+              Turn on location
+            </button>
+          </div>
+        </div>
+      )}
     </FieldLocationContext.Provider>
   )
 }

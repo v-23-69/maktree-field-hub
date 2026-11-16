@@ -12,9 +12,11 @@ export default function PlanDayBanner({ date }: { date: string }) {
     : 'No daily plan for this day. You can file DCRs normally. The report will note that the plan was not submitted.'
 
   return (
-    <div className="mb-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs leading-relaxed text-foreground">
+    <div className="mb-3 rounded-2xl border border-red-500 bg-red-600 p-3 text-xs leading-relaxed text-white">
       <p>{text}</p>
-      <Link to={`/mr/plan?date=${date}`} className="mt-1 inline-block font-semibold text-primary">Open plan</Link>
+      <Link to={`/mr/plan?date=${date}`} className="mt-2 inline-flex h-8 items-center rounded-lg bg-white px-3 text-xs font-bold text-red-600">
+        Submit plan
+      </Link>
     </div>
   )
 }

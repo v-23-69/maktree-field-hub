@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { formatDisplayDate, todayInputDate, isSundayYmd, formatIstTimeNow } from '@/lib/dateUtils';
+import { formatDisplayDate, todayInputDate, isSundayYmd, formatIstTimeNow, addDaysYmd } from '@/lib/dateUtils';
 import { useAuth } from '@/hooks/useAuth';
 import { FilePlus, FileText, Stethoscope, Calendar, ChevronRight, CheckCircle2, Sparkles, Cake, Heart, AlertTriangle, MapPin, Users, Lock, Zap, CalendarOff, CalendarDays, Receipt, BarChart3 } from 'lucide-react';
 import PageHeader from '@/components/shared/PageHeader';
@@ -36,6 +36,8 @@ import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import DashboardStatLinkCards from '@/components/dashboard/dashboard-stat-link-cards';
 import { DashboardSection, dashboardPageClass, dashboardPanelClass } from '@/components/dashboard/dashboard-shell';
 import { useAutoMarkMissedDcrLeave } from '@/hooks/useAutoMarkMissedDcr';
+import { useFieldDayBoard } from '@/hooks/useFieldPlan';
+import { SPOT_START_DATE, dailyPlanWindow } from '@/lib/spotWorking';
 type DrawerAction = 'strike' | 'holiday' | null;
 
 export default function MRDashboard() {
@@ -70,6 +72,13 @@ export default function MRDashboard() {
   const [showStrikeConfirm, setShowStrikeConfirm] = useState(false);
   const [holidayDate, setHolidayDate] = useState(todayInputDate());
   const [holidayReason, setHolidayReason] = useState('');
+  const planToday = todayInputDate();
+  const planTomorrow = addDaysYmd(planToday, 1);
+  const todayPlanBoard = useFieldDayBoard(planToday >= SPOT_START_DATE ? planToday : '');
+  const tomorrowPlanBoard = useFieldDayBoard(planTomorrow >= SPOT_START_DATE ? planTomorrow : '');
+  const focusPlanDate = dailyPlanWindow(planToday) === 'open' && planToday >= SPOT_START_DATE ? planToday : planTomorrow;
+  const focusPlan = focusPlanDate === planToday ? todayPlanBoard.data : tomorrowPlanBoard.data;
+  const planNeedsSubmit = !focusPlan?.plan_status || focusPlan.plan_status === 'none' || focusPlan.plan_status === 'rejected' || focusPlan.plan_status === 'missed';
 
   const { data: dailyStatus } = useQuery({
     queryKey: ['dcr-daily-status', userId, todayInputDate()],
@@ -393,13 +402,27 @@ export default function MRDashboard() {
 
         <button
           type="button"
-          onClick={() => navigate('/mr/plan')}
-          className={cn(dashboardPanelClass(), 'p-4 text-left max-md:order-[18]')}
+          onClick={() => navigate(`/mr/plan?date=${focusPlanDate}`)}
+          className={cn(
+            'p-4 text-left max-md:order-[18] rounded-2xl border',
+            planNeedsSubmit
+              ? 'border-red-500 bg-red-600 text-white'
+              : dashboardPanelClass(),
+          )}
         >
-          <p className="text-sm font-bold text-foreground">Daily plan</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Submit today’s or tomorrow’s doctors before 11:00 AM. A saved clinic opens the DCR only when you are there.
+          <p className={cn('text-sm font-bold', planNeedsSubmit ? 'text-white' : 'text-foreground')}>
+            {planNeedsSubmit ? 'Submit your daily plan' : 'Daily plan submitted'}
           </p>
+          <p className={cn('mt-1 text-xs', planNeedsSubmit ? 'text-white/90' : 'text-muted-foreground')}>
+            {focusPlanDate === planTomorrow
+              ? 'Tomorrow’s doctors. Submit the plan so your calls can be filed.'
+              : 'Today’s doctors. Submit the plan before 11:00 AM.'}
+          </p>
+          {planNeedsSubmit && (
+            <span className="mt-3 inline-flex h-9 items-center rounded-xl bg-white px-3 text-xs font-bold text-red-600">
+              Submit plan
+            </span>
+          )}
         </button>
 
         {deferReady && hasSubAreaAccess && tpApproved && (

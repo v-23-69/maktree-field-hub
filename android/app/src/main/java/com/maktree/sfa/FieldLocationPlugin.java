@@ -1,12 +1,19 @@
 package com.maktree.sfa;
 
 import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.location.LocationManager;
 import android.os.Build;
 import android.provider.Settings;
+
+import androidx.core.app.NotificationCompat;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
@@ -35,6 +42,51 @@ import com.getcapacitor.annotation.PermissionCallback;
     }
 )
 public class FieldLocationPlugin extends Plugin {
+    private static final String ALERT_CHANNEL = "maktree_location_alert";
+    private static final int ALERT_ID = 4702;
+    private boolean watchingGps = false;
+
+    private final BroadcastReceiver gpsReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (gpsOn()) {
+                NotificationManager manager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+                if (manager != null) manager.cancel(ALERT_ID);
+                return;
+            }
+            postLocationOff();
+        }
+    };
+
+    @Override
+    public void load() {
+        IntentFilter filter = new IntentFilter(LocationManager.PROVIDERS_CHANGED_ACTION);
+        if (Build.VERSION.SDK_INT >= 33) {
+            getContext().registerReceiver(gpsReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+        } else {
+            getContext().registerReceiver(gpsReceiver, filter);
+        }
+        watchingGps = true;
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (watchingGps) {
+            try {
+                getContext().unregisterReceiver(gpsReceiver);
+            } catch (Exception ignored) {
+                /* already unregistered */
+            }
+            watchingGps = false;
+        }
+        super.handleOnDestroy();
+    }
+
+    @PluginMethod
+    public void alertLocationOff(PluginCall call) {
+        if (!gpsOn()) postLocationOff();
+        call.resolve();
+    }
     @PluginMethod
     public void setSession(PluginCall call) {
         SharedPreferences.Editor editor = prefs().edit();
@@ -160,5 +212,40 @@ public class FieldLocationPlugin extends Plugin {
 
     private SharedPreferences prefs() {
         return getContext().getSharedPreferences(FieldRouteService.PREFS, Context.MODE_PRIVATE);
+    }
+
+    private void postLocationOff() {
+        NotificationManager manager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+        if (manager == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                ALERT_CHANNEL,
+                "Location",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setDescription("Asks you to turn location on so DCRs can be submitted");
+            manager.createNotificationChannel(channel);
+        }
+        Intent tap = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+        tap.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        android.app.PendingIntent pending = android.app.PendingIntent.getActivity(
+            getContext(),
+            8,
+            tap,
+            android.app.PendingIntent.FLAG_UPDATE_CURRENT | android.app.PendingIntent.FLAG_IMMUTABLE
+        );
+        Notification notification = new NotificationCompat.Builder(getContext(), ALERT_CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle("Turn on location")
+            .setContentText("Turn location on so your DCRs can be submitted.")
+            .setContentIntent(pending)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .build();
+        try {
+            manager.notify(ALERT_ID, notification);
+        } catch (SecurityException ignored) {
+            /* notification permission is off; the in-app message still shows */
+        }
     }
 }

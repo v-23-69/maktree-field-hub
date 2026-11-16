@@ -18,6 +18,7 @@ export interface FieldLocationPlugin {
   stop(): Promise<void>
   status(): Promise<FieldLocationStatus>
   openLocationSettings(): Promise<void>
+  alertLocationOff(): Promise<void>
 }
 
 export const FieldLocation = registerPlugin<FieldLocationPlugin>('FieldLocation')
