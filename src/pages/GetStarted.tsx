@@ -1,7 +1,13 @@
 import { Link } from 'react-router-dom'
 import { Globe, Smartphone } from 'lucide-react'
 import MaktreeBrand from '@/components/shared/MaktreeBrand'
-import { APK_DOWNLOAD_FILENAME, APK_DOWNLOAD_PATH } from '@/lib/apkDownload'
+import {
+  APK_DOWNLOAD_FILENAME,
+  APK_DOWNLOAD_PATH,
+  APK_NEW_DOWNLOAD_FILENAME,
+  APK_NEW_DOWNLOAD_PATH,
+  APK_NEW_VERSION,
+} from '@/lib/apkDownload'
 
 export default function GetStarted() {
   return (
@@ -46,11 +52,26 @@ export default function GetStarted() {
               </span>
             </span>
           </a>
+
+          <a
+            href={APK_NEW_DOWNLOAD_PATH}
+            download={APK_NEW_DOWNLOAD_FILENAME}
+            className="block w-full rounded-2xl border-2 border-primary bg-primary/10 p-4 text-left shadow-sm transition-all hover:bg-primary/15 active:scale-[0.98]"
+          >
+            <span className="block text-[15px] font-bold leading-snug text-foreground">
+              New version of Maktree SFA is available. Install it from here.
+            </span>
+            <span className="mt-2 inline-flex rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground">
+              Install version {APK_NEW_VERSION}
+            </span>
+            <span className="mt-2 block text-xs leading-relaxed text-muted-foreground">
+              Install it over the app you already have. Delete the old app only if the phone refuses the update.
+            </span>
+          </a>
         </div>
 
         <p className="mt-6 text-center text-xs leading-relaxed text-muted-foreground">
           After download, open the file and allow install from that app if Android asks.
-          Uninstall any old USB/debug Maktree SFA first.
         </p>
       </div>
     </div>
