@@ -73,6 +73,8 @@ export function useAddDoctorToCustomArea() {
       fullName: string
       speciality?: string
       mobile?: string
+      entrySource?: 'manual' | 'camera' | 'upload'
+      visitingCardImages?: Array<{ url: string; public_id?: string | null; side?: 'front' | 'back' }>
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
       const { data, error } = await supabase.rpc('add_doctor_to_manager_custom_area', {
@@ -80,6 +82,8 @@ export function useAddDoctorToCustomArea() {
         p_full_name: p.fullName,
         p_speciality: p.speciality ?? null,
         p_mobile: p.mobile ?? null,
+        p_entry_source: p.entrySource ?? 'manual',
+        p_visiting_card_images: p.visitingCardImages ?? [],
       })
       if (error) throw error
       return data as string

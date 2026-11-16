@@ -1,6 +1,6 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense, useEffect, type ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { HashRouter, Route, Routes, Navigate } from "react-router-dom";
+import { HashRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, getRoleDashboard } from "@/hooks/useAuth";
@@ -13,8 +13,10 @@ import InstallPrompt from "@/components/shared/InstallPrompt";
 import ProfileCompletionPrompt from "@/components/shared/ProfileCompletionPrompt";
 import EmployeeBirthdayProvider from "@/components/shared/employee-birthday/EmployeeBirthdayProvider";
 import NotificationProvider from "@/components/shared/NotificationProvider";
+import { FieldLocationProvider } from "@/components/field/FieldLocationProvider";
 import NativeSplashGate from "@/components/shared/NativeSplashGate";
 import { lazyPage } from "@/lib/lazyPage";
+import { readLastRoute, writeLastRoute } from "@/lib/pageMemory";
 import type { UserRole } from "@/types/database.types";
 
 function AppRoute({
@@ -44,6 +46,8 @@ const MasterList = lazyPage(() => import("@/pages/mr/MasterList"));
 const MRLeave = lazyPage(() => import("@/pages/mr/Leave"));
 const MRExpense = lazyPage(() => import("@/pages/mr/Expense"));
 const MRTourProgram = lazyPage(() => import("@/pages/mr/TourProgram"));
+const FieldPlanPage = lazyPage(() => import("@/pages/field/FieldPlanPage"));
+const FieldActivityPage = lazyPage(() => import("@/pages/manager/FieldActivityPage"));
 const ManagerDashboard = lazyPage(() => import("@/pages/manager/Dashboard"));
 const ManagerReports = lazyPage(() => import("@/pages/manager/Reports"));
 const ManagerAnalytics = lazyPage(() => import("@/pages/manager/Analytics"));
@@ -87,7 +91,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60_000,
-      gcTime: 10 * 60_000,
+      gcTime: 60 * 60_000,
       refetchOnWindowFocus: false,
       refetchOnReconnect: false,
       retry: 1,
@@ -101,6 +105,10 @@ function RootRedirect() {
     return <PageLoadingState fullScreen message="Restoring your session…" showLogo={false} />;
   }
   if (isAuthenticated && user) {
+    const last = readLastRoute();
+    if (last?.startsWith(`/${user.role}/`)) {
+      return <Navigate to={last} replace />;
+    }
     return <Navigate to={getRoleDashboard(user.role)} replace />;
   }
   // Android APK and installed PWAs must still open login, not the public download page.
@@ -108,6 +116,14 @@ function RootRedirect() {
     return <Navigate to="/login" replace />;
   }
   return <GetStarted />;
+}
+
+function RememberRoute() {
+  const location = useLocation();
+  useEffect(() => {
+    writeLastRoute(`${location.pathname}${location.search}`);
+  }, [location.pathname, location.search]);
+  return null;
 }
 
 const App = () => (
@@ -118,8 +134,10 @@ const App = () => (
         <AuthProvider>
           <NativeSplashGate />
           <HashRouter>
+          <RememberRoute />
           <EmployeeBirthdayProvider>
           <NotificationProvider>
+          <FieldLocationProvider>
           <InstallPrompt />
           <ProfileCompletionPrompt />
           <Suspense fallback={<PageLoader />}>
@@ -141,6 +159,7 @@ const App = () => (
             <Route path="/mr/leave" element={<AppRoute scope="mr-leave" allowedRoles={['mr']}><MRLeave /></AppRoute>} />
             <Route path="/mr/expense" element={<AppRoute scope="mr-expense" allowedRoles={['mr']}><MRExpense /></AppRoute>} />
             <Route path="/mr/tour-program" element={<AppRoute scope="mr-tour-program" allowedRoles={['mr']}><MRTourProgram /></AppRoute>} />
+            <Route path="/mr/plan" element={<AppRoute scope="mr-plan" allowedRoles={['mr']}><FieldPlanPage /></AppRoute>} />
             <Route path="/mr/report/history" element={<AppRoute scope="mr-report-history" allowedRoles={['mr']}><ReportHistory /></AppRoute>} />
             <Route path="/mr/report/:id" element={<AppRoute scope="mr-report-detail" allowedRoles={['mr']}><ReportDetail /></AppRoute>} />
 
@@ -170,6 +189,8 @@ const App = () => (
             <Route path="/manager/report/:id" element={<AppRoute scope="manager-report-detail" allowedRoles={['manager']}><ReportDetail /></AppRoute>} />
             <Route path="/manager/expense" element={<AppRoute scope="manager-expense" allowedRoles={['manager']}><MRExpense /></AppRoute>} />
             <Route path="/manager/tour-program" element={<AppRoute scope="manager-tour-program" allowedRoles={['manager']}><MRTourProgram /></AppRoute>} />
+            <Route path="/manager/plan" element={<AppRoute scope="manager-plan" allowedRoles={['manager']}><FieldPlanPage /></AppRoute>} />
+            <Route path="/manager/activity" element={<AppRoute scope="manager-activity" allowedRoles={['manager']}><FieldActivityPage /></AppRoute>} />
             <Route path="/manager/custom-areas" element={<AppRoute scope="manager-custom-areas" allowedRoles={['manager']}><ManagerCustomAreas /></AppRoute>} />
             <Route path="/manager/custom-areas/:customAreaId" element={<AppRoute scope="manager-custom-area-detail" allowedRoles={['manager']}><ManagerCustomAreaDetail /></AppRoute>} />
             <Route path="/manager/e-detailing" element={<AppRoute scope="manager-e-detailing" allowedRoles={['manager']}><ManagerEDetailing /></AppRoute>} />
@@ -186,6 +207,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          </FieldLocationProvider>
           </NotificationProvider>
           </EmployeeBirthdayProvider>
           </HashRouter>

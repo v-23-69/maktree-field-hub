@@ -28,6 +28,7 @@ import {
 import ManagerTpImportDrawer from '@/components/manager/ManagerTpImportDrawer'
 import {
   ManagerTpDayCard,
+  TP_HOLIDAY_VALUE,
   type ManagerTpLocalEntry,
 } from '@/components/manager/ManagerTpDayCard'
 import { supabase } from '@/lib/supabase'
@@ -63,14 +64,23 @@ interface DayCardProps {
   local: LocalEntry | undefined
   canEdit: boolean
   allSubAreas: SubAreaItem[]
+  calendarHoliday?: boolean
+  holidayName?: string | null
   onSubAreaChange: (date: string, value: string) => void
 }
 
+function tpDaySelectValue(local: LocalEntry | undefined, calendarHoliday: boolean) {
+  if (local?.day_type === 'working') return local.sub_area_id ?? ''
+  if (local?.day_type === 'holiday' || (!local && calendarHoliday)) return TP_HOLIDAY_VALUE
+  return local?.sub_area_id ?? ''
+}
+
 const DayCard = memo(function DayCard({
-  dateStr, local, canEdit, allSubAreas, onSubAreaChange,
+  dateStr, local, canEdit, allSubAreas, calendarHoliday = false, holidayName = null, onSubAreaChange,
 }: DayCardProps) {
   const dateLabel = formatShortDateIst(dateStr)
-  const filled = !!local?.sub_area_id
+  const holidayPlanned = tpDaySelectValue(local, calendarHoliday) === TP_HOLIDAY_VALUE
+  const filled = holidayPlanned || !!local?.sub_area_id
 
   return (
     <div className={cn('glass-card p-3.5 space-y-2.5', filled && 'ring-1 ring-emerald-500/20')}>
@@ -82,17 +92,22 @@ const DayCard = memo(function DayCard({
       {canEdit ? (
         <select
           className="flex h-10 w-full rounded-xl border-2 border-border/60 bg-background px-3 text-xs font-medium focus:border-primary focus:outline-none transition-colors"
-          value={local?.sub_area_id ?? ''}
+          value={tpDaySelectValue(local, calendarHoliday)}
           onChange={e => onSubAreaChange(dateStr, e.target.value)}
         >
-          <option value="">Select assigned area</option>
+          <option value="">{calendarHoliday ? 'Work this day — pick area' : 'Select assigned area'}</option>
+          {calendarHoliday && (
+            <option value={TP_HOLIDAY_VALUE}>Holiday{holidayName ? ` — ${holidayName}` : ''}</option>
+          )}
           {allSubAreas.map(sa => (
             <option key={sa.id} value={sa.id}>{sa.areaName} - {sa.name}</option>
           ))}
         </select>
       ) : (
         <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-foreground">
-          {local?.sub_area_id
+          {holidayPlanned
+            ? `Holiday${holidayName ? ` — ${holidayName}` : ''}`
+            : local?.sub_area_id
             ? (() => { const sa = allSubAreas.find(s => s.id === local.sub_area_id); return sa ? `${sa.areaName} - ${sa.name}` : 'Unknown area' })()
             : 'Not set'}
         </div>

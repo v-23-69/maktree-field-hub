@@ -123,7 +123,8 @@ export default function MRDashboard() {
     d => !d.already_submitted && d.day_type === 'sunday',
   );
   const openFieldReport = (d: AllowedReportDate) => {
-    const reportKind = d.day_type === 'leave' ? 'leave' as const : 'field' as const
+    const reportKind =
+      d.day_type === 'leave' ? ('leave' as const) : d.day_type === 'holiday' ? ('holiday' as const) : ('field' as const)
     navigate('/mr/report/new', { state: { date: d.report_date, reportKind } })
   }
 
@@ -389,6 +390,17 @@ export default function MRDashboard() {
             <DashboardStatLinkCards items={mrStatItems} columns={3} />
           </DashboardSection>
         )}
+
+        <button
+          type="button"
+          onClick={() => navigate('/mr/plan')}
+          className={cn(dashboardPanelClass(), 'p-4 text-left max-md:order-[18]')}
+        >
+          <p className="text-sm font-bold text-foreground">Daily plan</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Submit today’s or tomorrow’s doctors before 11:00 AM. A saved clinic opens the DCR only when you are there.
+          </p>
+        </button>
 
         {deferReady && hasSubAreaAccess && tpApproved && (
           <div className="max-md:order-[20]">

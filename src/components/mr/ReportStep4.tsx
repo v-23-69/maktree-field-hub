@@ -211,6 +211,7 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
         const v = data.visits[doctorId];
         if (!doc || !v) continue;
         const subAreaId = v.subAreaId || doc.sub_area_id;
+        if (v.persisted) continue;
         await saveReportVisit(supabase, {
           reportId,
           doctorId,
@@ -218,8 +219,14 @@ export default function ReportStep4({ data, onBack, onClearDraft, hideFooter }: 
           visit: {
             productsPromoted: v.productsPromoted,
             chemistName: v.chemistName,
-            competitors: v.competitors,
-            monthlySupport: v.monthlySupport,
+            competitors: v.competitors.flatMap(c => (
+              c.brandName.trim() ? [{ brandName: c.brandName, quantity: Number(c.quantity) || 0 }] : []
+            )),
+            monthlySupport: v.monthlySupport.flatMap(m => (
+              m.productId ? [{ productId: m.productId, quantity: Number(m.quantity) || 0 }] : []
+            )),
+            doctorUnavailable: v.doctorUnavailable,
+            unavailableNote: v.unavailableNote,
           },
         });
       }

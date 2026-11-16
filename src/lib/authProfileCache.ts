@@ -1,4 +1,3 @@
-import { isNativeApp } from '@/lib/capacitor'
 import type { User } from '@/types/database.types'
 
 export const PROFILE_CACHE_KEY = 'maktree-auth-profile-cache-v1'
@@ -7,9 +6,9 @@ export const PROFILE_STALE_CACHE_MAX_MS = 7 * 24 * 60 * 60 * 1000
 
 function storage(): Storage | null {
   if (typeof globalThis === 'undefined') return null
-  const g = globalThis as unknown as { localStorage?: Storage; sessionStorage?: Storage }
-  if (isNativeApp()) return g.localStorage ?? null
-  return g.sessionStorage ?? g.localStorage ?? null
+  const g = globalThis as unknown as { localStorage?: Storage }
+  // localStorage survives minimize and a reload. sessionStorage is wiped when a phone closes the page.
+  return g.localStorage ?? null
 }
 
 export function readCachedProfile(authUserId: string, maxAgeMs: number): User | null {

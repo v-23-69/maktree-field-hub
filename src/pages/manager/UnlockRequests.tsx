@@ -45,6 +45,8 @@ import { formatDisplayDate } from '@/lib/dateUtils'
 import type { DoctorAddRequest, DoctorDeletionRequest, LeaveRequest } from '@/types/database.types'
 import { leaveCategoryLabel } from '@/lib/leaveLabels'
 import RequestTimestamps from '@/components/manager/RequestTimestamps'
+import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge'
+import { cardImagesFromPayload, entrySourceFromPayload } from '@/lib/visitingCard'
 
 type RequestKind =
   | 'unlock'
@@ -702,11 +704,14 @@ export default function UnlockRequests() {
     const areaLabel = req.sub_area
       ? `${req.sub_area.area?.name ?? ''} / ${req.sub_area.name}`.replace(/^ \/ /, '')
       : '—'
+    const source = entrySourceFromPayload(req.payload)
+    const cardImages = cardImagesFromPayload(req.payload)
   return (
     <div key={`docadd-${req.id}`} id={`request-${req.id}`} className="rounded-xl border border-destructive/40 bg-card p-4 shadow-sm space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <KindBadge kind="doctor-add" />
         <Badge className="bg-destructive/10 text-destructive border-destructive/30">Pending</Badge>
+        <DoctorEntrySourceBadge source={source} />
       </div>
       <div className="space-y-1">
         <p className="text-sm font-bold text-foreground">{req.mr?.full_name ?? 'MR'}</p>
@@ -717,10 +722,32 @@ export default function UnlockRequests() {
           {doc?.speciality ? ` · ${doc.speciality}` : ''}
         </p>
         <p className="text-xs text-muted-foreground">Area: {areaLabel}</p>
+        {doc?.hospital_name && (
+          <p className="text-xs text-muted-foreground">Hospital: {doc.hospital_name}</p>
+        )}
+        {doc?.mobile && (
+          <p className="text-xs text-muted-foreground">Mobile: {doc.mobile}</p>
+        )}
+        {doc?.email && (
+          <p className="text-xs text-muted-foreground">Email: {doc.email}</p>
+        )}
         {(req.payload?.chemists?.length ?? 0) > 0 && (
           <p className="text-[11px] text-muted-foreground">
             Chemists: {(req.payload?.chemists ?? []).map(c => c.name).join(', ')}
           </p>
+        )}
+        {cardImages.length > 0 && (
+          <div className="flex gap-2 pt-1">
+            {cardImages.map(img => (
+              <a key={`${img.side}-${img.url}`} href={img.url} target="_blank" rel="noreferrer">
+                <img
+                  src={img.url}
+                  alt={`${img.side} visiting card`}
+                  className="h-16 w-24 rounded-lg object-cover border border-border"
+                />
+              </a>
+            ))}
+          </div>
         )}
       </div>
       <div>

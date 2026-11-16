@@ -7,10 +7,13 @@ import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
+export const TP_HOLIDAY_VALUE = '__holiday__'
+
 export type ManagerTpLocalEntry = {
   sub_area_id: string
   match_mr_id?: string
   working_with_ids?: string[]
+  day_type?: 'working' | 'holiday'
 }
 
 type SubAreaItem = { id: string; name: string; areaName: string }
@@ -24,6 +27,8 @@ type Props = {
   allSubAreas: SubAreaItem[]
   teamMrs: MrOption[]
   managerId: string
+  calendarHoliday?: boolean
+  holidayName?: string | null
   onSubAreaChange: (date: string, value: string) => void
   onMatchMrChange: (date: string, mrId: string) => void
   onMatchArea: (date: string, mrId: string, subAreaId: string) => void
@@ -54,6 +59,12 @@ function useMrTourDayArea(mrId: string, workDate: string, enabled: boolean) {
   })
 }
 
+function tpSelectValue(local: ManagerTpLocalEntry | undefined, calendarHoliday: boolean) {
+  if (local?.day_type === 'working') return local.sub_area_id ?? ''
+  if (local?.day_type === 'holiday' || (!local && calendarHoliday)) return TP_HOLIDAY_VALUE
+  return local?.sub_area_id ?? ''
+}
+
 export const ManagerTpDayCard = memo(function ManagerTpDayCard({
   dateStr,
   local,
@@ -61,13 +72,16 @@ export const ManagerTpDayCard = memo(function ManagerTpDayCard({
   allSubAreas,
   teamMrs,
   managerId,
+  calendarHoliday = false,
+  holidayName = null,
   onSubAreaChange,
   onMatchMrChange,
   onMatchArea,
   onClearMatch,
 }: Props) {
   const dateLabel = formatShortDateIst(dateStr)
-  const filled = !!local?.sub_area_id
+  const holidayPlanned = tpSelectValue(local, calendarHoliday) === TP_HOLIDAY_VALUE
+  const filled = holidayPlanned || !!local?.sub_area_id
   const selectedMrId = local?.match_mr_id ?? ''
   const { data: mrDayArea, isLoading: mrAreaLoading } = useMrTourDayArea(
     selectedMrId,
@@ -109,7 +123,7 @@ export const ManagerTpDayCard = memo(function ManagerTpDayCard({
         </div>
       </div>
 
-      {canEdit && (
+      {canEdit && !holidayPlanned && (
         <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 space-y-2.5">
           <p className="text-[10px] font-semibold text-violet-900 dark:text-violet-300 flex items-center gap-1">
             <Users className="h-3.5 w-3.5" />
@@ -185,10 +199,13 @@ export const ManagerTpDayCard = memo(function ManagerTpDayCard({
       {canEdit ? (
         <select
           className="flex h-10 w-full rounded-xl border-2 border-border/60 bg-background px-3 text-xs font-medium focus:border-primary focus:outline-none transition-colors"
-          value={local?.sub_area_id ?? ''}
+          value={tpSelectValue(local, calendarHoliday)}
           onChange={e => onSubAreaChange(dateStr, e.target.value)}
         >
-          <option value="">Your assigned area for this day</option>
+          <option value="">{calendarHoliday ? 'Work this day — pick area' : 'Your assigned area for this day'}</option>
+          {calendarHoliday && (
+            <option value={TP_HOLIDAY_VALUE}>Holiday{holidayName ? ` — ${holidayName}` : ''}</option>
+          )}
           {allSubAreas.map(sa => (
             <option key={sa.id} value={sa.id}>
               {sa.areaName} - {sa.name}
@@ -197,13 +214,15 @@ export const ManagerTpDayCard = memo(function ManagerTpDayCard({
         </select>
       ) : (
         <div className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-foreground">
-          {local?.sub_area_id
+          {holidayPlanned
+            ? `Holiday${holidayName ? ` — ${holidayName}` : ''}`
+            : local?.sub_area_id
             ? (() => {
                 const sa = allSubAreas.find(s => s.id === local.sub_area_id)
                 return sa ? `${sa.areaName} - ${sa.name}` : 'Unknown area'
               })()
             : 'Not set'}
-          {isMatched && (
+          {isMatched && !holidayPlanned && (
             <p className="text-[10px] text-violet-700 mt-1">Working with {matchedMrName}</p>
           )}
         </div>

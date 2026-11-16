@@ -2,7 +2,6 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { UserRole } from '@/types/database.types';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
-import DashboardWelcomeSplash from '@/components/shared/DashboardWelcomeSplash';
 import RouteErrorBoundary from '@/components/shared/RouteErrorBoundary';
 import { getRoleDashboard } from '@/hooks/useAuth';
 
@@ -16,30 +15,22 @@ interface ProtectedRouteProps {
 export default function ProtectedRoute({ children, allowedRoles, scope }: ProtectedRouteProps) {
   const { user, isAuthenticated, authReady, isProfileLoading } = useAuth();
 
-  if (!authReady) return <LoadingSpinner fullScreen showLogo={false} message="Checking your session…" />;
-  if (isProfileLoading && user) {
+  // A signed-in user keeps the page they were on. Refreshing the profile must not unmount it.
+  if (user && isAuthenticated) {
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      return <Navigate to={`/${user.role}/dashboard`} replace />;
+    }
+    if (!scope) return <>{children}</>;
+    const fallbackPath = allowedRoles?.[0] ? getRoleDashboard(allowedRoles[0]) : undefined;
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <DashboardWelcomeSplash
-          fullName={user.full_name}
-          profilePhotoUrl={user.profile_photo_url}
-          subtitle="Signing you in…"
-        />
-      </div>
+      <RouteErrorBoundary scope={scope} fallbackPath={fallbackPath}>
+        {children}
+      </RouteErrorBoundary>
     );
   }
-  if (isProfileLoading) return <LoadingSpinner fullScreen showLogo={false} message="Getting your profile ready…" />;
-  if (!isAuthenticated || !user) return <Navigate to="/login" replace />;
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to={`/${user.role}/dashboard`} replace />;
+
+  if (!authReady || isProfileLoading) {
+    return <LoadingSpinner fullScreen showLogo={false} message="Checking your session…" />;
   }
-
-  if (!scope) return <>{children}</>;
-
-  const fallbackPath = allowedRoles?.[0] ? getRoleDashboard(allowedRoles[0]) : undefined;
-  return (
-    <RouteErrorBoundary scope={scope} fallbackPath={fallbackPath}>
-      {children}
-    </RouteErrorBoundary>
-  );
+  return <Navigate to="/login" replace />;
 }

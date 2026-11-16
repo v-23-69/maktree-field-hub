@@ -1,7 +1,7 @@
-/** Polling + focus refresh for time-critical status (TP, DCR today, pending requests). */
+/** Light refresh for status that changes after manager actions. Avoid 30s poll storms. */
 export const LIVE_QUERY_OPTIONS = {
-  staleTime: 15_000,
-  refetchInterval: 30_000,
+  staleTime: 60_000,
+  refetchInterval: 120_000,
   refetchOnWindowFocus: true,
   refetchOnReconnect: true,
 } as const

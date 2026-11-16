@@ -33,7 +33,7 @@ export function useAutoMarkMissedDcrLeave(mrId: string) {
         .catch(() => {
           ranRef.current = false
         })
-    }, 20_000)
+    }, 45_000)
 
     return () => window.clearTimeout(timer)
   }, [mrId, qc])

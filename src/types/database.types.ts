@@ -98,6 +98,9 @@ export interface Doctor {
   master_list_complete: boolean
   is_active: boolean
   created_at: string
+  /** How this doctor was added: manual form, camera OCR, or gallery upload. */
+  entry_source?: 'manual' | 'camera' | 'upload'
+  visiting_card_images?: Array<{ url: string; public_id?: string | null; side?: 'front' | 'back' }>
   sub_area?: SubArea
 }
 
@@ -167,6 +170,9 @@ export interface DailyReport {
   admin_day_notes?: string | null
   stockist_id?: string | null
   is_late_submission?: boolean
+  /** True when the MR filed a field DCR without an approved or pending daily plan. */
+  plan_missing?: boolean
+  plan_remark?: string | null
   mr?: User
   manager?: User
 }
@@ -190,6 +196,9 @@ export interface ReportVisit {
   doctor_id: string
   chemist_id: string | null
   visited_at: string
+  doctor_unavailable?: boolean
+  unavailable_note?: string | null
+  plan_waived?: boolean
   doctor?: Doctor
   chemist?: Chemist
   promoted_products?: PromotedProduct[]
@@ -246,8 +255,12 @@ export interface DoctorAddRequest {
       marriage_anniversary?: string | null
       visit_frequency?: 'weekly' | 'fortnightly' | 'monthly' | null
       monthly_visit_target?: number
+      email?: string | null
+      hospital_name?: string | null
     }
     chemists?: DoctorChemistPayload[]
+    entry_source?: 'manual' | 'camera' | 'upload'
+    card_images?: Array<{ url: string; public_id?: string | null; side?: 'front' | 'back' }>
   }
   doctor_id: string | null
   manager_note: string | null
@@ -526,6 +539,7 @@ export interface Holiday {
   name: string
   holiday_date: string
   holiday_type: 'national' | 'company'
+  is_granted?: boolean
   created_by: string
   created_at: string
 }
@@ -546,7 +560,7 @@ export interface LeaveRequest {
   manager_id: string | null
   leave_date: string
   leave_type: 'full' | 'half_morning' | 'half_afternoon'
-  leave_category?: 'casual' | 'sick' | 'without_pay'
+  leave_category?: 'casual' | 'sick' | 'without_pay' | 'holiday'
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   manager_note: string | null

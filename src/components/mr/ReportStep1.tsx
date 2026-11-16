@@ -348,7 +348,9 @@ export default function ReportStep1({ data, onChange, onNext, hideFooter, onCanP
       )}
       {reportKind === 'holiday' && (
         <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-900 dark:text-amber-100">
-          Holiday DCR: confirm no field activity on the next step.
+          {user?.role === 'mr' && suggestedKind !== 'holiday'
+            ? 'Holiday DCR: this date is not a company holiday. Next step sends a request to your manager.'
+            : 'Holiday DCR: confirm no field activity on the next step.'}
         </div>
       )}
 

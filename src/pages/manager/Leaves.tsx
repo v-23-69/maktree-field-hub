@@ -159,7 +159,7 @@ export default function ManagerLeaves() {
               ))}
 
             {filteredLeaves.length === 0 && (
-              <p className="text-sm text-muted-foreground py-4 text-center">No {leaveTab} leave requests.</p>
+              <p className="text-sm text-muted-foreground py-4 text-center">No {leaveTab} leave or holiday requests.</p>
             )}
           </>
         )}

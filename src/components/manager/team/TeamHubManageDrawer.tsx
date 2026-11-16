@@ -14,6 +14,11 @@ import { useAllAreas } from '@/hooks/useAreas';
 import { useProducts, useUpdateProductPtr } from '@/hooks/useProducts';
 import type { User } from '@/types/database.types';
 import { employeeCodeFromEmail } from '@/lib/employeeCode';
+import { VisitingCardOcrButtons } from '@/components/doctors/VisitingCardIntakeControls';
+import VisitingCardIntakeOverlay from '@/components/doctors/VisitingCardIntakeOverlay';
+import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge';
+import { useVisitingCardIntake, useApplyVisitingCardResult } from '@/hooks/useVisitingCardIntake';
+import type { DoctorEntrySource, VisitingCardImage } from '@/lib/visitingCard';
 
 export type TeamManageAction =
   | 'doctor'
@@ -56,6 +61,21 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
   const [doctorName, setDoctorName] = useState('');
   const [doctorSpec, setDoctorSpec] = useState('');
   const [doctorSubAreaId, setDoctorSubAreaId] = useState('');
+  const [doctorSource, setDoctorSource] = useState<DoctorEntrySource>('manual');
+  const [doctorCardImages, setDoctorCardImages] = useState<VisitingCardImage[]>([]);
+  const cardIntake = useVisitingCardIntake();
+  useApplyVisitingCardResult(result => {
+    const first = result.doctors[0];
+    if (first) {
+      setDoctorName(first.full_name);
+      setDoctorSpec(first.speciality);
+    }
+    setDoctorSource(result.source);
+    setDoctorCardImages(result.images);
+    if (result.doctors.length > 1) {
+      toast.message(`This card has ${result.doctors.length} doctors. Review the first, save, then scan again for the next.`);
+    }
+  });
   const [areaName, setAreaName] = useState('');
   const [subAreaName, setSubAreaName] = useState('');
   const [subAreaAreaId, setSubAreaAreaId] = useState('');
@@ -123,6 +143,8 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
     setDoctorName('');
     setDoctorSpec('');
     setDoctorSubAreaId('');
+    setDoctorSource('manual');
+    setDoctorCardImages([]);
     setAreaName('');
     setSubAreaName('');
     setSubAreaAreaId('');
@@ -151,6 +173,29 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-4 space-y-4">
             {action === 'doctor' && (
               <>
+                <VisitingCardOcrButtons
+                  disabled={cardIntake.parsing}
+                  onCamera={() => void cardIntake.start('camera')}
+                  onUpload={() => void cardIntake.start('upload')}
+                />
+                {doctorSource !== 'manual' && (
+                  <div className="flex items-center gap-2">
+                    <DoctorEntrySourceBadge source={doctorSource} />
+                    <span className="text-[11px] text-muted-foreground">Preview and correct before saving.</span>
+                  </div>
+                )}
+                {doctorCardImages.length > 0 && (
+                  <div className="flex gap-2">
+                    {doctorCardImages.map(img => (
+                      <img
+                        key={`${img.side}-${img.url}`}
+                        src={img.url}
+                        alt={`${img.side} visiting card`}
+                        className="h-16 w-24 rounded-lg object-cover border border-border"
+                      />
+                    ))}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label className="text-xs">Doctor Name</Label>
                   <Input value={doctorName} onChange={e => setDoctorName(e.target.value)} className="touch-target rounded-lg" />
@@ -174,7 +219,13 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
                   className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
                   onClick={() =>
                     void addDoctor
-                      .mutateAsync({ sub_area_id: doctorSubAreaId, full_name: doctorName, speciality: doctorSpec })
+                      .mutateAsync({
+                        sub_area_id: doctorSubAreaId,
+                        full_name: doctorName,
+                        speciality: doctorSpec,
+                        entry_source: doctorSource,
+                        visiting_card_images: doctorCardImages,
+                      })
                       .then(() => {
                         toast.success('Doctor added');
                         closeDrawer();
@@ -507,6 +558,7 @@ export default function TeamHubManageDrawer({ action, onClose, managerId, mrs }:
         destructive
         confirmDisabled={deleteMr.isPending}
       />
+      <VisitingCardIntakeOverlay intake={cardIntake} />
     </>
   );
 }

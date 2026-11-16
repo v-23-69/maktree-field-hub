@@ -15,8 +15,12 @@ export type DoctorAddPayload = {
     marriage_anniversary: string | null
     visit_frequency: 'weekly' | 'fortnightly' | 'monthly' | null
     monthly_visit_target: number
+    email?: string | null
+    hospital_name?: string | null
   }
   chemists: DoctorChemistPayload[]
+  entry_source?: 'manual' | 'camera' | 'upload'
+  card_images?: Array<{ url: string; public_id?: string | null; side?: 'front' | 'back' }>
 }
 
 export function usePendingDoctorAddRequests(mrId: string, subAreaId: string | null) {

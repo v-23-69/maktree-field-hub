@@ -154,7 +154,13 @@ export default function ManagerLateDcrGrant() {
       )
       setLeaveDates(new Set())
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not remove leave')
+      const message =
+        e instanceof Error
+          ? e.message
+          : typeof e === 'object' && e && 'message' in e
+            ? String((e as { message: unknown }).message)
+            : 'Could not remove leave'
+      toast.error(message || 'Could not remove leave')
     }
   }
 

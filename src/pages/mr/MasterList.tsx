@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, AlertCircle, Plus, Search, Stethoscope } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Search, Stethoscope } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -17,6 +17,12 @@ import type { Doctor, DoctorAddRequest, MasterListCompletion, SubArea } from '@/
 import DoctorMasterDrawer from '@/components/mr/DoctorMasterDrawer'
 import AreaSelectPager from '@/components/mr/AreaSelectPager'
 import { cn } from '@/lib/utils'
+import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge'
+import CaptureLocationButton from '@/components/field/CaptureLocationButton'
+import VisitingCardIntakeControls from '@/components/doctors/VisitingCardIntakeControls'
+import VisitingCardIntakeOverlay from '@/components/doctors/VisitingCardIntakeOverlay'
+import { useVisitingCardIntake, useApplyVisitingCardResult } from '@/hooks/useVisitingCardIntake'
+import { entrySourceFromPayload, type VisitingCardIntake } from '@/lib/visitingCard'
 
 function doctorInitials(name: string) {
   return name
@@ -59,12 +65,13 @@ export default function MasterList() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [search, setSearch] = useState('')
-  const [searchDebounced, setSearchDebounced] = useState('')
+  const [search, setSearch] = useState(() => localStorage.getItem('maktree-search-master') ?? '')
+  const [searchDebounced, setSearchDebounced] = useState(() => localStorage.getItem('maktree-search-master') ?? '')
   const [doctorPage, setDoctorPage] = useState(0)
   const [doctors, setDoctors] = useState<Doctor[]>([])
 
   useEffect(() => {
+    localStorage.setItem('maktree-search-master', search)
     const t = setTimeout(() => setSearchDebounced(search), 300)
     return () => clearTimeout(t)
   }, [search])
@@ -154,15 +161,29 @@ export default function MasterList() {
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [drawerDoctorId, setDrawerDoctorId] = useState<string | null>(null)
+  const [intake, setIntake] = useState<VisitingCardIntake | null>(null)
+  const cardIntake = useVisitingCardIntake()
 
   const openEdit = (doctor: Doctor) => {
+    setIntake(null)
     setDrawerDoctorId(doctor.id)
     setDrawerOpen(true)
   }
 
   const openAdd = () => {
+    setIntake({ source: 'manual', images: [], doctors: [] })
     setDrawerDoctorId(null)
     setDrawerOpen(true)
+  }
+
+  useApplyVisitingCardResult(result => {
+    setIntake(result)
+    setDrawerDoctorId(null)
+    setDrawerOpen(true)
+  })
+
+  const openAddFromCard = (kind: 'camera' | 'upload') => {
+    void cardIntake.start(kind)
   }
 
   const activeDoctor = useMemo(() => {
@@ -389,14 +410,12 @@ export default function MasterList() {
                 )}
 
                 <div className="p-3 border-t border-border/60 bg-background">
-                  <Button
-                    type="button"
-                    className="w-full h-11 rounded-xl font-semibold touch-manipulation"
-                    onClick={openAdd}
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add doctor to this area
-                  </Button>
+                  <VisitingCardIntakeControls
+                    onManual={openAdd}
+                    onCamera={() => void openAddFromCard('camera')}
+                    onUpload={() => void openAddFromCard('upload')}
+                    disabled={cardIntake.parsing}
+                  />
                 </div>
               </section>
             )}
@@ -406,14 +425,20 @@ export default function MasterList() {
 
       <DoctorMasterDrawer
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false)
+          setIntake(null)
+        }}
         mrId={mrId}
         subAreaId={selectedSubAreaId ?? ''}
         subAreaName={selectedSubArea?.name}
         doctorId={drawerDoctorId}
         doctor={activeDoctor}
+        intake={drawerDoctorId ? null : intake}
         onSaved={async () => void onSaved()}
       />
+
+      <VisitingCardIntakeOverlay intake={cardIntake} />
 
       <BottomNav role="mr" />
     </div>
@@ -424,6 +449,7 @@ function PendingDoctorRow({ request }: { request: DoctorAddRequest }) {
   const doc = request.payload?.doctor
   const name = doc?.full_name ?? 'New doctor'
   const speciality = doc?.speciality
+  const source = entrySourceFromPayload(request.payload)
 
   return (
     <li>
@@ -432,7 +458,7 @@ function PendingDoctorRow({ request }: { request: DoctorAddRequest }) {
         role="status"
         aria-label={`${name} pending manager approval`}
       >
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-destructive/15 text-destructive text-xs font-bold">
+        <div className="flex h-11 w-11 shrink-0 items-center rounded-full bg-destructive/15 text-destructive text-xs font-bold justify-center">
           {doctorInitials(name)}
         </div>
         <div className="min-w-0 flex-1">
@@ -444,6 +470,7 @@ function PendingDoctorRow({ request }: { request: DoctorAddRequest }) {
                 {speciality}
               </span>
             )}
+            <DoctorEntrySourceBadge source={source} />
             <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-destructive">
               <AlertCircle className="h-3 w-3" />
               Awaiting approval
@@ -460,11 +487,11 @@ function DoctorRow({ doc, onPress }: { doc: Doctor; onPress: () => void }) {
   const missing = missingCount(doc)
 
   return (
-    <li>
+    <li className="flex items-center gap-1 rounded-xl border border-border/70 bg-background pr-1 hover:border-primary/30">
       <button
         type="button"
         onClick={onPress}
-        className="w-full flex items-center gap-3 rounded-xl border border-border/70 bg-background px-3 py-3 text-left hover:border-primary/30 hover:bg-muted/20 active:scale-[0.99] transition-all touch-manipulation"
+        className="min-w-0 flex-1 flex items-center gap-3 px-3 py-3 text-left active:scale-[0.99] transition-all touch-manipulation"
       >
         <div
           className={cn(
@@ -483,6 +510,9 @@ function DoctorRow({ doc, onPress }: { doc: Doctor; onPress: () => void }) {
                 {doc.speciality}
               </span>
             )}
+            {doc.entry_source && doc.entry_source !== 'manual' && (
+              <DoctorEntrySourceBadge source={doc.entry_source} />
+            )}
             {complete ? (
               <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
                 <CheckCircle2 className="h-3 w-3" />
@@ -497,6 +527,7 @@ function DoctorRow({ doc, onPress }: { doc: Doctor; onPress: () => void }) {
           </div>
         </div>
       </button>
+      <CaptureLocationButton doctorId={doc.id} compact />
     </li>
   )
 }

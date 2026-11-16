@@ -33,6 +33,7 @@ import { usePreventAccidentalBack } from '@/hooks/usePreventAccidentalBack';
 import { coerceQuantity } from '@/lib/quantityInput';
 import { intersectSubAreaIds } from '@/hooks/useDoctors';
 import { useMrSubAreas } from '@/hooks/useAreas';
+import PlanDayBanner from '@/components/field/PlanDayBanner';
 
 /** One saved doctor visit (local form state). */
 export interface VisitFormEntry {
@@ -42,6 +43,10 @@ export interface VisitFormEntry {
   chemistName: string
   competitors: { brandName: string; quantity: number | null }[]
   monthlySupport: { productId: string; quantity: number | null }[]
+  doctorUnavailable?: boolean
+  unavailableNote?: string
+  /** Saved to the server while the MR was at the clinic. */
+  persisted?: boolean
 }
 
 export interface ReportFormData {
@@ -73,6 +78,7 @@ export interface ReportFormData {
 const STEPS = ['Basic Info', 'Areas', 'Visits', 'Submit'];
 const LEAVE_STEPS = ['Date', 'Leave DCR'];
 const DRAFT_KEY = 'maktree_report_draft';
+const STEP_KEY = 'maktree_report_step';
 
 type ReportNavState = {
   date?: string
@@ -192,7 +198,10 @@ export default function NewReport() {
   const { data: wwSanitizeOpts = [] } = useWorkingWithReportOptions(user?.id, user?.role)
   const { data: assignedSubAreas = [] } = useMrSubAreas(mrId)
 
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => {
+    const saved = Number(localStorage.getItem(STEP_KEY));
+    return saved >= 1 && saved <= 11 ? saved : 1;
+  });
   const [step1CanProceed, setStep1CanProceed] = useState(false);
   const [step2CanProceed, setStep2CanProceed] = useState(false);
   const [unlockReason, setUnlockReason] = useState('')
@@ -223,7 +232,8 @@ export default function NewReport() {
 
   useEffect(() => {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(formData));
-  }, [formData]);
+    localStorage.setItem(STEP_KEY, String(step));
+  }, [formData, step]);
 
   useEffect(() => {
     if (!navState?.date && !navState?.reportKind) return
@@ -360,6 +370,8 @@ export default function NewReport() {
 
   const clearDraft = useCallback(() => {
     localStorage.removeItem(DRAFT_KEY);
+    localStorage.removeItem(STEP_KEY);
+    localStorage.removeItem('maktree-open-visit');
   }, []);
 
   const {
@@ -601,6 +613,9 @@ export default function NewReport() {
             (dockedFooter || (step === 4 && !altDcrFlow) || (step === 2 && leaveFlow) || (step === 5 && sundayFlow) || (step === 6 && strikeFlow) || (step === 7 && holidayFlow) || (step === 8 && meetingFlow) || (step === 9 && adminDayFlow) || (step === 10 && stockistFlow) || (step === 11 && salesClosingFlow)) && "pb-28 md:pb-32",
           )}
         >
+          {user?.role === 'mr' && (formData.reportKind === 'field' || !formData.reportKind) && (
+            <PlanDayBanner date={formData.date} />
+          )}
           {step === 1 && (
             <ReportStep1
               data={formData}

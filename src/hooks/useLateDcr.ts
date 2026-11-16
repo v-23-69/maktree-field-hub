@@ -125,7 +125,7 @@ export function useClearAutoMarkedLeaveForLateDcr() {
         p_mr_id: p.mrId,
         p_dates: p.dates,
       })
-      if (error) throw error
+      if (error) throw new Error(error.message || 'Could not remove leave')
       return data as {
         cleared_count: number
         granted_count: number

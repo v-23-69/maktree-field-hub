@@ -8,6 +8,14 @@ import { toast } from 'sonner'
 import { toastMrPendingManagerApproval } from '@/lib/mrApprovalToast'
 import { CheckCircle2, AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import type { Chemist, Doctor } from '@/types/database.types'
+import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge'
+import {
+  composeDoctorAddress,
+  emptyParsedDoctor,
+  parsedDoctorFromFields,
+  type ParsedVisitingCardDoctor,
+  type VisitingCardIntake,
+} from '@/lib/visitingCard'
 
 /** Stable empty list so useEffect deps do not change identity every render when query data is undefined. */
 const EMPTY_CHEMISTS: Chemist[] = []
@@ -48,6 +56,8 @@ interface Props {
   doctorId: string | null
   doctor: Doctor | null
   onSaved: () => void
+  /** Native visiting-card scan/upload result. Ignored in edit mode. */
+  intake?: VisitingCardIntake | null
 }
 
 export default function DoctorMasterDrawer({
@@ -59,6 +69,7 @@ export default function DoctorMasterDrawer({
   doctorId,
   doctor,
   onSaved,
+  intake = null,
 }: Props) {
   const { data: doctorDetail } = useDoctorDetail(open ? doctorId : null)
   const activeDoctor = doctorDetail ?? doctor
@@ -87,7 +98,14 @@ export default function DoctorMasterDrawer({
   const [monthlyVisitTarget, setMonthlyVisitTarget] = useState(2)
   const [removalReason, setRemovalReason] = useState('')
   const [chemistRows, setChemistRows] = useState<ChemistFormRow[]>([])
+  const [hospitalName, setHospitalName] = useState('')
+  const [email, setEmail] = useState('')
+  const [doctorDrafts, setDoctorDrafts] = useState<ParsedVisitingCardDoctor[]>([])
+  const [doctorTab, setDoctorTab] = useState(0)
   const lastChemistHydrateKey = useRef<string | null>(null)
+  const ocrSource = !isEdit ? (intake?.source ?? 'manual') : null
+  const cardImages = !isEdit ? (intake?.images ?? []) : []
+  const multiDoctor = !isEdit && doctorDrafts.length > 1
 
   const { data: linkedChemistsData, isFetching: chemistsFetching } = useChemistsByDoctor(
     open && isEdit && doctorId ? doctorId : '',
@@ -97,8 +115,9 @@ export default function DoctorMasterDrawer({
   const canSave = useMemo(() => {
     if (!open) return false
     if (isEdit) return true
-    return fullName.trim().length > 0 && speciality.trim().length > 0
-  }, [open, isEdit, fullName, speciality])
+    if (fullName.trim().length > 0 && speciality.trim().length > 0) return true
+    return doctorDrafts.some(d => d.full_name.trim().length > 0 && d.speciality.trim().length > 0)
+  }, [open, isEdit, fullName, speciality, doctorDrafts])
 
   useEffect(() => {
     if (!open) return
@@ -118,7 +137,26 @@ export default function DoctorMasterDrawer({
         : 2,
     )
     setRemovalReason('')
-  }, [open, activeDoctor])
+    if (isEdit) {
+      setHospitalName('')
+      setEmail('')
+      setDoctorDrafts([])
+      setDoctorTab(0)
+      return
+    }
+    const parsed = intake?.doctors?.length ? intake.doctors : [emptyParsedDoctor()]
+    const first = parsed[0]
+    setFullName(first.full_name)
+    setSpeciality(first.speciality)
+    setQualification(first.qualification)
+    setHospitalName(first.hospital_name)
+    setAddress(first.address)
+    setCity(first.city)
+    setMobile(first.mobile)
+    setEmail(first.email)
+    setDoctorDrafts(parsed)
+    setDoctorTab(0)
+  }, [open, activeDoctor, isEdit, intake])
 
   useEffect(() => {
     if (!open) {
@@ -179,6 +217,37 @@ export default function DoctorMasterDrawer({
     [chemistRows],
   )
 
+  const snapshotCurrentDoctor = (): ParsedVisitingCardDoctor =>
+    parsedDoctorFromFields({
+      fullName,
+      speciality,
+      qualification,
+      hospitalName,
+      address,
+      city,
+      mobile,
+      email,
+    })
+
+  const applyParsedDoctor = (d: ParsedVisitingCardDoctor) => {
+    setFullName(d.full_name)
+    setSpeciality(d.speciality)
+    setQualification(d.qualification)
+    setHospitalName(d.hospital_name)
+    setAddress(d.address)
+    setCity(d.city)
+    setMobile(d.mobile)
+    setEmail(d.email)
+  }
+
+  const goDoctorTab = (next: number) => {
+    const current = snapshotCurrentDoctor()
+    const nextDrafts = doctorDrafts.map((d, i) => (i === doctorTab ? current : d))
+    setDoctorDrafts(nextDrafts)
+    setDoctorTab(next)
+    applyParsedDoctor(nextDrafts[next] ?? emptyParsedDoctor())
+  }
+
   const handleSave = async () => {
     try {
       if (!open) return
@@ -206,7 +275,13 @@ export default function DoctorMasterDrawer({
         return
       }
 
-      if (!fullName.trim() || !speciality.trim()) {
+      const current = snapshotCurrentDoctor()
+      const drafts =
+        doctorDrafts.length > 1
+          ? doctorDrafts.map((d, i) => (i === doctorTab ? current : d))
+          : [current]
+      const toSend = drafts.filter(d => d.full_name.trim() && d.speciality.trim())
+      if (toSend.length === 0) {
         toast.error('Doctor name and speciality are required')
         return
       }
@@ -216,33 +291,46 @@ export default function DoctorMasterDrawer({
         toast.error('No manager is assigned to your account. Contact admin before adding doctors.')
         return
       }
-      await submitDoctorAdd.mutateAsync({
-        mr_id: mrId,
-        sub_area_id: subAreaId,
-        manager_id: managerId,
-        payload: {
-          doctor: {
-            full_name: fullName.trim(),
-            speciality: speciality.trim(),
-            qualification: qualification.trim() || null,
-            address: address.trim() || null,
-            city: city.trim() || null,
-            mobile: mobile.trim() || null,
-            birthday: birthday.trim() || null,
-            marriage_anniversary: marriageAnniversary.trim() || null,
-            visit_frequency: visitFrequencyForSave(visitFrequency),
-            monthly_visit_target: monthlyVisitTarget,
+
+      const chemists = chemistPayload
+        .filter(r => r.name.trim())
+        .map(r => ({
+          name: r.name.trim(),
+          owner_name: r.ownerName.trim() || null,
+          owner_contact: r.ownerContact.trim() || null,
+        }))
+
+      for (const [idx, d] of toSend.entries()) {
+        await submitDoctorAdd.mutateAsync({
+          mr_id: mrId,
+          sub_area_id: subAreaId,
+          manager_id: managerId,
+          payload: {
+            entry_source: ocrSource ?? 'manual',
+            card_images: cardImages,
+            doctor: {
+              full_name: d.full_name.trim(),
+              speciality: d.speciality.trim(),
+              qualification: d.qualification.trim() || null,
+              address: composeDoctorAddress(d.hospital_name, d.address) || null,
+              city: d.city.trim() || null,
+              mobile: d.mobile.trim() || null,
+              email: d.email.trim() || null,
+              hospital_name: d.hospital_name.trim() || null,
+              birthday: idx === 0 ? birthday.trim() || null : null,
+              marriage_anniversary: idx === 0 ? marriageAnniversary.trim() || null : null,
+              visit_frequency: idx === 0 ? visitFrequencyForSave(visitFrequency) : null,
+              monthly_visit_target: monthlyVisitTarget,
+            },
+            chemists: idx === 0 ? chemists : [],
           },
-          chemists: chemistPayload
-            .filter(r => r.name.trim())
-            .map(r => ({
-              name: r.name.trim(),
-              owner_name: r.ownerName.trim() || null,
-              owner_contact: r.ownerContact.trim() || null,
-            })),
-        },
-      })
-      toastMrPendingManagerApproval('Doctor added (pending approval)')
+        })
+      }
+      toastMrPendingManagerApproval(
+        toSend.length > 1
+          ? `${toSend.length} doctors sent for approval`
+          : 'Doctor sent for approval',
+      )
       onSaved()
       onClose()
     } catch (e) {
@@ -257,14 +345,14 @@ export default function DoctorMasterDrawer({
       <DrawerContent className="!mt-0 flex h-[100dvh] max-h-[100dvh] flex-col rounded-t-[10px] border bg-background p-0 gap-0">
         <DrawerHeader className="shrink-0 border-b border-border px-4 pb-3 pt-2">
           <DrawerTitle className="text-base break-words">
-            {isEdit ? activeDoctor?.full_name ?? 'Doctor' : 'Add doctor'}
+            {isEdit ? activeDoctor?.full_name ?? 'Doctor' : ocrSource === 'manual' ? 'Add doctor' : 'Review doctor'}
           </DrawerTitle>
           <DrawerDescription className="sr-only">
             {isEdit
               ? 'Review or update this doctor profile, visit targets, and linked chemists.'
-              : 'Enter details to add a new doctor to this sub-area.'}
+              : 'Check the details, then send this doctor to your manager for approval.'}
           </DrawerDescription>
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
             {isEdit ? (
               <>
                 <span>{activeDoctor?.doctor_code ?? '—'}</span>
@@ -281,12 +369,63 @@ export default function DoctorMasterDrawer({
                 )}
               </>
             ) : (
-              <span>{subAreaName?.trim() || '—'}</span>
+              <>
+                <span>{subAreaName?.trim() || '—'}</span>
+                {ocrSource && <DoctorEntrySourceBadge source={ocrSource} />}
+              </>
             )}
           </div>
         </DrawerHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-4 pt-4 space-y-4">
+          {!isEdit && (cardImages.length > 0 || ocrSource !== 'manual') && (
+            <div className="rounded-xl border border-border/80 bg-muted/20 p-3 space-y-2">
+              <p className="text-[11px] text-muted-foreground">
+                Preview the captured details, correct anything that looks wrong, then send for approval.
+              </p>
+              {cardImages.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto">
+                  {cardImages.map(img => (
+                    <a
+                      key={`${img.side}-${img.url}`}
+                      href={img.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="shrink-0"
+                    >
+                      <img
+                        src={img.url}
+                        alt={`${img.side} of visiting card`}
+                        className="h-20 w-28 rounded-lg object-cover border border-border"
+                      />
+                      <p className="text-[10px] text-center text-muted-foreground mt-0.5 capitalize">{img.side}</p>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {multiDoctor && (
+            <div className="flex gap-2">
+              {doctorDrafts.map((d, i) => (
+                <button
+                  key={`doc-tab-${i}`}
+                  type="button"
+                  onClick={() => goDoctorTab(i)}
+                  className={`flex-1 rounded-lg px-2 py-2 text-xs font-semibold border touch-manipulation ${
+                    i === doctorTab
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-background text-muted-foreground'
+                  }`}
+                >
+                  Doctor {i + 1}
+                  {d.full_name ? ` · ${d.full_name.split(' ').slice(-1)[0]}` : ''}
+                </button>
+              ))}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Name
@@ -356,6 +495,34 @@ export default function DoctorMasterDrawer({
               />
             </div>
           </div>
+
+          {!isEdit && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Hospital / clinic
+                </Label>
+                <Input
+                  value={hospitalName}
+                  onChange={e => setHospitalName(e.target.value)}
+                  placeholder="Optional"
+                  className="touch-target rounded-lg"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Email
+                </Label>
+                <Input
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  type="email"
+                  placeholder="Optional"
+                  className="touch-target rounded-lg"
+                />
+              </div>
+            </div>
+          )}
 
           <div className="rounded-xl border border-border/80 bg-muted/20 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
@@ -556,7 +723,7 @@ export default function DoctorMasterDrawer({
               onClick={() => void handleSave()}
               className="w-full touch-target rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
             >
-              {savePending ? 'Saving…' : 'Save'}
+              {savePending ? (isEdit ? 'Saving…' : 'Sending…') : isEdit ? 'Save' : 'Send for approval'}
             </Button>
           </div>
         </div>

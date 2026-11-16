@@ -208,7 +208,8 @@ export default function ManagerDashboard() {
   };
 
   const mgrOpenFieldReport = (d: AllowedReportDate) => {
-    const reportKind = d.day_type === 'leave' ? ('leave' as const) : ('field' as const);
+    const reportKind =
+      d.day_type === 'leave' ? ('leave' as const) : d.day_type === 'holiday' ? ('holiday' as const) : ('field' as const);
     navigate('/manager/report/new', { state: { date: d.report_date, reportKind } });
   };
 
@@ -426,6 +427,18 @@ export default function ManagerDashboard() {
               iconClassName="bg-blue-500/10"
               onClick={() => navigate('/manager/tour-program')}
               icon={<CalendarDays className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-blue-400" />}
+            />
+            <ManagerQuickAction
+              label="Daily plan"
+              iconClassName="bg-blue-500/10"
+              onClick={() => navigate('/manager/plan')}
+              icon={<ClipboardList className="h-4 w-4 md:h-5 md:w-5 text-blue-600 dark:text-blue-400" />}
+            />
+            <ManagerQuickAction
+              label="Live activity"
+              iconClassName="bg-emerald-500/10"
+              onClick={() => navigate('/manager/activity')}
+              icon={<MapPin className="h-4 w-4 md:h-5 md:w-5 text-emerald-600 dark:text-emerald-400" />}
             />
             <ManagerQuickAction
               label="Vacant areas"

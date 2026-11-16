@@ -22,10 +22,11 @@ import {
   readCachedProfile,
   writeCachedProfile,
 } from '@/lib/authProfileCache'
+import { clearLastRoute } from '@/lib/pageMemory'
   'id,auth_user_id,employee_code,full_name,email,role,is_active,is_blocked,block_reason,is_resigned,is_paused,pause_reason,profile_photo_url,designation,mobile,created_at,updated_at'
-const LOGIN_RPC_TIMEOUT_MS = 8_000
+const LOGIN_RPC_TIMEOUT_MS = 2_500
 const PROFILE_FETCH_TIMEOUT_MS = 15_000
-const PROFILE_RETRY_COUNT = 5
+const PROFILE_RETRY_COUNT = 2
 const PASSWORD_LOGIN_TIMEOUT_MS = 30_000
 
 type ProfileQueryError = { message?: string; code?: string; name?: string } | null
@@ -43,7 +44,7 @@ function asUser(row: unknown): User | null {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(() => readAnyCachedProfile(PROFILE_STALE_CACHE_MAX_MS))
-  const [authReady, setAuthReady] = useState(false)
+  const [authReady, setAuthReady] = useState(() => readAnyCachedProfile(PROFILE_STALE_CACHE_MAX_MS) != null)
   const [isProfileLoading, setIsProfileLoading] = useState(false)
   const [blockedInfo, setBlockedInfo] = useState<{ isBlocked: boolean; blockReason: string | null } | null>(null)
   const [accountClosedInfo, setAccountClosedInfo] = useState<{
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const lastLoadedAuthUserIdRef = useRef<string | null>(null)
   const lastLoadedAtRef = useRef<number>(0)
   const signingInRef = useRef(false)
+  const cancelSignInRef = useRef(false)
 
   const clearBlockedInfo = useCallback(() => setBlockedInfo(null), [])
   const clearAccountClosedInfo = useCallback(() => setAccountClosedInfo(null), [])
@@ -133,7 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       loadingAuthUserIdRef.current = authUserId
-      setIsProfileLoading(true)
+      if (!usedCache) setIsProfileLoading(true)
 
       for (let attempt = 0; attempt < PROFILE_RETRY_COUNT; attempt++) {
         if (epoch !== profileEpochRef.current) return false
@@ -254,11 +256,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (isInvalidAuthSessionError(msg)) {
           bumpProfileEpoch()
           await client.auth.signOut({ scope: 'local' })
+          setUser(null)
+          clearCachedProfile()
         }
-        setUser(null)
         setAuthReady(true)
         setIsProfileLoading(false)
-        clearCachedProfile()
       }
     })()
 
@@ -268,12 +270,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       window.setTimeout(() => {
         if (!mounted) return
         if (event === 'TOKEN_REFRESHED') {
-          if (!session) {
-            bumpProfileEpoch()
-            setUser(null)
-            setAuthReady(true)
-            clearCachedProfile()
-          }
           return
         }
         if (event === 'SIGNED_OUT') {
@@ -288,6 +284,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (event === 'SIGNED_IN' && session?.user) {
+          if (cancelSignInRef.current) return
           void loadProfile(session.user.id, true, true)
           return
         }
@@ -313,21 +310,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: 'Supabase is not configured' }
     }
     signingInRef.current = true
+    cancelSignInRef.current = false
     bumpProfileEpoch()
     const epoch = profileEpochRef.current
     try {
       const normalizedEmail = email.trim().toLowerCase()
-
-      try {
-        const { data: accessCheck, error: accessErr } = await client
-          .rpc('check_portal_login_allowed', { p_email: normalizedEmail })
-          .abortSignal(abortSignalTimeout(LOGIN_RPC_TIMEOUT_MS))
-        if (!accessErr && isPortalAccessDenied(accessCheck as { allowed?: boolean; reason?: string })) {
-          return { success: false, accountBlocked: true }
-        }
-      } catch {
-        // Access check timed out — still try password; blocked accounts are re-checked on profile load.
-      }
+      const accessPromise = client
+        .rpc('check_portal_login_allowed', { p_email: normalizedEmail })
+        .abortSignal(abortSignalTimeout(LOGIN_RPC_TIMEOUT_MS))
+        .then(({ data, error }) => ({ data, error }))
+        .catch(() => null)
 
       const { data: authData, error: authError } = await withTimeout(
         client.auth.signInWithPassword({
@@ -348,6 +340,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       if (!authData.session) {
         return { success: false, error: 'Login failed. Please try again.' }
+      }
+
+      const access = await accessPromise
+      if (access && !access.error && isPortalAccessDenied(access.data as { allowed?: boolean; reason?: string })) {
+        cancelSignInRef.current = true
+        await client.auth.signOut({ scope: 'local' })
+        return { success: false, accountBlocked: true }
       }
 
       let loaded = await loadProfile(authData.session.user.id, true, true, epoch)
@@ -377,6 +376,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { success: false, error: message }
     } finally {
       signingInRef.current = false
+      cancelSignInRef.current = false
     }
   }, [bumpProfileEpoch, loadProfile])
 
@@ -388,6 +388,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (supabase) await supabase.auth.signOut()
     } finally {
       if (userId) resetProfilePromptSession(userId)
+      clearLastRoute()
       setUser(null)
       setAuthReady(true)
       setIsProfileLoading(false)

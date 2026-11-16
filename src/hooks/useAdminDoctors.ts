@@ -38,6 +38,8 @@ export function useAddDoctor() {
       sub_area_id: string
       full_name: string
       speciality: string
+      entry_source?: 'manual' | 'camera' | 'upload'
+      visiting_card_images?: Array<{ url: string; public_id?: string | null; side?: 'front' | 'back' }>
     }) => {
       if (!supabase) throw new Error('Supabase not configured')
       try {
@@ -47,6 +49,8 @@ export function useAddDoctor() {
           speciality: p.speciality.trim() || null,
           doctor_code: generateDoctorCode(),
           is_active: true,
+          entry_source: p.entry_source ?? 'manual',
+          visiting_card_images: p.visiting_card_images ?? [],
         })
         if (error) throw error
       } catch (e) {

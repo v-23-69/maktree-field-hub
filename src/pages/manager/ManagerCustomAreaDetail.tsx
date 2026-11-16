@@ -15,6 +15,11 @@ import {
 } from '@/hooks/useManagerCustomAreas'
 import { useDoctorsBySubAreas } from '@/hooks/useDoctors'
 import { dashboardPanelClass } from '@/components/dashboard/dashboard-shell'
+import { VisitingCardOcrButtons } from '@/components/doctors/VisitingCardIntakeControls'
+import VisitingCardIntakeOverlay from '@/components/doctors/VisitingCardIntakeOverlay'
+import DoctorEntrySourceBadge from '@/components/doctors/DoctorEntrySourceBadge'
+import { useVisitingCardIntake, useApplyVisitingCardResult } from '@/hooks/useVisitingCardIntake'
+import type { DoctorEntrySource, VisitingCardImage } from '@/lib/visitingCard'
 
 export default function ManagerCustomAreaDetail() {
   const { customAreaId = '' } = useParams()
@@ -28,10 +33,26 @@ export default function ManagerCustomAreaDetail() {
     area?.sub_area_id ? [area.sub_area_id] : [],
   )
   const addDoctor = useAddDoctorToCustomArea()
+  const cardIntake = useVisitingCardIntake()
+  useApplyVisitingCardResult(result => {
+    const first = result.doctors[0]
+    if (first) {
+      setDocName(first.full_name)
+      setSpeciality(first.speciality)
+      setMobile(first.mobile)
+    }
+    setEntrySource(result.source)
+    setCardImages(result.images)
+    if (result.doctors.length > 1) {
+      toast.message(`This card has ${result.doctors.length} doctors. Review the first, save, then scan again for the next.`)
+    }
+  })
 
   const [docName, setDocName] = useState('')
   const [speciality, setSpeciality] = useState('')
   const [mobile, setMobile] = useState('')
+  const [entrySource, setEntrySource] = useState<DoctorEntrySource>('manual')
+  const [cardImages, setCardImages] = useState<VisitingCardImage[]>([])
 
   const handleAddDoctor = async () => {
     if (!area) return
@@ -45,11 +66,15 @@ export default function ManagerCustomAreaDetail() {
         fullName: docName.trim(),
         speciality: speciality.trim() || undefined,
         mobile: mobile.trim() || undefined,
+        entrySource,
+        visitingCardImages: cardImages,
       })
       toast.success('Doctor added')
       setDocName('')
       setSpeciality('')
       setMobile('')
+      setEntrySource('manual')
+      setCardImages([])
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Could not add doctor')
     }
@@ -100,6 +125,29 @@ export default function ManagerCustomAreaDetail() {
             <Plus className="h-4 w-4" />
             Add doctor
           </p>
+          <VisitingCardOcrButtons
+            disabled={cardIntake.parsing}
+            onCamera={() => void cardIntake.start('camera')}
+            onUpload={() => void cardIntake.start('upload')}
+          />
+          {entrySource !== 'manual' && (
+            <div className="flex items-center gap-2">
+              <DoctorEntrySourceBadge source={entrySource} />
+              <span className="text-[11px] text-muted-foreground">Preview and correct before saving.</span>
+            </div>
+          )}
+          {cardImages.length > 0 && (
+            <div className="flex gap-2">
+              {cardImages.map(img => (
+                <img
+                  key={`${img.side}-${img.url}`}
+                  src={img.url}
+                  alt={`${img.side} visiting card`}
+                  className="h-16 w-24 rounded-lg object-cover border border-border"
+                />
+              ))}
+            </div>
+          )}
           <div className="space-y-2">
             <Label className="text-xs">Doctor name *</Label>
             <Input
@@ -155,6 +203,11 @@ export default function ManagerCustomAreaDetail() {
                   <p className="text-xs text-muted-foreground">
                     {[d.speciality, d.mobile].filter(Boolean).join(' · ') || '—'}
                   </p>
+                  {d.entry_source && d.entry_source !== 'manual' && (
+                    <div className="mt-1">
+                      <DoctorEntrySourceBadge source={d.entry_source} />
+                    </div>
+                  )}
                 </div>
               </li>
             ))}
@@ -162,6 +215,7 @@ export default function ManagerCustomAreaDetail() {
         </div>
       </div>
       <BottomNav role="manager" />
+      <VisitingCardIntakeOverlay intake={cardIntake} />
     </div>
   )
 }

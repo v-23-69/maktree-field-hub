@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,7 @@ import {
   parseQuantityInput,
   quantityInputDisplay,
 } from '@/lib/quantityInput';
+import { clearPageMemory, readPageMemory, writePageMemory } from '@/lib/pageMemory';
 
 const defaultCompetitors = (): { brandName: string; quantity: number | null }[] => [
   { brandName: '', quantity: null },
@@ -97,6 +98,7 @@ export default function DoctorVisitDrawer({
   const [chemistName, setChemistName] = useState('');
   const [competitors, setCompetitors] = useState(defaultCompetitors);
   const [monthlySupport, setMonthlySupport] = useState(defaultMonthly);
+  const skipDraftWrite = useRef(true);
 
   const { data: linkedChemists = [] } = useChemistsByDoctor(doctorId ?? '');
   const { data: areaChemists = [] } = useChemistsBySubArea(subAreaId);
@@ -111,6 +113,21 @@ export default function DoctorVisitDrawer({
   }, [open]);
 
   useEffect(() => {
+    skipDraftWrite.current = true;
+    if (!open || !doctorId) return;
+    const draft = readPageMemory<{
+      productsPromoted: string[];
+      chemistName: string;
+      competitors: { brandName: string; quantity: number | null }[];
+      monthlySupport: { productId: string; quantity: number | null }[];
+    }>(`visit:${doctorId}`);
+    if (draft) {
+      setProductsPromoted(draft.productsPromoted ?? []);
+      setChemistName(draft.chemistName ?? '');
+      setCompetitors(draft.competitors?.length ? draft.competitors : defaultCompetitors());
+      setMonthlySupport(draft.monthlySupport?.length ? draft.monthlySupport : defaultMonthly());
+      return;
+    }
     if (existingVisit) {
       setProductsPromoted(existingVisit.productsPromoted);
       setChemistName(existingVisit.chemistName);
@@ -131,6 +148,15 @@ export default function DoctorVisitDrawer({
       setMonthlySupport(defaultMonthly());
     }
   }, [existingVisit, doctorId, open]);
+
+  useEffect(() => {
+    if (skipDraftWrite.current) {
+      skipDraftWrite.current = false;
+      return;
+    }
+    if (!open || !doctorId) return;
+    writePageMemory(`visit:${doctorId}`, { productsPromoted, chemistName, competitors, monthlySupport });
+  }, [open, doctorId, productsPromoted, chemistName, competitors, monthlySupport]);
 
   const allChemists = useMemo(() => {
     const seen = new Set<string>();
@@ -214,6 +240,7 @@ export default function DoctorVisitDrawer({
       .filter(c => c.brandName.trim() && isQuantityFilled(c.quantity))
       .map(c => ({ brandName: c.brandName.trim(), quantity: c.quantity as number }));
 
+    clearPageMemory(`visit:${doctorId}`);
     onSave(doctorId, subAreaId, {
       doctorId,
       subAreaId,
@@ -225,7 +252,6 @@ export default function DoctorVisitDrawer({
         quantity: ms.quantity as number,
       })),
     });
-    toast.success('Visit saved');
   };
 
   return createPortal(

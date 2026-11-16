@@ -48,7 +48,10 @@ export default function TeamHub() {
   const [manageAction, setManageAction] = useState<TeamManageAction>(null)
   const [teamCallPreset, setTeamCallPreset] = useState<PeriodPreset>('monthly')
   const [performanceFilter, setPerformanceFilter] = useState<ManagerStatsFilter>('This Month')
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => localStorage.getItem('maktree-search-team') ?? '')
+  useEffect(() => {
+    localStorage.setItem('maktree-search-team', search)
+  }, [search])
 
   const teamMemberIds = useMemo(() => mrIds, [mrIds])
   const { data: teamActivity, isLoading: teamActivityLoading } = useManagerDashboardStats(

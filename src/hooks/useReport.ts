@@ -214,28 +214,43 @@ export interface SaveVisitInput {
     chemistName: string
     competitors: { brandName: string; quantity: number }[]
     monthlySupport: { productId: string; quantity: number }[]
+    doctorUnavailable?: boolean
+    unavailableNote?: string
   }
+  spot?: { lat: number; lng: number; accuracy: number } | null
 }
 
 async function ensureVisitId(
   client: SupabaseClient,
   reportId: string,
   doctorId: string,
+  extra?: {
+    doctorUnavailable?: boolean
+    unavailableNote?: string
+    spot?: { lat: number; lng: number; accuracy: number } | null
+  },
 ): Promise<string> {
   const visitedAt = new Date().toISOString()
+  const row = {
+    report_id: reportId,
+    doctor_id: doctorId,
+    visited_at: visitedAt,
+    doctor_unavailable: extra?.doctorUnavailable === true,
+    unavailable_note: extra?.unavailableNote?.trim() || null,
+    spot_latitude: extra?.spot?.lat ?? null,
+    spot_longitude: extra?.spot?.lng ?? null,
+    spot_accuracy_m: extra?.spot?.accuracy ?? null,
+  }
   const upsert = await client
     .from('report_visits')
-    .upsert(
-      {
-        report_id: reportId,
-        doctor_id: doctorId,
-        visited_at: visitedAt,
-      },
-      { onConflict: 'report_id,doctor_id' },
-    )
+    .upsert(row, { onConflict: 'report_id,doctor_id' })
     .select('id')
     .maybeSingle()
 
+  if (upsert.error) {
+    const msg = upsert.error.message ?? ''
+    if (/clinic|plan|GPS|location|Priority|trail/i.test(msg)) throw new Error(msg)
+  }
   if (!upsert.error && upsert.data?.id) return upsert.data.id
 
   const { data, error } = await client
@@ -250,11 +265,7 @@ async function ensureVisitId(
 
   const { data: inserted, error: insErr } = await client
     .from('report_visits')
-    .insert({
-      report_id: reportId,
-      doctor_id: doctorId,
-      visited_at: visitedAt,
-    })
+    .insert(row)
     .select('id')
     .single()
 
@@ -262,12 +273,62 @@ async function ensureVisitId(
   return inserted.id
 }
 
+export async function removePersistedFieldVisit(
+  client: SupabaseClient,
+  input: { mrId: string; reportDate: string; doctorId: string },
+): Promise<void> {
+  const existing = await findExistingDailyReport(client, input.mrId, input.reportDate)
+  if (!existing?.id) return
+  if (existing.status === 'submitted') {
+    throw new Error('This report is already submitted.')
+  }
+  const { error } = await client
+    .from('report_visits')
+    .delete()
+    .eq('report_id', existing.id)
+    .eq('doctor_id', input.doctorId)
+  if (error) {
+    const msg = error.message ?? ''
+    if (/clinic|plan|GPS|location|Priority|trail/i.test(msg)) throw new Error(msg)
+    throw error
+  }
+}
+
+export async function ensureDraftFieldReport(
+  client: SupabaseClient,
+  input: { mrId: string; reportDate: string; workingWithIds: string[] },
+): Promise<string> {
+  const existing = await findExistingDailyReport(client, input.mrId, input.reportDate)
+  if (existing?.status === 'submitted') {
+    throw new Error('You have already submitted a report for this date.')
+  }
+  if (existing?.id) return existing.id
+  const { data, error } = await client
+    .from('daily_reports')
+    .insert({
+      mr_id: input.mrId,
+      manager_id: input.workingWithIds[0] ?? null,
+      working_with_ids: input.workingWithIds,
+      report_date: input.reportDate,
+      status: 'draft',
+      report_kind: 'field',
+    })
+    .select('id')
+    .single()
+  if (error) throw error
+  return data.id as string
+}
+
 export async function saveReportVisit(
   client: SupabaseClient,
   input: SaveVisitInput,
 ): Promise<void> {
-  const { reportId, doctorId, doctorSubAreaId, visit } = input
-  const visitId = await ensureVisitId(client, reportId, doctorId)
+  const { reportId, doctorId, doctorSubAreaId, visit, spot } = input
+  const visitId = await ensureVisitId(client, reportId, doctorId, {
+    doctorUnavailable: visit.doctorUnavailable,
+    unavailableNote: visit.unavailableNote,
+    spot,
+  })
 
   const { error: dp } = await client
     .from('promoted_products')

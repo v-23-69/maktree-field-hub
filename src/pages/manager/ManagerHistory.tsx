@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CalendarClock, Archive, UserMinus } from 'lucide-react'
+import { CalendarClock, Archive, UserMinus, MapPinned } from 'lucide-react'
 import PageHeader from '@/components/shared/PageHeader'
 import BottomNav from '@/components/shared/BottomNav'
 import LoadingSpinner from '@/components/shared/LoadingSpinner'
@@ -90,6 +90,18 @@ export default function ManagerHistory() {
                   >
                     <CalendarClock className="h-4 w-4" />
                     Allow late DCR
+                  </Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl gap-1.5"
+                  asChild
+                >
+                  <Link to={selectedMrId ? `/manager/activity?mrId=${selectedMrId}` : '/manager/activity'}>
+                    <MapPinned className="h-4 w-4" />
+                    Field activity
                   </Link>
                 </Button>
                 <Button
