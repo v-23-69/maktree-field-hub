@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import LoadingSpinner from '@/components/shared/LoadingSpinner';
 import MaktreeBrand from '@/components/shared/MaktreeBrand';
 import { prefetchRoleDashboard } from '@/lib/prefetchDashboard';
+import { forgetLogin, readSavedLogins, rememberLogin, type SavedLogin } from '@/lib/savedLogins';
 
 export default function Login() {
   const {
@@ -27,6 +28,7 @@ export default function Login() {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [savedLogins, setSavedLogins] = useState<SavedLogin[]>(() => readSavedLogins());
 
   useEffect(() => {
     if (user && authReady) {
@@ -56,6 +58,7 @@ export default function Login() {
     try {
       const result = await signIn(email, password);
       if (result.success) {
+        setSavedLogins(rememberLogin(email, password));
         toast.success('Signed in');
       } else if (result.accountBlocked) {
         navigate('/account-blocked', { replace: true });
@@ -89,6 +92,36 @@ export default function Login() {
             </Link>
           ) : null}
         </div>
+
+        {savedLogins.length > 0 && (
+          <div className="mb-6 space-y-2">
+            <p className="text-xs font-semibold text-foreground">Saved on this device</p>
+            <div className="max-h-44 space-y-2 overflow-y-auto sm:max-h-56">
+              {savedLogins.map(login => (
+                <div key={login.email.toLowerCase()} className="flex items-center gap-2 rounded-2xl border border-border/70 bg-card p-3">
+                  <button
+                    type="button"
+                    className="min-w-0 flex-1 text-left"
+                    onClick={() => {
+                      if (emailRef.current) emailRef.current.value = login.email
+                      if (passwordRef.current) passwordRef.current.value = login.password
+                    }}
+                  >
+                    <span className="block truncate text-sm font-semibold text-foreground">{login.email}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">{login.password}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="shrink-0 text-[11px] font-semibold text-muted-foreground"
+                    onClick={() => setSavedLogins(forgetLogin(login.email))}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleLogin} autoComplete="on" method="post" className="space-y-5">
           {(isProfileLoading || !authReady) && (
