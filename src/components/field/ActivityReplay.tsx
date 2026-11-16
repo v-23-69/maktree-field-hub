@@ -162,7 +162,8 @@ export default function ActivityReplay({
             )}
           </MapContainer>
         </div>
-        {path.length > 0 && <div className="flex items-center gap-3 border-t border-border px-3 py-2">
+        {path.length > 0 && (
+        <div className="flex items-center gap-3 border-t border-border px-3 py-2">
           <button
             type="button"
             onClick={() => {
@@ -202,6 +203,7 @@ export default function ActivityReplay({
           />
           <span className="w-16 shrink-0 text-right text-xs font-semibold tabular-nums">{here ? formatIstClock(here.at) : '—'}</span>
         </div>
+        )}
       </div>
 
       <aside className="max-h-[28rem] overflow-y-auto rounded-2xl border border-border bg-card p-3">
