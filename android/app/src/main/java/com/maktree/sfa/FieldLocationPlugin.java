@@ -47,6 +47,24 @@ public class FieldLocationPlugin extends Plugin {
     }
 
     @PluginMethod
+    public void allow(PluginCall call) {
+        if (getPermissionState("location") != PermissionState.GRANTED) {
+            requestPermissionForAlias("location", call, "afterAllow");
+            return;
+        }
+        call.resolve(statusObject());
+    }
+
+    @PermissionCallback
+    private void afterAllow(PluginCall call) {
+        if (getPermissionState("location") != PermissionState.GRANTED) {
+            call.reject("Location permission is off");
+            return;
+        }
+        call.resolve(statusObject());
+    }
+
+    @PluginMethod
     public void start(PluginCall call) {
         prefs().edit().putBoolean("enabled", true).apply();
         if (Build.VERSION.SDK_INT >= 33 && getPermissionState("notifications") != PermissionState.GRANTED) {

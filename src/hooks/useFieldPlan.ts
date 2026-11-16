@@ -225,6 +225,23 @@ export function useSetPlanAutoApprove() {
   })
 }
 
+export function useLocatedDoctorIds(doctorIds: string[]) {
+  const key = [...doctorIds].sort().join(',')
+  return useQuery({
+    queryKey: ['doctor-locations', key],
+    enabled: doctorIds.length > 0 && !!supabase,
+    queryFn: async () => {
+      if (!supabase) return new Set<string>()
+      const { data, error } = await supabase
+        .from('doctor_locations')
+        .select('doctor_id')
+        .in('doctor_id', doctorIds)
+      if (error) throw error
+      return new Set((data ?? []).map(row => row.doctor_id as string))
+    },
+  })
+}
+
 export function useCaptureDoctorLocation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -238,7 +255,10 @@ export function useCaptureDoctorLocation() {
       })
       if (error) throw error
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['field-day-board'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['field-day-board'] })
+      queryClient.invalidateQueries({ queryKey: ['doctor-locations'] })
+    },
   })
 }
 

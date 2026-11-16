@@ -80,49 +80,74 @@ export default function FieldActivityPage() {
     <div className="min-h-screen bg-background pb-24">
       <PageHeader title="Field activity" showBack />
       <div className="mx-auto w-full max-w-lg space-y-4 px-4 py-4 md:max-w-3xl md:px-8">
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {people.map(person => (
-            <button
-              key={person.id}
-              type="button"
-              onClick={() => select(person.id, date)}
-              className={cn('shrink-0 rounded-xl border px-3 py-2 text-xs font-semibold', mrId === person.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card')}
-            >
-              {person.full_name}
-            </button>
-          ))}
-        </div>
+        <section className="space-y-2">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Medical representative</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {people.map(person => (
+              <button
+                key={person.id}
+                type="button"
+                onClick={() => select(person.id, date)}
+                className={cn(
+                  'shrink-0 rounded-full border px-4 py-2 text-sm font-semibold',
+                  mrId === person.id ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground',
+                )}
+              >
+                {person.full_name}
+              </button>
+            ))}
+          </div>
+        </section>
 
-        <label className="block text-xs font-semibold text-muted-foreground">
-          Day
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Day</p>
+            <button type="button" onClick={() => select(mrId, today)} className="text-xs font-bold text-primary">
+              Today
+            </button>
+          </div>
           <input
             type="date"
             value={date}
             onChange={e => select(mrId, e.target.value)}
-            className="mt-1 h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+            className="h-12 w-full rounded-2xl border border-border bg-card px-4 text-sm font-semibold"
           />
-        </label>
+        </section>
 
         {summary.data && (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Plans" value={summary.data.plans_approved} />
-            <Stat label="Missed plans" value={summary.data.plans_missed} />
-            <Stat label="Calls" value={summary.data.calls_done} />
-            <Stat label="Unavailable" value={summary.data.unavailable} />
-          </div>
+          <section className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">This month</p>
+            <div className="grid grid-cols-2 gap-2">
+              <Stat label="Calls this month" value={summary.data.calls_done} />
+              <Stat label="Unavailable" value={summary.data.unavailable} />
+              <Stat label="Plans approved" value={summary.data.plans_approved} />
+              <Stat label="Missed plans" value={summary.data.plans_missed} />
+            </div>
+          </section>
         )}
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {(summary.data?.days ?? []).map(item => (
-            <button
-              key={item.date}
-              type="button"
-              onClick={() => select(mrId, item.date.slice(0, 10))}
-              className={cn('shrink-0 rounded-lg border px-2 py-1 text-[10px] font-semibold', item.date.slice(0, 10) === date ? 'border-primary bg-primary/10 text-primary' : 'border-border')}
-            >
-              {WEEKDAYS[calendarWeekdaySun0(item.date.slice(0, 10))] ?? ''} {item.date.slice(8, 10)} · {item.visits}
-            </button>
-          ))}
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {(summary.data?.days ?? []).map(item => {
+            const day = item.date.slice(0, 10)
+            const selectedDay = day === date
+            return (
+              <button
+                key={item.date}
+                type="button"
+                onClick={() => select(mrId, day)}
+                className={cn(
+                  'flex w-16 shrink-0 flex-col items-center rounded-2xl border px-2 py-2',
+                  selectedDay ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card',
+                )}
+              >
+                <span className="text-[10px] font-semibold uppercase">{WEEKDAYS[calendarWeekdaySun0(day)] ?? ''}</span>
+                <span className="text-base font-bold leading-tight">{day.slice(8, 10)}</span>
+                <span className={cn('text-[10px] font-semibold', selectedDay ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
+                  {item.visits} calls
+                </span>
+              </button>
+            )
+          })}
         </div>
 
         {activity.isLoading && <LoadingSpinner />}
@@ -147,7 +172,7 @@ export default function FieldActivityPage() {
                   : 'No location yet. It appears while this MR has the app open and GPS on.'}
               </p>
               <div className="grid grid-cols-3 gap-2 pt-1">
-                <Stat label="Calls" value={callsDone} />
+                <Stat label={isToday ? "Today's calls" : 'Calls this day'} value={callsDone} />
                 <Stat label="Unavailable" value={unavailable} />
                 <Stat label="At calls" value={formatDurationMs(callStays)} />
               </div>

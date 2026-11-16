@@ -39,7 +39,7 @@ const announced = new Set<string>()
 
 export function FieldLocationProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const active = user?.role === 'mr' || user?.role === 'manager'
+  const isMr = user?.role === 'mr'
   const [coords, setCoords] = useState<Coords | null>(null)
   const [permission, setPermission] = useState<FieldLocationValue['permission']>('unknown')
   const [unlockedIds, setUnlockedIds] = useState<string[]>([])
@@ -47,17 +47,67 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
   const [flagged, setFlagged] = useState(false)
   const [flagReason, setFlagReason] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [needsLocation, setNeedsLocation] = useState(false)
+  const [gate, setGate] = useState<'check' | 'need' | 'ready'>(isMr ? 'check' : 'ready')
   const latest = useRef<Coords | null>(null)
   const gpsNoted = useRef(false)
-  const iosWeb = typeof navigator !== 'undefined' && !isAndroidApp() && /iPhone|iPad/.test(navigator.userAgent)
 
   useEffect(() => {
-    if (!active || !navigator.geolocation) {
-      if (active && !navigator.geolocation) setPermission('unsupported')
+    if (!isMr) {
+      setGate('ready')
       return
     }
+    let stopped = false
+    setGate('check')
+    const decide = async () => {
+      if (isAndroidApp()) {
+        try {
+          await FieldLocation.stop()
+        } catch {
+          /* the recording service may already be gone */
+        }
+        try {
+          const status = await FieldLocation.status()
+          if (stopped) return
+          const on = status.locationGranted && status.gpsEnabled
+          setPermission(status.locationGranted ? 'granted' : 'denied')
+          setGate(on ? 'ready' : 'need')
+          if (!on) setError('Location is off')
+        } catch {
+          if (!stopped) setGate('need')
+        }
+        return
+      }
+      if (!navigator.geolocation) {
+        setPermission('unsupported')
+        setGate('need')
+        return
+      }
+      try {
+        const perm = await navigator.permissions.query({ name: 'geolocation' })
+        if (stopped) return
+        if (perm.state === 'granted') {
+          setPermission('granted')
+          setGate('ready')
+          return
+        }
+        setPermission(perm.state === 'denied' ? 'denied' : 'unknown')
+        setGate('need')
+      } catch {
+        if (!stopped) setGate('need')
+      }
+    }
+    void decide()
+    const resume = isAndroidApp()
+      ? CapApp.addListener('resume', () => { void decide() })
+      : null
+    return () => {
+      stopped = true
+      void resume?.then(handle => handle.remove())
+    }
+  }, [isMr, user?.id])
 
+  useEffect(() => {
+    if (!isMr || gate !== 'ready' || !navigator.geolocation) return
     const watch = navigator.geolocation.watchPosition(
       pos => {
         const next = {
@@ -68,101 +118,29 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
         latest.current = next
         setCoords(next)
         setPermission('granted')
-        setNeedsLocation(false)
         setError(null)
       },
-      err => {
-        const denied = err.code === err.PERMISSION_DENIED
-        setPermission(denied ? 'denied' : 'granted')
-        setNeedsLocation(true)
-        setError(err.message || 'Location is unavailable')
+      () => {
+        setGate('need')
+        setError('Location is off')
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 },
     )
-
     return () => navigator.geolocation.clearWatch(watch)
-  }, [active])
-
-  useEffect(() => {
-    if (!active || user?.role !== 'mr' || !isAndroidApp() || !supabase) return
-    let stopped = false
-    const pushSession = async () => {
-      const { data } = await supabase.auth.getSession()
-      const session = data.session
-      if (!session || stopped) return
-      await FieldLocation.setSession({
-        supabaseUrl: import.meta.env.VITE_SUPABASE_URL,
-        anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY,
-        accessToken: session.access_token,
-        refreshToken: session.refresh_token,
-      })
-    }
-    const applyStatus = async () => {
-      const status = await FieldLocation.status()
-      const off = !status.gpsEnabled || !status.locationGranted
-      setNeedsLocation(off)
-      setPermission(status.locationGranted ? 'granted' : 'denied')
-      if (off) setError('Location is off')
-    }
-    const { data: auth } = supabase.auth.onAuthStateChange(() => {
-      void pushSession()
-    })
-    void (async () => {
-      try {
-        await pushSession()
-        if (stopped) return
-        await FieldLocation.start()
-        await applyStatus()
-      } catch (err) {
-        if (stopped) return
-        setNeedsLocation(true)
-        setPermission('denied')
-        setError(err instanceof Error ? err.message : 'Location is off')
-      }
-    })()
-    const resume = CapApp.addListener('resume', () => {
-      void applyStatus()
-    })
-    return () => {
-      stopped = true
-      auth.subscription.unsubscribe()
-      void resume.then(handle => handle.remove())
-    }
-  }, [active, user?.role])
-
-  useEffect(() => {
-    if (!active || user?.role !== 'mr' || !isAndroidApp()) return
-    return () => {
-      void FieldLocation.stop()
-    }
-  }, [active, user?.id, user?.role])
-
-  useEffect(() => {
-    if (!needsLocation || user?.role !== 'mr') return
-    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
-      void Notification.requestPermission()
-    }
-    showBrowserNotification({
-      id: `gps-off-${new Date().toISOString().slice(0, 10)}`,
-      title: 'Turn on location',
-      body: 'Location is off. Open Maktree and tap Turn on location.',
-      url: '/mr/plan',
-    })
-  }, [needsLocation, user?.role])
+  }, [gate, isMr])
 
   const turnOnLocation = async () => {
     if (isAndroidApp()) {
       try {
-        const status = await FieldLocation.status()
-        if (!status.locationGranted || !status.backgroundGranted) {
-          await FieldLocation.start()
-        }
+        const status = await FieldLocation.allow()
+        if (!status.gpsEnabled) await FieldLocation.openLocationSettings()
         const next = await FieldLocation.status()
-        if (!next.gpsEnabled) await FieldLocation.openLocationSettings()
-        setNeedsLocation(!next.gpsEnabled || !next.locationGranted)
+        const on = next.locationGranted && next.gpsEnabled
         setPermission(next.locationGranted ? 'granted' : 'denied')
+        setGate(on ? 'ready' : 'need')
+        if (!on) toast.message('Turn location on for Maktree, then come back.')
       } catch (err) {
-        toast.error(err instanceof Error ? err.message : 'Could not open location settings')
+        toast.error(err instanceof Error ? err.message : 'Could not turn location on')
       }
       return
     }
@@ -179,24 +157,26 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
         }
         setCoords(latest.current)
         setPermission('granted')
-        setNeedsLocation(false)
         setError(null)
+        setGate('ready')
       },
       () => {
-        toast.message('Allow location for Maktree in the browser or phone settings')
+        setPermission('denied')
+        setGate('need')
+        toast.message('Allow location for Maktree, then continue.')
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
     )
   }
 
   useEffect(() => {
-    if (!active || permission !== 'denied' || user?.role !== 'mr' || gpsNoted.current || !supabase) return
+    if (!isMr || permission !== 'denied' || gpsNoted.current || !supabase) return
     gpsNoted.current = true
     void supabase.rpc('note_gps_off')
-  }, [active, permission, user?.role])
+  }, [isMr, permission])
 
   useEffect(() => {
-    if (!active || !supabase) return
+    if (!isMr || gate !== 'ready' || !supabase) return
     let stopped = false
 
     const tick = async () => {
@@ -220,7 +200,6 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
       const confirming = body.confirming ?? []
       setUnlockedIds(unlocked.map(d => d.doctor_id))
       setConfirmingIds(confirming.map(d => d.doctor_id))
-      if (user?.role !== 'mr') return
       for (const doctor of unlocked) {
         if (announced.has(doctor.doctor_id)) continue
         announced.add(doctor.doctor_id)
@@ -241,7 +220,7 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
       window.clearInterval(timer)
       window.clearTimeout(first)
     }
-  }, [active, user?.role])
+  }, [gate, isMr])
 
   const value = useMemo<FieldLocationValue>(() => ({
     coords,
@@ -253,25 +232,33 @@ export function FieldLocationProvider({ children }: { children: ReactNode }) {
     error,
   }), [coords, permission, unlockedIds, confirmingIds, flagged, flagReason, error])
 
+  const blocked = isMr && gate !== 'ready'
+
   return (
     <FieldLocationContext.Provider value={value}>
-      {children}
-      {needsLocation && user?.role === 'mr' && (
-        <div className="fixed inset-x-3 bottom-24 z-[70] rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-lg">
-          <p className="text-sm font-bold">Turn on location</p>
-          <p className="mt-1 text-xs leading-relaxed">
-            Location is off. Turn it on so the route and live visits keep recording while Maktree is open or sitting in Recents.
-            {iosWeb ? ' On iPhone, Apple only allows this while Maktree is on the screen.' : ''}
-          </p>
-          <button
-            type="button"
-            onClick={() => void turnOnLocation()}
-            className="mt-3 h-10 rounded-xl bg-amber-600 px-4 text-sm font-bold text-white"
-          >
-            Turn on location
-          </button>
+      {blocked ? (
+        <div className="fixed inset-0 z-[80] flex flex-col bg-background">
+          <div className="flex flex-1 flex-col justify-center px-6">
+            <p className="text-2xl font-bold text-foreground">Turn on location</p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              {gate === 'check'
+                ? 'Checking location…'
+                : 'Turn location on first. Then you can enter Maktree, submit your plan, capture clinic locations, and fill your DCRs.'}
+            </p>
+          </div>
+          {gate === 'need' && (
+            <div className="px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+              <button
+                type="button"
+                onClick={() => void turnOnLocation()}
+                className="h-12 w-full rounded-2xl bg-primary text-sm font-bold text-primary-foreground"
+              >
+                Turn on location
+              </button>
+            </div>
+          )}
         </div>
-      )}
+      ) : children}
     </FieldLocationContext.Provider>
   )
 }

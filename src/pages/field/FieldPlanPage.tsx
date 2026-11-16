@@ -14,9 +14,12 @@ import { useMrSubAreasGrouped } from '@/hooks/useAreas'
 import { useDoctorsForMrDcr } from '@/hooks/useDoctors'
 import { useWorkingWithReportOptions } from '@/hooks/useManagers'
 import { useManagerMrs } from '@/hooks/useManagerTeam'
+import { gpsCapturePaused, subscribeGpsCapture } from '@/lib/gpsCapture'
+import { clearPageMemory, readPageMemory, writePageMemory } from '@/lib/pageMemory'
 import {
   doctorNameOf,
   useFieldDayBoard,
+  useLocatedDoctorIds,
   usePlanAutoApproveSettings,
   useReviewFieldPlan,
   useSetPlanAutoApprove,
@@ -28,7 +31,6 @@ import { addDaysYmd, formatDisplayDate, todayInputDate } from '@/lib/dateUtils'
 import { PLAN_MAX_CALLS, PLAN_MIN_CALLS, SPOT_START_DATE, dailyPlanWindow } from '@/lib/spotWorking'
 import { cn } from '@/lib/utils'
 import CaptureLocationButton from '@/components/field/CaptureLocationButton'
-import { clearPageMemory, readPageMemory, writePageMemory } from '@/lib/pageMemory'
 
 function personName(plan: TeamFieldPlan): string {
   const user = plan.user
@@ -123,6 +125,18 @@ export default function FieldPlanPage() {
     if (!q) return true
     return d.full_name.toLowerCase().includes(q) || (d.speciality ?? '').toLowerCase().includes(q)
   })
+  const lookupIds = useMemo(
+    () => [...new Set([...selected, ...visibleDoctors.map(d => d.id)])],
+    [selected, visibleDoctors],
+  )
+  const located = useLocatedDoctorIds(lookupIds)
+  const [gpsPaused, setGpsPaused] = useState(gpsCapturePaused)
+  useEffect(() => subscribeGpsCapture(() => setGpsPaused(gpsCapturePaused())), [])
+  const hasLocation = (id: string) => (
+    located.data?.has(id)
+    || (board.data?.calls.some(c => c.doctor_id === id && c.has_location) ?? false)
+  )
+  const missingLocations = located.isLoading ? [] : selected.filter(id => !hasLocation(id))
 
   const toggleDoctor = (id: string) => {
     if (!priorityMode && dailyLocked) {
@@ -168,8 +182,8 @@ export default function FieldPlanPage() {
   const priorityAlready = (board.data?.calls ?? []).filter(c => c.source === 'priority_call').length
   const countLabel = priorityMode ? `${selected.length} selected` : `${selected.length}/${PLAN_MAX_CALLS}`
   const canSubmit = priorityMode
-    ? selected.length >= 1 && selected.length + priorityAlready <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !submit.isPending
-    : selected.length >= PLAN_MIN_CALLS && selected.length <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !dailyLocked && !submit.isPending
+    ? selected.length >= 1 && selected.length + priorityAlready <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !submit.isPending && (missingLocations.length === 0 || gpsPaused)
+    : selected.length >= PLAN_MIN_CALLS && selected.length <= PLAN_MAX_CALLS && (solo || withIds.length > 0) && !dailyLocked && !submit.isPending && (missingLocations.length === 0 || gpsPaused)
 
   return (
     <div className="min-h-screen bg-background pb-24">
@@ -284,7 +298,7 @@ export default function FieldPlanPage() {
               <div className="space-y-2">
                 {visibleDoctors.map(doc => {
                   const on = selected.includes(doc.id)
-                  const located = board.data?.calls.some(c => c.doctor_id === doc.id && c.has_location)
+                  const saved = hasLocation(doc.id)
                   return (
                     <div key={doc.id} className={cn('flex items-center gap-2 rounded-2xl border p-3', on ? 'border-primary/40 bg-primary/5' : 'border-border/70 bg-card')}>
                       <button type="button" onClick={() => toggleDoctor(doc.id)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
@@ -296,7 +310,7 @@ export default function FieldPlanPage() {
                           <span className="block truncate text-xs text-muted-foreground">{doc.speciality || doc.sub_area?.name}</span>
                         </span>
                       </button>
-                      {located ? (
+                      {saved ? (
                         <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600"><MapPin className="h-3 w-3" />Saved</span>
                       ) : (
                         <CaptureLocationButton doctorId={doc.id} compact />
@@ -322,6 +336,13 @@ export default function FieldPlanPage() {
             {!priorityMode && selected.length < PLAN_MIN_CALLS && (
               <p className="text-center text-[11px] text-muted-foreground">
                 {PLAN_MIN_CALLS} calls are required. You can add up to {PLAN_MAX_CALLS}.
+              </p>
+            )}
+            {missingLocations.length > 0 && (
+              <p className="text-center text-[11px] font-semibold text-red-600">
+                {gpsPaused
+                  ? 'GPS is having trouble. Submit the plan and capture these clinic locations later.'
+                  : 'Capture the clinic location for every doctor on this plan. It is required.'}
               </p>
             )}
           </>

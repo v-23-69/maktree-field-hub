@@ -13,6 +13,7 @@ export interface FieldLocationPlugin {
     accessToken: string
     refreshToken: string
   }): Promise<void>
+  allow(): Promise<FieldLocationStatus>
   start(): Promise<FieldLocationStatus>
   stop(): Promise<void>
   status(): Promise<FieldLocationStatus>

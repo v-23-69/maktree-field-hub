@@ -87,24 +87,35 @@ public class FieldRouteService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        // Location is used only while Maktree is open. If Android restarts this
+        // service, satisfy the foreground contract and remove the notice at once.
         createChannel();
-        SharedPreferences prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
-        if (!prefs.getBoolean("enabled", false)) {
-            stopSelf();
-            return START_NOT_STICKY;
-        }
-        Notification notification = buildNotification();
+        Notification notification = new NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setContentTitle("Maktree")
+            .setPriority(NotificationCompat.PRIORITY_MIN)
+            .setSilent(true)
+            .build();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
         } else {
             startForeground(NOTIFICATION_ID, notification);
         }
-        if (!tracking) {
-            requestUpdates();
-            handler.post(gpsWatch);
-            tracking = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            stopForeground(STOP_FOREGROUND_REMOVE);
+        } else {
+            stopForeground(true);
         }
-        return START_STICKY;
+        NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        if (manager != null) {
+            manager.cancel(NOTIFICATION_ID);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.deleteNotificationChannel(CHANNEL_ID);
+            }
+        }
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putBoolean("enabled", false).apply();
+        stopSelf();
+        return START_NOT_STICKY;
     }
 
     @Override
@@ -182,7 +193,7 @@ public class FieldRouteService extends Service {
         NotificationChannel channel = new NotificationChannel(
             CHANNEL_ID,
             "Field route",
-            NotificationManager.IMPORTANCE_HIGH
+            NotificationManager.IMPORTANCE_MIN
         );
         channel.setDescription("Route recording and the alert when location is off");
         manager.createNotificationChannel(channel);
