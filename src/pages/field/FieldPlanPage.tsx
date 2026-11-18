@@ -52,7 +52,7 @@ export default function FieldPlanPage() {
   const replaceId = params.get('replace')
   const planDate = priorityMode ? today : date
 
-  const windowState = dailyPlanWindow(planDate)
+  const windowState = dailyPlanWindow(planDate, new Date(), user?.role)
   const board = useFieldDayBoard(planDate)
   const hq = useMyHqAreas(user?.id ?? '')
   const areas = useMrSubAreasGrouped(user?.id ?? '')
@@ -204,7 +204,9 @@ export default function FieldPlanPage() {
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     {priorityMode
                       ? 'Add one or more doctors. You can submit again later if more doctors are free, and you can mark several doctors unavailable. No approval. Your managers are notified each time.'
-                      : `Select areas inside your headquarter, then ${PLAN_MIN_CALLS} to ${PLAN_MAX_CALLS} doctors. Submit the plan first. Capture each clinic later, when you are at that hospital. The plan opens at 6:00 PM the day before. Submit it before 10:00 AM. After the 11:00 AM reminder it cannot be submitted.`}
+                      : isManager
+                        ? `Select areas inside your headquarter, then ${PLAN_MIN_CALLS} to ${PLAN_MAX_CALLS} doctors. Tomorrow's plan opens at 6:00 PM. Today's plan can be submitted any time.`
+                        : `Select areas inside your headquarter, then ${PLAN_MIN_CALLS} to ${PLAN_MAX_CALLS} doctors. Submit the plan first. Capture each clinic later, when you are at that hospital. The plan opens at 6:00 PM the day before. Submit it before 10:00 AM. After the 11:00 AM reminder it cannot be submitted.`}
                   </p>
                 </div>
                 <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{countLabel}</span>

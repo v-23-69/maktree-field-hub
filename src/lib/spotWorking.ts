@@ -32,13 +32,14 @@ export function istNowParts(now = new Date()): { ymd: string; minutes: number } 
 
 export type PlanWindow = 'open' | 'locked' | 'closed' | 'too_far'
 
-/** Tomorrow opens at 18:00 IST. The screen asks for the plan by 10:00 IST. It actually closes at 11:00 IST, after the last reminder. */
-export function dailyPlanWindow(planDate: string, now = new Date()): PlanWindow {
+/** Tomorrow opens at 18:00 IST. MRs are asked for the plan by 10:00 IST, and it closes at 11:00 IST. A manager can submit today's plan at any time. */
+export function dailyPlanWindow(planDate: string, now = new Date(), role?: string): PlanWindow {
   const { ymd, minutes } = istNowParts(now)
   const tomorrow = addDaysYmd(ymd, 1)
   if (planDate < ymd) return 'closed'
   if (planDate > tomorrow) return 'too_far'
   if (planDate === tomorrow) return minutes >= 18 * 60 ? 'open' : 'locked'
+  if (role === 'manager' && planDate === ymd) return 'open'
   return minutes < 11 * 60 ? 'open' : 'closed'
 }
 

@@ -22,9 +22,12 @@ describe('dailyPlanWindow', () => {
     expect(dailyPlanWindow('2026-11-18', evening)).toBe('too_far')
   })
 
-  it('closes today at 11 AM IST', () => {
+  it('closes today at 11 AM IST for an MR and leaves it open for a manager', () => {
     expect(dailyPlanWindow('2026-11-16', atIst('2026-11-16', '10:59'))).toBe('open')
     expect(dailyPlanWindow('2026-11-16', atIst('2026-11-16', '11:00'))).toBe('closed')
+    expect(dailyPlanWindow('2026-11-16', atIst('2026-11-16', '11:00'), 'mr')).toBe('closed')
+    expect(dailyPlanWindow('2026-11-16', atIst('2026-11-16', '15:30'), 'manager')).toBe('open')
+    expect(dailyPlanWindow('2026-11-17', atIst('2026-11-16', '15:30'), 'manager')).toBe('locked')
   })
 })
 
